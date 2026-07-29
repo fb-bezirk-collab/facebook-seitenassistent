@@ -49,6 +49,9 @@
             <a href="{{ url_for('startseite') }}">Import</a>
             <a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a>
             <a href="/settings">Einstellungen</a>
+                    <form method="post" action="/logout" style="margin:0;">
+                <button type="submit" style="min-height:42px;padding:0 14px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#344054;font-weight:700;cursor:pointer;">Abmelden</button>
+            </form>
         </nav>
     </div>
 </header>
