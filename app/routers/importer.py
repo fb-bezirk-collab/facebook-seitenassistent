@@ -1,13 +1,39 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.config import TEMPLATES_DIR
+from app.config import TEMPLATES_DIR, UPLOADS_DIR
 from app.services.facebook_importer import FacebookImporter
 
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def _image_path_to_url(image_path: str) -> str | None:
+    """
+    Wandelt einen internen Dateipfad in eine öffentliche Bild-URL um.
+
+    Beispiel:
+    /app/storage/uploads/facebook/2026-07-29/bild.jpg
+    wird zu:
+    /uploads/facebook/2026-07-29/bild.jpg
+    """
+    path = Path(image_path)
+
+    try:
+        relative_path = path.resolve().relative_to(UPLOADS_DIR.resolve())
+        return f"/uploads/{relative_path.as_posix()}"
+    except ValueError:
+        normalized = str(image_path).replace("\\", "/").lstrip("/")
+
+        # Rückwärtskompatibilität für ältere relative Pfade
+        if normalized.startswith("uploads/"):
+            return f"/{normalized}"
+
+        return None
 
 
 @router.get("/import", include_in_schema=False)
@@ -32,10 +58,13 @@ def beitrag_importieren(
             video_url=video_url,
         )
 
-        image_urls = [
-            "/" + image_path.replace("\\", "/")
-            for image_path in post.images
-        ]
+        image_urls: list[str] = []
+
+        for image_path in post.images:
+            image_url = _image_path_to_url(image_path)
+
+            if image_url:
+                image_urls.append(image_url)
 
         return templates.TemplateResponse(
             request=request,
