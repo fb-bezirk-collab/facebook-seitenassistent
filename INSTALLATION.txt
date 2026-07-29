@@ -1,0 +1,15 @@
+VIDEO-LINK-UPDATE
+
+1. Uvicorn mit STRG+C beenden.
+2. Den Inhalt dieser ZIP direkt in den Projektordner kopieren.
+3. Vorhandene Dateien ersetzen.
+4. .env, .venv, playwright_profile, uploads und data NICHT löschen oder ersetzen.
+5. Uvicorn neu starten:
+   uvicorn app.main:app --reload
+6. Im Browser öffnen:
+   http://127.0.0.1:8000/
+
+Videobeitrag:
+- Erster Link: Seite, auf der der Begleittext sichtbar ist (z. B. fb.watch).
+- Zweiter Link: Originalvideo/Reel.
+- Das Video wird nicht heruntergeladen, sondern nur als Link gespeichert.

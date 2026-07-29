@@ -1,0 +1,22 @@
+UPDATE: Video-Import und Video-Entwürfe
+
+1. Uvicorn/Anwendung beenden.
+2. Den Inhalt dieses ZIP in deinen bestehenden Projektordner kopieren.
+3. Beim Kopieren die gleichnamigen Programmdateien ersetzen.
+4. .env, .venv, playwright_profile, uploads und data NICHT löschen oder ersetzen.
+5. Anwendung wieder starten:
+   uvicorn app.main:app --reload
+6. Einen öffentlichen Facebook-Beitrag mit Video importieren.
+
+Neu:
+- Video-URLs werden im Browser-Netzwerk und im Beitrag erkannt.
+- Das Video wird lokal unter uploads/facebook/JJJJ-MM-TT gespeichert.
+- Video-Vorschau nach dem Import.
+- Video bleibt beim Speichern und Bearbeiten eines Entwurfs erhalten.
+- Bestehende Entwürfe ohne videos-Feld bleiben kompatibel.
+
+Hinweis:
+Facebook liefert Videos je nach Beitrag in unterschiedlichen technischen Varianten.
+Direkte MP4/WebM-Dateien werden unterstützt. Falls ein bestimmtes Video nur als
+segmentierter Stream geliefert wird, kann es noch vorkommen, dass kein Video erkannt wird.
+Dann bitte die Terminal-Ausgabe und den Link zum Testbeitrag weitergeben.
