@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import get_auth_settings, is_authenticated
+from app.auth import auth_status, get_auth_settings, is_authenticated
 from app.config import STATIC_DIR, UPLOADS_DIR, create_required_directories
 from app.routers import ai, auth, home, importer, posts, publish, settings
 
@@ -15,7 +15,7 @@ auth_settings = get_auth_settings()
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="1.1.0",
+    version="1.1.2",
 )
 
 app.add_middleware(
@@ -64,4 +64,4 @@ app.include_router(posts.router)
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "1.1.0"})
+    return JSONResponse({"status": "ok", "version": "1.1.2", "auth": auth_status()})
