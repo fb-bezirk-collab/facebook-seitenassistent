@@ -15,18 +15,8 @@ auth_settings = get_auth_settings()
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="1.1.2",
+    version="1.1.3",
 )
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=auth_settings.session_secret,
-    session_cookie="facebook_seitenassistent_session",
-    max_age=60 * 60 * 24 * 14,
-    same_site="lax",
-    https_only=auth_settings.secure_cookie,
-)
-
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
@@ -50,6 +40,18 @@ async def require_login(request: Request, call_next):
     )
 
 
+# SessionMiddleware muss außerhalb der Login-Prüfung liegen, damit
+# request.session bereits in require_login verfügbar ist.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=auth_settings.session_secret,
+    session_cookie="facebook_seitenassistent_session",
+    max_age=60 * 60 * 24 * 14,
+    same_site="lax",
+    https_only=auth_settings.secure_cookie,
+)
+
+
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -64,4 +66,4 @@ app.include_router(posts.router)
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "1.1.2", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "1.1.3", "auth": auth_status()})
