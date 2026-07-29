@@ -2,70 +2,151 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Facebook Seitenassistent</title>
-
     <style>
-        body{
-            font-family: Arial, Helvetica, sans-serif;
-            max-width:900px;
-            margin:40px auto;
-            padding:20px;
-            background:#f5f5f5;
-        }
-
-        .card{
-            background:white;
-            padding:25px;
-            border-radius:10px;
-            box-shadow:0 2px 10px rgba(0,0,0,.1);
-        }
-
-        h1{
-            margin-top:0;
-            color:#1877F2;
-        }
-
-        input, textarea{
-            width:100%;
-            padding:10px;
-            margin-top:5px;
-            margin-bottom:15px;
-            box-sizing:border-box;
-        }
-
-        button{
-            background:#1877F2;
-            color:white;
-            border:none;
-            padding:12px 20px;
-            border-radius:6px;
-            cursor:pointer;
-        }
-
-        button:hover{
-            background:#0f5ec7;
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f3f5f8; color: #1f2937; }
+        .header { background: #fff; border-bottom: 1px solid #dfe3e8; padding: 20px 0; }
+        .container { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+        .header h1 { margin: 0 0 6px; font-size: 28px; }
+        .header p { margin: 0; color: #667085; }
+        .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav a { color: #344054; text-decoration: none; padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; font-weight: 700; }
+        .nav a:hover { border-color: #1877f2; color: #1877f2; }
+        main { padding: 40px 0; }
+        .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.08); padding: 28px; }
+        .import-card { margin-bottom: 28px; }
+        label { display: block; margin-bottom: 8px; font-weight: 700; }
+        .input-row { display: flex; gap: 12px; }
+        input[type="url"], input[type="text"] { width: 100%; min-width: 0; height: 50px; padding: 0 16px; border: 1px solid #cfd6df; border-radius: 10px; font-size: 16px; }
+        input:focus, textarea:focus { outline: none; border-color: #1877f2; box-shadow: 0 0 0 3px rgba(24,119,242,.15); }
+        button { border: 0; border-radius: 10px; padding: 0 22px; min-height: 50px; font-size: 16px; font-weight: 700; cursor: pointer; }
+        .button-primary { color: #fff; background: #1877f2; }
+        .button-primary:hover { background: #1264d6; }
+        .button-secondary { color: #fff; background: #344054; }
+        .button-secondary:hover { background: #1d2939; }
+        .button-ai { width: 100%; color: #fff; background: #168353; margin-top: 16px; }
+        .button-ai:disabled { background: #9ca3af; cursor: not-allowed; }
+        .error { margin-top: 20px; padding: 15px 18px; border-radius: 10px; background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
+        .content-grid { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(320px,.7fr); gap: 28px; }
+        h2 { margin-top: 0; margin-bottom: 18px; font-size: 21px; }
+        textarea { width: 100%; min-height: 360px; resize: vertical; padding: 16px; border: 1px solid #cfd6df; border-radius: 10px; font: 16px/1.55 Arial, Helvetica, sans-serif; }
+        .field { margin-bottom: 18px; }
+        .post-image, .post-video { display: block; width: 100%; max-height: 620px; object-fit: contain; border-radius: 12px; background: #111827; margin-bottom: 15px; }
+        .no-image { padding: 20px; border-radius: 10px; background: #f0f2f5; color: #667085; }
+        .source-card { margin-top: 28px; }
+        .source-card a { color: #1877f2; overflow-wrap: anywhere; }
+        .hint { margin: 10px 0 0; color: #667085; font-size: 14px; }
+        .save-row { display: flex; justify-content: flex-end; margin-top: 20px; }
+        .type-choice { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 18px; }
+        .type-option { display: flex; align-items: center; gap: 9px; padding: 12px 14px; border: 1px solid #d0d5dd; border-radius: 10px; background: #fff; cursor: pointer; font-weight: 700; }
+        .type-option:has(input:checked) { border-color: #1877f2; background: #eff6ff; box-shadow: 0 0 0 2px rgba(24,119,242,.10); }
+        .type-option input { margin: 0; accent-color: #1877f2; }
+        .type-help { margin: -8px 0 18px; color: #667085; font-size: 14px; }
+        @media (max-width: 850px) {
+            .content-grid { grid-template-columns: 1fr; }
+            .input-row, .header-row { flex-direction: column; align-items: stretch; }
+            .button-primary, .button-secondary { width: 100%; }
         }
     </style>
-
 </head>
-
 <body>
+<header class="header">
+    <div class="container header-row">
+        <div>
+            <h1>Facebook Seitenassistent</h1>
+            <p>Facebook-Beitrag importieren, bearbeiten und als Entwurf speichern</p>
+        </div>
+        <nav class="nav">
+            <a href="{{ url_for('startseite') }}">Import</a>
+            <a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a>
+            <a href="/settings">Einstellungen</a>
+        </nav>
+    </div>
+</header>
+<main>
+    <div class="container">
+        <section class="card import-card">
+            <form method="post" action="/import">
+                <label>Beitragstyp</label>
+                <div class="type-choice" role="radiogroup" aria-label="Beitragstyp">
+                    <label class="type-option">
+                        <input type="radio" name="content_type" value="image" {% if content_type != 'video' %}checked{% endif %}>
+                        Bild-/Textbeitrag
+                    </label>
+                    <label class="type-option">
+                        <input type="radio" name="content_type" value="video" {% if content_type == 'video' %}checked{% endif %}>
+                        Videobeitrag
+                    </label>
+                </div>
+                <p class="type-help">Für Videos funktionieren normale Facebook-Links, Reel-Links, Share-Links und fb.watch-Links.</p>
+                <label for="facebook_url">Facebook-Link</label>
+                <div class="input-row">
+                    <input type="url" id="facebook_url" name="facebook_url" placeholder="https://www.facebook.com/... oder https://fb.watch/..." value="{{ facebook_url }}" required>
+                    <button type="submit" class="button-primary">Beitrag importieren</button>
+                </div>
+            </form>
+            {% if error %}
+                <div class="error"><strong>Import fehlgeschlagen:</strong> {{ error }}</div>
+            {% endif %}
+        </section>
 
-<div class="card">
+        {% if post %}
+        <form method="post" action="/drafts">
+            <div class="content-grid">
+                <section class="card">
+                    <h2>Beitrag bearbeiten</h2>
+                    <div class="field">
+                        <label for="title">Interner Titel</label>
+                        <input type="text" id="title" name="title" maxlength="120" placeholder="z. B. Sommerfest – Einladung">
+                        <p class="hint">Der Titel dient nur deiner Übersicht und wird nicht auf Facebook veröffentlicht.</p>
+                    </div>
+                    <div class="field">
+                        <label for="post_text">Beitragstext</label>
+                        <textarea id="post_text" name="text">{{ post.text }}</textarea>
+                    </div>
+                    <button type="button" class="button-ai" disabled>KI-Text erzeugen</button>
+                    <p class="hint">Die KI-Funktion ergänzen wir in einem späteren Schritt.</p>
+                </section>
 
-<h1>Facebook Seitenassistent</h1>
+                <section class="card">
+                    <h2>Medienvorschau</h2>
+                    {% if image_urls %}
+                        {% for image_url in image_urls %}
+                            <img src="{{ image_url }}" alt="Importiertes Facebook-Bild" class="post-image">
+                            <input type="hidden" name="images" value="{{ post.images[loop.index0] }}">
+                        {% endfor %}
+                    {% endif %}
+                    {% if video_urls %}
+                        {% for video_url in video_urls %}
+                            <video class="post-video" controls preload="metadata">
+                                <source src="{{ video_url }}">
+                                Dein Browser kann dieses Video nicht wiedergeben.
+                            </video>
+                            <input type="hidden" name="videos" value="{{ post.videos[loop.index0] }}">
+                        {% endfor %}
+                    {% endif %}
+                    {% if not image_urls and not video_urls %}
+                        <div class="no-image">Zu diesem Beitrag wurden keine Bilder oder Videos gefunden.</div>
+                    {% endif %}
+                </section>
+            </div>
 
-<p>Willkommen beim Facebook Seitenassistenten.</p>
+            <input type="hidden" name="source_url" value="{{ post.source_url }}">
+            <input type="hidden" name="page_id" value="">
 
-<label>Facebook-Link</label>
-<input type="text" placeholder="https://www.facebook.com/...">
-
-<label>Originaltext</label>
-<textarea rows="8"></textarea>
-
-<button>Noch ohne Funktion</button>
-
-</div>
-
+            <section class="card source-card">
+                <h2>Quelle</h2>
+                <a href="{{ post.source_url }}" target="_blank" rel="noopener noreferrer">{{ post.source_url }}</a>
+                <div class="save-row">
+                    <button type="submit" class="button-secondary">Als Entwurf speichern</button>
+                </div>
+            </section>
+        </form>
+        {% endif %}
+    </div>
+</main>
 </body>
 </html>
