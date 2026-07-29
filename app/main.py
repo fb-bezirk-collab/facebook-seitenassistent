@@ -21,7 +21,7 @@ app = FastAPI(
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     public_paths = {"/login", "/health"}
-    public_prefixes = ("/static/",)
+    public_prefixes = ("/static/", "/uploads/")
 
     if (
         request.url.path in public_paths
