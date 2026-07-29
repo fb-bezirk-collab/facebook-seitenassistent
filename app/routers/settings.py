@@ -5,6 +5,7 @@ from urllib.parse import quote
 from fastapi import (
     APIRouter,
     Request,
+    Form,
 )
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -37,9 +38,14 @@ def einstellungen(
     request: Request,
     connected: bool = False,
     facebook_error: str | None = None,
+    account_saved: int = 0,
+    account_deleted: int = 0,
+    account_error: str | None = None,
 ):
     meta_config = meta_config_service.load()
     facebook_pages = settings_service.load_pages()
+    from app.services.social_account_service import SocialAccountService
+    social_accounts = SocialAccountService().list_accounts()
 
     return templates.TemplateResponse(
         request=request,
@@ -56,6 +62,10 @@ def einstellungen(
             ),
             "connected": connected,
             "facebook_error": facebook_error,
+            "social_accounts": social_accounts,
+            "account_saved": bool(account_saved),
+            "account_deleted": bool(account_deleted),
+            "account_error": account_error,
         },
     )
 
@@ -242,3 +252,31 @@ def facebook_callback(
     )
 
     return response
+
+@router.post("/settings/accounts")
+def konto_hinzufuegen(
+    platform: str = Form(...),
+    name: str = Form(...),
+    external_id: str = Form(""),
+):
+    from app.services.social_account_service import SocialAccountService
+    platform = platform.strip().lower()
+    name = name.strip()
+    if platform not in {"facebook", "instagram", "x", "tiktok"} or not name:
+        return RedirectResponse(url="/settings?account_error=Ungültige Kontodaten", status_code=303)
+    SocialAccountService().create(platform=platform, name=name, external_id=external_id)
+    return RedirectResponse(url="/settings?account_saved=1", status_code=303)
+
+
+@router.post("/settings/accounts/{account_id}/toggle")
+def konto_umschalten(account_id: str):
+    from app.services.social_account_service import SocialAccountService
+    SocialAccountService().toggle(account_id)
+    return RedirectResponse(url="/settings?account_saved=1", status_code=303)
+
+
+@router.post("/settings/accounts/{account_id}/delete")
+def konto_loeschen(account_id: str):
+    from app.services.social_account_service import SocialAccountService
+    SocialAccountService().delete(account_id)
+    return RedirectResponse(url="/settings?account_deleted=1", status_code=303)

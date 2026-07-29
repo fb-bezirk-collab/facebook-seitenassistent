@@ -24,6 +24,8 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 PAGES_FILE = DATA_DIR / "pages.json"
 POSTS_FILE = DATA_DIR / "posts.json"
 META_TOKEN_FILE = DATA_DIR / "meta_user_access_token.txt"
+PUBLICATIONS_FILE = DATA_DIR / "publications.json"
+SOCIAL_ACCOUNTS_FILE = DATA_DIR / "social_accounts.json"
 
 
 def create_required_directories() -> None:

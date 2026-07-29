@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import auth_status, get_auth_settings, is_authenticated
 from app.config import STATIC_DIR, UPLOADS_DIR, create_required_directories
-from app.routers import ai, auth, home, importer, posts, publish, settings
+from app.routers import ai, auth, home, importer, planning, posts, publish, settings
 
 
 create_required_directories()
@@ -15,7 +15,7 @@ auth_settings = get_auth_settings()
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="1.1.3",
+    version="1.2.0",
 )
 
 @app.middleware("http")
@@ -62,8 +62,9 @@ app.include_router(importer.router)
 app.include_router(ai.router)
 app.include_router(publish.router)
 app.include_router(posts.router)
+app.include_router(planning.router)
 
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "1.1.3", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "1.2.0", "auth": auth_status()})

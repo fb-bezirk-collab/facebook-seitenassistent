@@ -4,11 +4,15 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
 from app.services.post_service import PostService
+from app.services.publication_service import PublicationService
+from app.services.social_account_service import SocialAccountService
 
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 post_service = PostService()
+publication_service = PublicationService()
+account_service = SocialAccountService()
 
 
 @router.post("/drafts")
@@ -52,12 +56,13 @@ def entwuerfe_anzeigen(request: Request, deleted: int = 0):
         context={
             "drafts": post_service.list_posts(status="draft"),
             "deleted": bool(deleted),
+            "publication_counts": {post.id: len(publication_service.list_publications(post.id)) for post in post_service.list_posts(status="draft")},
         },
     )
 
 
 @router.get("/drafts/{post_id}", name="entwurf_bearbeiten")
-def entwurf_bearbeiten(request: Request, post_id: str, saved: int = 0):
+def entwurf_bearbeiten(request: Request, post_id: str, saved: int = 0, planned: int = 0):
     draft = post_service.get_post(post_id)
     if not draft or draft.status != "draft":
         raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
@@ -69,6 +74,9 @@ def entwurf_bearbeiten(request: Request, post_id: str, saved: int = 0):
             "draft": draft,
             "saved": bool(saved),
             "image_urls": ["/" + image for image in draft.images],
+            "planned": bool(planned),
+            "publications": publication_service.list_publications(post_id),
+            "social_accounts": account_service.list_accounts(include_inactive=False),
         },
     )
 
@@ -106,6 +114,7 @@ def entwurf_aktualisieren(
 
 @router.post("/drafts/{post_id}/delete")
 def entwurf_loeschen(request: Request, post_id: str):
+    publication_service.delete_for_post(post_id)
     if not post_service.delete_draft(post_id):
         raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
 
