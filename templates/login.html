@@ -48,6 +48,7 @@
             cursor: pointer;
         }
         button:hover { background: #1264d6; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
         .error {
             margin-bottom: 20px;
             padding: 14px 16px;
@@ -64,7 +65,9 @@
         <h1>Facebook Seitenassistent</h1>
         <p class="subtitle">Bitte melde dich an, um den Seitenassistenten zu verwenden.</p>
 
-        {% if error %}
+        {% if configuration_error %}
+            <div class="error"><strong>Login noch nicht konfiguriert.</strong><br>{{ configuration_error }}</div>
+        {% elif error %}
             <div class="error">Benutzername oder Passwort ist nicht richtig.</div>
         {% endif %}
 
@@ -78,7 +81,7 @@
                 <label for="password">Passwort</label>
                 <input id="password" name="password" type="password" autocomplete="current-password" required>
             </div>
-            <button type="submit">Anmelden</button>
+            <button type="submit" {% if configuration_error %}disabled{% endif %}>Anmelden</button>
         </form>
     </main>
 </body>
