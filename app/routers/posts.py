@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.config import TEMPLATES_DIR
+from app.config import TEMPLATES_DIR, UPLOADS_DIR
 from app.services.post_service import PostService
 from app.services.publication_service import PublicationService
 from app.services.social_account_service import SocialAccountService
@@ -10,13 +12,53 @@ from app.services.social_account_service import SocialAccountService
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
 post_service = PostService()
 publication_service = PublicationService()
 account_service = SocialAccountService()
 
 
+def _image_path_to_url(image_path: str) -> str | None:
+    """
+    Wandelt einen internen Bildpfad in eine öffentliche URL um.
+
+    Beispiel:
+    /app/storage/uploads/facebook/2026-07-29/bild.jpg
+
+    wird zu:
+    /uploads/facebook/2026-07-29/bild.jpg
+    """
+    path = Path(image_path)
+
+    try:
+        relative_path = path.resolve().relative_to(UPLOADS_DIR.resolve())
+        return f"/uploads/{relative_path.as_posix()}"
+
+    except ValueError:
+        normalized = str(image_path).replace("\\", "/").lstrip("/")
+
+        # Rückwärtskompatibilität für ältere relative Pfade
+        if normalized.startswith("uploads/"):
+            return f"/{normalized}"
+
+        return None
+
+
+def _create_image_urls(images: list[str]) -> list[str]:
+    """Erzeugt für alle gespeicherten Bilder gültige Browser-URLs."""
+    image_urls: list[str] = []
+
+    for image_path in images:
+        image_url = _image_path_to_url(image_path)
+
+        if image_url:
+            image_urls.append(image_url)
+
+    return image_urls
+
+
 @router.post("/drafts")
-def entwicklung_speichern(
+def entwurf_speichern(
     request: Request,
     title: str = Form(""),
     text: str = Form(""),
@@ -43,29 +85,48 @@ def entwicklung_speichern(
     )
 
     return RedirectResponse(
-        url=str(request.url_for("entwurf_bearbeiten", post_id=draft.id)) + "?saved=1",
+        url=(
+            str(request.url_for("entwurf_bearbeiten", post_id=draft.id))
+            + "?saved=1"
+        ),
         status_code=303,
     )
 
 
 @router.get("/drafts", name="entwuerfe_anzeigen")
 def entwuerfe_anzeigen(request: Request, deleted: int = 0):
+    drafts = post_service.list_posts(status="draft")
+
     return templates.TemplateResponse(
         request=request,
         name="drafts.html",
         context={
-            "drafts": post_service.list_posts(status="draft"),
+            "drafts": drafts,
             "deleted": bool(deleted),
-            "publication_counts": {post.id: len(publication_service.list_publications(post.id)) for post in post_service.list_posts(status="draft")},
+            "publication_counts": {
+                post.id: len(
+                    publication_service.list_publications(post.id)
+                )
+                for post in drafts
+            },
         },
     )
 
 
 @router.get("/drafts/{post_id}", name="entwurf_bearbeiten")
-def entwurf_bearbeiten(request: Request, post_id: str, saved: int = 0, planned: int = 0):
+def entwurf_bearbeiten(
+    request: Request,
+    post_id: str,
+    saved: int = 0,
+    planned: int = 0,
+):
     draft = post_service.get_post(post_id)
+
     if not draft or draft.status != "draft":
-        raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
+        raise HTTPException(
+            status_code=404,
+            detail="Entwurf nicht gefunden.",
+        )
 
     return templates.TemplateResponse(
         request=request,
@@ -73,10 +134,12 @@ def entwurf_bearbeiten(request: Request, post_id: str, saved: int = 0, planned: 
         context={
             "draft": draft,
             "saved": bool(saved),
-            "image_urls": ["/" + image for image in draft.images],
+            "image_urls": _create_image_urls(draft.images),
             "planned": bool(planned),
             "publications": publication_service.list_publications(post_id),
-            "social_accounts": account_service.list_accounts(include_inactive=False),
+            "social_accounts": account_service.list_accounts(
+                include_inactive=False
+            ),
         },
     )
 
@@ -103,11 +166,18 @@ def entwurf_aktualisieren(
         page_id=page_id,
         source_url=source_url,
     )
+
     if not draft:
-        raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
+        raise HTTPException(
+            status_code=404,
+            detail="Entwurf nicht gefunden.",
+        )
 
     return RedirectResponse(
-        url=str(request.url_for("entwurf_bearbeiten", post_id=post_id)) + "?saved=1",
+        url=(
+            str(request.url_for("entwurf_bearbeiten", post_id=post_id))
+            + "?saved=1"
+        ),
         status_code=303,
     )
 
@@ -115,8 +185,12 @@ def entwurf_aktualisieren(
 @router.post("/drafts/{post_id}/delete")
 def entwurf_loeschen(request: Request, post_id: str):
     publication_service.delete_for_post(post_id)
+
     if not post_service.delete_draft(post_id):
-        raise HTTPException(status_code=404, detail="Entwurf nicht gefunden.")
+        raise HTTPException(
+            status_code=404,
+            detail="Entwurf nicht gefunden.",
+        )
 
     return RedirectResponse(
         url=str(request.url_for("entwuerfe_anzeigen")) + "?deleted=1",
