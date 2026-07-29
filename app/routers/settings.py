@@ -1,3 +1,4 @@
+import os
 import secrets
 from urllib.parse import quote
 
@@ -105,7 +106,7 @@ def facebook_verbinden():
         value=state,
         max_age=600,
         httponly=True,
-        secure=False,
+        secure=bool(os.getenv("RAILWAY_ENVIRONMENT")),
         samesite="lax",
     )
 

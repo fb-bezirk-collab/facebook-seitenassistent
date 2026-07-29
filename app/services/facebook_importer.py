@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
+from app.config import PLAYWRIGHT_PROFILE_DIR
 from app.models.facebook_post import FacebookPost
 from app.services.facebook_downloader import FacebookDownloader
 
@@ -10,11 +12,17 @@ from app.services.facebook_downloader import FacebookDownloader
 class FacebookImporter:
     def __init__(
         self,
-        profile_dir: str | Path = "playwright_profile",
-        headless: bool = False,
+        profile_dir: str | Path = PLAYWRIGHT_PROFILE_DIR,
+        headless: bool | None = None,
         downloader: FacebookDownloader | None = None,
     ):
         self.profile_dir = Path(profile_dir)
+        if headless is None:
+            configured = os.getenv("PLAYWRIGHT_HEADLESS", "").strip().lower()
+            if configured:
+                headless = configured in {"1", "true", "yes", "on"}
+            else:
+                headless = bool(os.getenv("RAILWAY_ENVIRONMENT"))
         self.headless = headless
         self.downloader = downloader or FacebookDownloader()
 
@@ -124,6 +132,7 @@ class FacebookImporter:
             user_data_dir=str(self.profile_dir),
             headless=self.headless,
             viewport={"width": 1400, "height": 1000},
+            args=["--disable-dev-shm-usage"],
         )
 
     @staticmethod
