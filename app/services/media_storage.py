@@ -2,10 +2,16 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
+from app.config import UPLOADS_DIR
+
 
 class MediaStorage:
-    def __init__(self, base_dir: str | Path = "uploads/facebook"):
-        self.base_dir = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None):
+        self.base_dir = (
+            Path(base_dir)
+            if base_dir is not None
+            else UPLOADS_DIR / "facebook"
+        )
 
     def create_file_path(self, file_extension: str) -> Path:
         today = date.today().isoformat()
