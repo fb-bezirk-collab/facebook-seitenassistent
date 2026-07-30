@@ -19,27 +19,31 @@ account_service = SocialAccountService()
 
 
 def _image_path_to_url(image_path: str) -> str | None:
-    """
-    Wandelt einen internen Bildpfad in eine öffentliche URL um.
+    normalized = str(image_path).strip().replace("\\", "/")
 
-    Beispiel:
-    /app/storage/uploads/facebook/2026-07-29/bild.jpg
+    if not normalized:
+        return None
 
-    wird zu:
-    /uploads/facebook/2026-07-29/bild.jpg
-    """
-    path = Path(image_path)
+    if normalized.startswith(("http://", "https://")):
+        return normalized
+
+    if normalized.startswith("/uploads/"):
+        return normalized
+
+    if normalized.startswith("uploads/"):
+        return f"/{normalized}"
+
+    path = Path(normalized)
 
     try:
         relative_path = path.resolve().relative_to(UPLOADS_DIR.resolve())
         return f"/uploads/{relative_path.as_posix()}"
-
     except ValueError:
-        normalized = str(image_path).replace("\\", "/").lstrip("/")
+        upload_marker = "uploads/"
+        marker_position = normalized.find(upload_marker)
 
-        # Rückwärtskompatibilität für ältere relative Pfade
-        if normalized.startswith("uploads/"):
-            return f"/{normalized}"
+        if marker_position >= 0:
+            return f"/{normalized[marker_position:]}"
 
         return None
 
