@@ -1,3 +1,12 @@
+# Version 1.5.0 – Mehrfachveröffentlichung
+
+- Mehrere Facebook-Seiten gleichzeitig per Checkbox auswählen.
+- Pro Seite wird eine eigene Veröffentlichung mit eigenem Status erzeugt.
+- Ein Beitrag kann sofort auf allen noch offenen Seiten veröffentlicht werden.
+- Einzelne fehlgeschlagene Seiten blockieren die übrigen Veröffentlichungen nicht.
+- Doppelte Planungen für dieselbe Seite und denselben Zeitpunkt werden vermieden.
+- Bestehende Einzelplanung, Scheduler, Bildbeiträge und Reel-Linkbeiträge bleiben erhalten.
+
 # Version 1.4.2
 
 - Button „Jetzt veröffentlichen“ in der Planungsübersicht
