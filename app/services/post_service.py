@@ -13,6 +13,7 @@ class PostService:
 
     def list_posts(self, status: str | None = None) -> list[ManagedPost]:
         posts = self._load_all()
+
         if status:
             posts = [post for post in posts if post.status == status]
 
@@ -40,6 +41,7 @@ class PostService:
         source_url: str = "",
     ) -> ManagedPost:
         now = utc_now_iso()
+
         draft = ManagedPost(
             id=str(uuid4()),
             title=self._clean_title(title, text),
@@ -57,6 +59,7 @@ class PostService:
         posts = self._load_all()
         posts.append(draft)
         self._save_all(posts)
+
         return draft
 
     def update_draft(
@@ -88,6 +91,7 @@ class PostService:
             post.page_id = page_id.strip()
             post.source_url = source_url.strip()
             post.updated_at = utc_now_iso()
+
             self._save_all(posts)
             return post
 
@@ -95,10 +99,14 @@ class PostService:
 
     def delete_draft(self, post_id: str) -> bool:
         posts = self._load_all()
+
         remaining = [
             post
             for post in posts
-            if not (post.id == post_id and post.status == "draft")
+            if not (
+                post.id == post_id
+                and post.status == "draft"
+            )
         ]
 
         if len(remaining) == len(posts):
@@ -109,13 +117,18 @@ class PostService:
 
     def _ensure_file_exists(self) -> None:
         self.posts_file.parent.mkdir(parents=True, exist_ok=True)
+
         if not self.posts_file.exists():
             self._save_all([])
 
     def _load_all(self) -> list[ManagedPost]:
         try:
-            content = self.posts_file.read_text(encoding="utf-8").strip()
+            content = self.posts_file.read_text(
+                encoding="utf-8"
+            ).strip()
+
             raw_data = json.loads(content) if content else []
+
         except (OSError, json.JSONDecodeError):
             return []
 
@@ -123,16 +136,21 @@ class PostService:
             return []
 
         posts: list[ManagedPost] = []
+
         for item in raw_data:
             if not isinstance(item, dict):
                 continue
+
             post = ManagedPost.from_dict(item)
+
             if post.id:
                 posts.append(post)
+
         return posts
 
     def _save_all(self, posts: list[ManagedPost]) -> None:
         temporary_file = self.posts_file.with_suffix(".tmp")
+
         temporary_file.write_text(
             json.dumps(
                 [post.to_dict() for post in posts],
@@ -141,51 +159,61 @@ class PostService:
             ),
             encoding="utf-8",
         )
+
         temporary_file.replace(self.posts_file)
 
-@staticmethod
-def _clean_media(items: list[str]) -> list[str]:
-    """
-    Vereinheitlicht Medienpfade für die Speicherung.
+    @staticmethod
+    def _clean_media(items: list[str]) -> list[str]:
+        """
+        Vereinheitlicht Medienpfade für die Speicherung.
 
-    Aus einem absoluten Pfad wie
-    /app/storage/uploads/facebook/2026-07-29/bild.jpg
+        Aus:
+        /app/storage/uploads/facebook/2026-07-29/bild.jpg
 
-    wird
-    uploads/facebook/2026-07-29/bild.jpg
-    """
-    cleaned: list[str] = []
+        wird:
+        uploads/facebook/2026-07-29/bild.jpg
+        """
+        cleaned: list[str] = []
 
-    for item in items:
-        normalized = str(item).strip().replace("\\", "/")
+        for item in items:
+            normalized = str(item).strip().replace("\\", "/")
 
-        if not normalized:
-            continue
+            if not normalized:
+                continue
 
-        if normalized.startswith(("http://", "https://")):
-            cleaned_value = normalized
-        else:
-            upload_marker = "uploads/"
-            marker_position = normalized.find(upload_marker)
-
-            if marker_position >= 0:
-                cleaned_value = normalized[marker_position:]
+            if normalized.startswith(("http://", "https://")):
+                cleaned_value = normalized
             else:
-                cleaned_value = normalized.lstrip("/")
+                upload_marker = "uploads/"
+                marker_position = normalized.find(upload_marker)
 
-        if cleaned_value and cleaned_value not in cleaned:
-            cleaned.append(cleaned_value)
+                if marker_position >= 0:
+                    cleaned_value = normalized[marker_position:]
+                else:
+                    cleaned_value = normalized.lstrip("/")
 
-    return cleaned
+            if (
+                cleaned_value
+                and cleaned_value not in cleaned
+            ):
+                cleaned.append(cleaned_value)
+
+        return cleaned
 
     @staticmethod
     def _clean_title(title: str, text: str) -> str:
         cleaned_title = title.strip()
+
         if cleaned_title:
             return cleaned_title[:120]
 
         first_line = next(
-            (line.strip() for line in text.splitlines() if line.strip()),
+            (
+                line.strip()
+                for line in text.splitlines()
+                if line.strip()
+            ),
             "Unbenannter Entwurf",
         )
+
         return first_line[:120]
