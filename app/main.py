@@ -15,7 +15,7 @@ auth_settings = get_auth_settings()
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="1.2.0",
+    version="1.3.0",
 )
 
 @app.middleware("http")
@@ -67,4 +67,4 @@ app.include_router(planning.router)
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "1.2.0", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "1.3.0", "auth": auth_status()})

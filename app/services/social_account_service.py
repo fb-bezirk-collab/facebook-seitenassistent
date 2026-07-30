@@ -42,6 +42,8 @@ class SocialAccountService:
         known={(a.platform,a.external_id) for a in accounts if a.external_id}
         changed=False
         for page in SettingsService().load_pages():
+            if not page.is_active:
+                continue
             key=("facebook", page.page_id)
             if key in known: continue
             accounts.append(SocialAccount(id=f"facebook:{page.page_id}", platform="facebook", name=page.name, external_id=page.page_id, connection_status="connected"))

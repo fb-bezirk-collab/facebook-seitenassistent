@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Anmelden – Facebook Seitenassistent</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f5f8;
+            color: #1f2937;
+        }
+        .login-card {
+            width: min(440px, 100%);
+            padding: 36px;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 12px 40px rgba(0,0,0,.10);
+        }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        .subtitle { margin: 0 0 28px; color: #667085; line-height: 1.5; }
+        .field { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; font-weight: 700; }
+        input {
+            width: 100%;
+            height: 50px;
+            padding: 0 14px;
+            border: 1px solid #cfd6df;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        input:focus { outline: none; border-color: #1877f2; box-shadow: 0 0 0 3px rgba(24,119,242,.15); }
+        button {
+            width: 100%;
+            min-height: 50px;
+            border: 0;
+            border-radius: 10px;
+            background: #1877f2;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button:hover { background: #1264d6; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .error {
+            margin-bottom: 20px;
+            padding: 14px 16px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            background: #fee2e2;
+            color: #991b1b;
+            line-height: 1.45;
+        }
+    </style>
+</head>
+<body>
+    <main class="login-card">
+        <h1>Facebook Seitenassistent</h1>
+        <p class="subtitle">Bitte melde dich an, um den Seitenassistenten zu verwenden.</p>
+
+        {% if configuration_error %}
+            <div class="error"><strong>Login noch nicht konfiguriert.</strong><br>{{ configuration_error }}</div>
+        {% elif error %}
+            <div class="error">Benutzername oder Passwort ist nicht richtig.</div>
+        {% endif %}
+
+        <form method="post" action="/login">
+            <input type="hidden" name="next_url" value="{{ next_url }}">
+            <div class="field">
+                <label for="username">Benutzername</label>
+                <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+            </div>
+            <div class="field">
+                <label for="password">Passwort</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" {% if configuration_error %}disabled{% endif %}>Anmelden</button>
+        </form>
+    </main>
+</body>
+</html>

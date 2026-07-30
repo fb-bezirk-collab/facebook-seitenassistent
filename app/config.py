@@ -24,6 +24,7 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 PAGES_FILE = DATA_DIR / "pages.json"
 POSTS_FILE = DATA_DIR / "posts.json"
 META_TOKEN_FILE = DATA_DIR / "meta_user_access_token.txt"
+FACEBOOK_CONNECTION_FILE = DATA_DIR / "facebook_connection.json"
 PUBLICATIONS_FILE = DATA_DIR / "publications.json"
 SOCIAL_ACCOUNTS_FILE = DATA_DIR / "social_accounts.json"
 
