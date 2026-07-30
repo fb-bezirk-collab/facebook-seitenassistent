@@ -1,3 +1,10 @@
+# Version 1.4.2
+
+- Button „Jetzt veröffentlichen“ in der Planungsübersicht
+- Facebook-Reels und Videos werden als Linkbeiträge veröffentlicht
+- kein Video-Download und kein Video-Upload
+- fehlgeschlagene Planungen können erneut veröffentlicht werden
+
 # Changelog
 
 ## 1.2.0
@@ -18,3 +25,10 @@
 - Veröffentlichung von Text, Einzelbild und mehreren Bildern
 - Fehleranzeige und Speicherung der Facebook-Beitrags-ID
 - Lokale Planungszeiten werden als Europe/Vienna interpretiert
+
+## 1.4.1
+- Button „Jetzt veröffentlichen“ direkt in der Veröffentlichungsplanung ergänzt.
+- Sofortveröffentlichung leitet wieder zur aufrufenden Ansicht zurück.
+- Facebook-Videobeiträge werden über den Page-Videos-Endpunkt veröffentlicht.
+- Direkte Videodatei-URLs werden per `file_url` übergeben.
+- Bei Facebook-/Reel-Seitenlinks wird die tatsächliche Videodatei ermittelt, lokal gespeichert und hochgeladen.

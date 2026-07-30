@@ -14,7 +14,10 @@ from app.services.settings_service import SettingsService
 
 
 class FacebookPublisher:
-    def __init__(self, settings_service: SettingsService | None = None):
+    def __init__(
+        self,
+        settings_service: SettingsService | None = None,
+    ):
         self.settings_service = settings_service or SettingsService()
 
     def publish(self, post: ManagedPost, page_id: str) -> str:
@@ -25,10 +28,9 @@ class FacebookPublisher:
                 "Bitte Facebook unter Einstellungen erneut verbinden."
             )
 
-        if post.videos or post.video_url:
-            raise FacebookApiError(
-                "Die direkte Videoveröffentlichung ist in dieser Version noch nicht aktiviert."
-            )
+        video_link = self._get_video_link(post)
+        if video_link:
+            return self._publish_link(post, page, video_link)
 
         image_paths = [self._resolve_image_path(item) for item in post.images]
         image_paths = [path for path in image_paths if path is not None]
@@ -38,6 +40,39 @@ class FacebookPublisher:
         if len(image_paths) > 1:
             return self._publish_multiple_photos(post, page, image_paths)
         return self._publish_text(post, page)
+
+    @staticmethod
+    def _get_video_link(post: ManagedPost) -> str:
+        """Ermittelt den Original-Link eines Video- oder Reel-Beitrags.
+
+        Videos werden bewusst weder heruntergeladen noch erneut hochgeladen.
+        Der Original-Link wird gemeinsam mit dem importierten Beitragstext als
+        normaler Facebook-Linkbeitrag veröffentlicht.
+        """
+        candidates = [post.video_url, *post.videos]
+
+        for value in candidates:
+            normalized = str(value).strip()
+            if normalized.startswith(("http://", "https://")):
+                return normalized
+
+        return ""
+
+    def _publish_link(
+        self,
+        post: ManagedPost,
+        page: FacebookPage,
+        link: str,
+    ) -> str:
+        data = self._request_json(
+            url=f"{GRAPH_API_BASE_URL}/{page.page_id}/feed",
+            data={
+                "message": post.text.strip(),
+                "link": link,
+                "access_token": page.access_token,
+            },
+        )
+        return self._require_post_id(data)
 
     def _get_page(self, page_id: str) -> FacebookPage:
         page = next(
@@ -145,9 +180,14 @@ class FacebookPublisher:
         return path
 
     @staticmethod
-    def _request_json(url: str, data: dict, files: dict | None = None) -> dict:
+    def _request_json(
+        url: str,
+        data: dict,
+        files: dict | None = None,
+        timeout: int = 60,
+    ) -> dict:
         try:
-            response = requests.post(url, data=data, files=files, timeout=60)
+            response = requests.post(url, data=data, files=files, timeout=timeout)
         except requests.RequestException as exc:
             raise FacebookApiError(f"Facebook konnte nicht erreicht werden: {exc}") from exc
 

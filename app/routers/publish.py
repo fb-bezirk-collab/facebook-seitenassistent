@@ -24,7 +24,13 @@ def jetzt_veroeffentlichen(request: Request, publication_id: str):
     else:
         query = "publish_error=" + quote(result.error_message or "Veröffentlichung fehlgeschlagen.")
 
+    referer = request.headers.get("referer", "")
+    if "/planning" in referer:
+        target = str(request.url_for("veroeffentlichungsplanung"))
+    else:
+        target = str(request.url_for("entwurf_bearbeiten", post_id=result.post_id))
+
     return RedirectResponse(
-        url=str(request.url_for("entwurf_bearbeiten", post_id=result.post_id)) + "?" + query,
+        url=target + "?" + query,
         status_code=303,
     )

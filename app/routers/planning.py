@@ -18,7 +18,13 @@ account_service = SocialAccountService()
 
 
 @router.get("/planning", name="veroeffentlichungsplanung")
-def planning(request: Request, saved: int = 0, deleted: int = 0):
+def planning(
+    request: Request,
+    saved: int = 0,
+    deleted: int = 0,
+    published: int = 0,
+    publish_error: str | None = None,
+):
     publications = publication_service.list_publications()
     posts = {post.id: post for post in post_service.list_posts()}
     grouped = defaultdict(list)
@@ -33,6 +39,8 @@ def planning(request: Request, saved: int = 0, deleted: int = 0):
             "grouped": dict(grouped),
             "saved": bool(saved),
             "deleted": bool(deleted),
+            "published": bool(published),
+            "publish_error": publish_error,
             "now": datetime.now().isoformat(timespec="minutes"),
         },
     )
