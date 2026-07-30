@@ -143,14 +143,40 @@ class PostService:
         )
         temporary_file.replace(self.posts_file)
 
-    @staticmethod
-    def _clean_media(items: list[str]) -> list[str]:
-        cleaned: list[str] = []
-        for item in items:
-            normalized = item.strip().replace("\\", "/").lstrip("/")
-            if normalized and normalized not in cleaned:
-                cleaned.append(normalized)
-        return cleaned
+@staticmethod
+def _clean_media(items: list[str]) -> list[str]:
+    """
+    Vereinheitlicht Medienpfade für die Speicherung.
+
+    Aus einem absoluten Pfad wie
+    /app/storage/uploads/facebook/2026-07-29/bild.jpg
+
+    wird
+    uploads/facebook/2026-07-29/bild.jpg
+    """
+    cleaned: list[str] = []
+
+    for item in items:
+        normalized = str(item).strip().replace("\\", "/")
+
+        if not normalized:
+            continue
+
+        if normalized.startswith(("http://", "https://")):
+            cleaned_value = normalized
+        else:
+            upload_marker = "uploads/"
+            marker_position = normalized.find(upload_marker)
+
+            if marker_position >= 0:
+                cleaned_value = normalized[marker_position:]
+            else:
+                cleaned_value = normalized.lstrip("/")
+
+        if cleaned_value and cleaned_value not in cleaned:
+            cleaned.append(cleaned_value)
+
+    return cleaned
 
     @staticmethod
     def _clean_title(title: str, text: str) -> str:
