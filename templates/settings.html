@@ -1,27 +1,486 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Einstellungen – Facebook Seitenassistent</title>
-<style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f8;color:#1f2937}.header{background:#fff;border-bottom:1px solid #dfe3e8}.container{width:min(1180px,calc(100% - 40px));margin:0 auto}.header-inner{min-height:94px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand h1{margin:0 0 6px;font-size:28px}.brand p,.muted{margin:0;color:#667085}.nav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.nav a,.nav button{display:inline-flex;align-items:center;min-height:42px;padding:0 14px;border:1px solid #d0d5dd;border-radius:9px;text-decoration:none;font-weight:700;background:#fff;color:#344054;cursor:pointer}.nav .active{color:#fff;background:#1877f2;border-color:#1877f2}main{padding:40px 0}.page-title{margin-bottom:24px}.page-title h2{margin:0 0 8px;font-size:28px}.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,.85fr);gap:28px}.card{background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:28px;margin-bottom:28px}.card h3{margin:0 0 8px;font-size:21px}.description{margin:0 0 22px;color:#667085;line-height:1.5}.message,.status{padding:16px;border-radius:10px;margin-bottom:20px;line-height:1.5}.success{background:#ecfdf3;border:1px solid #abefc6;color:#067647}.error{background:#fef3f2;border:1px solid #fecdca;color:#b42318}.warning{background:#fffaeb;border:1px solid #fedf89;color:#b54708}.connected{background:#eff8ff;border:1px solid #b2ddff;color:#175cd3}.button,button.primary{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border:0;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;cursor:pointer}.facebook{width:100%;color:#fff;background:#1877f2}.secondary{color:#344054;background:#fff;border:1px solid #d0d5dd}.danger{color:#b42318;background:#fff;border:1px solid #fda29b}.disabled{width:100%;color:#fff;background:#9ca3af}.facts{display:grid;gap:10px;margin:18px 0}.fact{padding:12px 14px;border:1px solid #e4e7ec;border-radius:10px;overflow-wrap:anywhere}.fact strong{display:block;margin-bottom:4px}.page-list{display:grid;gap:12px}.page-item{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid #dfe3e8;border-radius:12px}.page-item input{margin-top:4px;width:18px;height:18px}.page-name{font-weight:700}.page-id{margin-top:4px;color:#667085;font-size:13px;overflow-wrap:anywhere}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.empty{padding:26px 18px;text-align:center;border:2px dashed #d0d5dd;border-radius:12px;color:#667085}.security{margin-top:20px;padding-top:18px;border-top:1px solid #eaecf0;color:#667085;font-size:14px;line-height:1.5}.account-form{display:grid;grid-template-columns:180px 1fr 1fr auto;gap:12px;align-items:end;margin:18px 0}.account-form input,.account-form select{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:9px}.account-list{display:grid;gap:10px}.account{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px;border:1px solid #e4e7ec;border-radius:10px}.small{color:#667085;font-size:13px}.inline{display:flex;gap:8px;flex-wrap:wrap}.inline form{margin:0}.inline button{min-height:38px;padding:0 12px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;cursor:pointer}@media(max-width:850px){.header-inner{align-items:flex-start;flex-direction:column;padding:22px 0}.grid{grid-template-columns:1fr}.account-form{grid-template-columns:1fr}.account{align-items:flex-start;flex-direction:column}}
-</style>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>
+        Einstellungen – Facebook Seitenassistent
+    </title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f5f8;
+            color: #1f2937;
+        }
+
+        .header {
+            background: #ffffff;
+            border-bottom: 1px solid #dfe3e8;
+        }
+
+        .container {
+            width: min(1180px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+
+        .header-inner {
+            min-height: 94px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .brand h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        .brand p {
+            margin: 0;
+            color: #667085;
+        }
+
+        .nav {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 0 16px;
+            border-radius: 9px;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .nav-home {
+            color: #344054;
+            background: #eef1f5;
+        }
+
+        .nav-settings {
+            color: #ffffff;
+            background: #1877f2;
+        }
+
+        main {
+            padding: 40px 0;
+        }
+
+        .page-title {
+            margin: 0 0 24px;
+        }
+
+        .page-title h2 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .page-title p {
+            margin: 0;
+            color: #667085;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns:
+                minmax(0, 1fr)
+                minmax(320px, 0.75fr);
+            gap: 28px;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow:
+                0 8px 30px rgba(0, 0, 0, 0.08);
+            padding: 28px;
+        }
+
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 21px;
+        }
+
+        .card-description {
+            margin: 0 0 24px;
+            color: #667085;
+            line-height: 1.5;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 0 20px;
+            border: 0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .button-facebook {
+            width: 100%;
+            color: #ffffff;
+            background: #1877f2;
+        }
+
+        .button-facebook:hover {
+            background: #1264d6;
+        }
+
+        .button-disabled {
+            width: 100%;
+            color: #ffffff;
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-bottom: 24px;
+            padding: 16px;
+            border-radius: 10px;
+            line-height: 1.5;
+        }
+
+        .message-success {
+            background: #ecfdf3;
+            border: 1px solid #abefc6;
+            color: #067647;
+        }
+
+        .message-error {
+            background: #fef3f2;
+            border: 1px solid #fecdca;
+            color: #b42318;
+        }
+
+        .status-box {
+            margin-bottom: 22px;
+            padding: 17px;
+            border-radius: 10px;
+            line-height: 1.5;
+        }
+
+        .status-ready {
+            background: #ecfdf3;
+            border: 1px solid #abefc6;
+            color: #067647;
+        }
+
+        .status-missing {
+            background: #fffaeb;
+            border: 1px solid #fedf89;
+            color: #b54708;
+        }
+
+        .status-connected {
+            background: #eff8ff;
+            border: 1px solid #b2ddff;
+            color: #175cd3;
+        }
+
+        .app-id {
+            margin-top: 8px;
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .empty-state {
+            padding: 28px 18px;
+            text-align: center;
+            border: 2px dashed #d0d5dd;
+            border-radius: 12px;
+            color: #667085;
+        }
+
+        .page-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .page-item {
+            border: 1px solid #dfe3e8;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .page-name {
+            font-weight: 700;
+            font-size: 17px;
+        }
+
+        .page-id {
+            margin-top: 5px;
+            color: #667085;
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .security-note {
+            margin-top: 22px;
+            padding-top: 20px;
+            border-top: 1px solid #eaecf0;
+            color: #667085;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 850px) {
+            .header-inner {
+                align-items: flex-start;
+                flex-direction: column;
+                padding: 22px 0;
+            }
+
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav {
+                width: 100%;
+            }
+
+            .nav a {
+                flex: 1;
+                justify-content: center;
+            }
+        }
+    </style>
 </head>
+
 <body>
-<header class="header"><div class="container header-inner"><div class="brand"><h1>Facebook Seitenassistent</h1><p>Beiträge für mehrere Facebook-Seiten vorbereiten</p></div><nav class="nav"><a href="/">Beiträge</a><a href="/drafts">Entwürfe</a><a href="/planning">Planung</a><a href="/settings" class="active">Einstellungen</a><form method="post" action="/logout" style="margin:0"><button type="submit">Abmelden</button></form></nav></div></header>
-<main><div class="container">
-<div class="page-title"><h2>Einstellungen</h2><p class="muted">Facebook verbinden und die Seiten für die Veröffentlichungsplanung auswählen.</p></div>
-{% if connected %}<div class="message success"><strong>Facebook wurde erfolgreich verbunden.</strong> {{ facebook_pages|length }} Seite{% if facebook_pages|length != 1 %}n{% endif %} wurde{% if facebook_pages|length != 1 %}n{% endif %} abgerufen.</div>{% endif %}
-{% if disconnected %}<div class="message success">Die Facebook-Verbindung wurde getrennt und die gespeicherten Facebook-Tokens wurden gelöscht.</div>{% endif %}
-{% if pages_saved %}<div class="message success">Die Seitenauswahl wurde gespeichert.</div>{% endif %}
-{% if facebook_error %}<div class="message error"><strong>Facebook-Verbindung fehlgeschlagen:</strong> {{ facebook_error }}</div>{% endif %}
-<div class="grid">
-<section class="card"><h3>Facebook-Verbindung</h3><p class="description">Melde dich bei Facebook an und erlaube den Zugriff auf die Seiten, die du mit dem Assistenten verwalten möchtest.</p>
-{% if not meta_is_configured %}<div class="status warning"><strong>Meta-App noch nicht vollständig konfiguriert</strong><br>In Railway müssen <code>META_APP_ID</code>, <code>META_APP_SECRET</code> und <code>META_REDIRECT_URI</code> gesetzt sein.</div><span class="button disabled">Mit Facebook verbinden</span>
-{% elif facebook_is_connected %}<div class="status connected"><strong>Facebook ist verbunden</strong>{% if facebook_connection.user_name %}<br>Konto: {{ facebook_connection.user_name }}{% endif %}{% if facebook_connection.is_expired %}<br><strong>Das Token ist laut gespeichertem Ablaufdatum abgelaufen. Bitte erneuern.</strong>{% endif %}</div><div class="facts"><div class="fact"><strong>Aktive Seiten</strong>{{ active_page_count }} von {{ facebook_pages|length }}</div>{% if facebook_connection.token_expires_at %}<div class="fact"><strong>Token gültig bis</strong>{{ facebook_connection.token_expires_at }}</div>{% endif %}<div class="fact"><strong>Login-Verfahren</strong>{% if meta_uses_business_login %}Facebook Login for Business{% else %}Facebook Login mit Berechtigungen{% endif %}</div></div><a href="/facebook/connect" class="button facebook">Facebook-Verbindung erneuern</a><form method="post" action="/facebook/disconnect" onsubmit="return confirm('Facebook-Verbindung wirklich trennen? Die gespeicherten Tokens und Seiten werden entfernt.')"><button class="button danger" type="submit" style="width:100%;margin-top:10px">Facebook-Verbindung trennen</button></form>
-{% else %}<div class="status success"><strong>Meta-App ist bereit</strong><br>App-ID: {{ meta_app_id }}</div><a href="/facebook/connect" class="button facebook">Mit Facebook verbinden</a>{% endif %}
-<div class="security">Tokens werden im persistenten Railway-Speicher unter <code>/app/storage/data</code> abgelegt. Das App-Secret bleibt ausschließlich in den Railway-Variablen und wird nicht in der Oberfläche angezeigt.</div></section>
-<section class="card"><h3>Verwaltete Facebook-Seiten</h3><p class="description">Nur aktivierte Seiten erscheinen später als Ziel in der Veröffentlichungsplanung.</p>{% if facebook_pages %}<form method="post" action="/facebook/pages"><div class="page-list">{% for page in facebook_pages %}<label class="page-item"><input type="checkbox" name="active_page_ids" value="{{ page.page_id }}" {% if page.is_active %}checked{% endif %}><span><span class="page-name">{{ page.name }}</span><span class="page-id">Seiten-ID: {{ page.page_id }}</span></span></label>{% endfor %}</div><div class="actions"><button class="button facebook" type="submit">Seitenauswahl speichern</button></div></form>{% else %}<div class="empty">Noch keine Facebook-Seiten verbunden.</div>{% endif %}</section>
-</div>
-<section class="card"><h3>Weitere Social-Media-Konten</h3><p class="description">Manuelle Konten bleiben für die Planung erhalten. Die tatsächliche Veröffentlichung auf diesen Plattformen folgt in einer späteren Version.</p>{% if account_saved %}<div class="message success">Konto gespeichert.</div>{% endif %}{% if account_deleted %}<div class="message success">Konto gelöscht.</div>{% endif %}{% if account_error %}<div class="message error">{{ account_error }}</div>{% endif %}<form method="post" action="/settings/accounts" class="account-form"><div><label for="platform">Plattform</label><select id="platform" name="platform"><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="x">X</option><option value="tiktok">TikTok</option></select></div><div><label for="account_name">Name</label><input id="account_name" name="name" required placeholder="z. B. FPÖ Bezirk Gänserndorf"></div><div><label for="external_id">Externe ID (optional)</label><input id="external_id" name="external_id" placeholder="Seiten- oder Konto-ID"></div><button class="button facebook" type="submit">Konto hinzufügen</button></form>{% if social_accounts %}<div class="account-list">{% for account in social_accounts %}<div class="account"><div><strong>{{ account.name }}</strong><br><span class="small">{{ account.platform|capitalize }} · {% if account.connection_status == 'connected' %}über Facebook verbunden{% else %}manuell{% endif %} · {% if account.active %}aktiv{% else %}inaktiv{% endif %}</span></div>{% if account.connection_status != 'connected' %}<div class="inline"><form method="post" action="/settings/accounts/{{ account.id }}/toggle"><button type="submit">{% if account.active %}Deaktivieren{% else %}Aktivieren{% endif %}</button></form><form method="post" action="/settings/accounts/{{ account.id }}/delete" onsubmit="return confirm('Konto löschen?')"><button type="submit">Löschen</button></form></div>{% endif %}</div>{% endfor %}</div>{% else %}<div class="empty">Noch keine zusätzlichen Konten angelegt.</div>{% endif %}</section>
-</div></main></body></html>
+
+<header class="header">
+    <div class="container header-inner">
+
+        <div class="brand">
+            <h1>Facebook Seitenassistent</h1>
+
+            <p>
+                Beiträge für mehrere Facebook-Seiten
+                vorbereiten
+            </p>
+        </div>
+
+        <nav class="nav">
+            <a href="/" class="nav-home">
+                Beiträge
+            </a>
+
+            <a
+                href="/settings"
+                class="nav-settings"
+            >
+                Einstellungen
+            </a>
+                    <form method="post" action="/logout" style="margin:0;">
+                <button type="submit" style="min-height:42px;padding:0 14px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#344054;font-weight:700;cursor:pointer;">Abmelden</button>
+            </form>
+        </nav>
+
+    </div>
+</header>
+
+<main>
+    <div class="container">
+
+        <div class="page-title">
+            <h2>Einstellungen</h2>
+
+            <p>
+                Facebook-Verbindung und verwaltete
+                Seiten einrichten.
+            </p>
+        </div>
+
+        {% if connected %}
+            <div class="message message-success">
+                Facebook wurde erfolgreich verbunden.
+                {{ facebook_pages | length }}
+                Seite{% if facebook_pages | length != 1 %}n{% endif %}
+                wurde{% if facebook_pages | length != 1 %}n{% endif %}
+                übernommen.
+            </div>
+        {% endif %}
+
+        {% if facebook_error %}
+            <div class="message message-error">
+                <strong>
+                    Facebook-Verbindung fehlgeschlagen:
+                </strong>
+
+                {{ facebook_error }}
+            </div>
+        {% endif %}
+
+        <div class="settings-grid">
+
+            <section class="card">
+
+                <h3>Facebook-Verbindung</h3>
+
+                <p class="card-description">
+                    Verbinde dein Facebook-Konto, um die
+                    von dir verwalteten Seiten abzurufen.
+                </p>
+
+                {% if not meta_is_configured %}
+
+                    <div class="status-box status-missing">
+                        <strong>
+                            Meta-App nicht vollständig
+                            konfiguriert
+                        </strong>
+
+                        <br>
+
+                        Kontrolliere App-ID, App-Secret,
+                        Konfigurations-ID und Redirect-URI
+                        in der Datei <code>.env</code>.
+                    </div>
+
+                    <span
+                        class="button button-disabled"
+                    >
+                        Mit Facebook verbinden
+                    </span>
+
+                {% elif facebook_is_connected %}
+
+                    <div class="status-box status-connected">
+                        <strong>
+                            Facebook ist verbunden
+                        </strong>
+
+                        <br>
+
+                        Die unten angeführten Seiten wurden
+                        erfolgreich abgerufen.
+                    </div>
+
+                    <a
+                        href="/facebook/connect"
+                        class="button button-facebook"
+                    >
+                        Facebook-Verbindung erneuern
+                    </a>
+
+                {% else %}
+
+                    <div class="status-box status-ready">
+                        <strong>
+                            Meta-App ist bereit
+                        </strong>
+
+                        <div class="app-id">
+                            App-ID: {{ meta_app_id }}
+                        </div>
+                    </div>
+
+                    <a
+                        href="/facebook/connect"
+                        class="button button-facebook"
+                    >
+                        Mit Facebook verbinden
+                    </a>
+
+                {% endif %}
+
+                <div class="security-note">
+                    Zugangstoken werden ausschließlich
+                    lokal gespeichert. App-Secret und
+                    Benutzer-Token befinden sich in der
+                    ausgeschlossenen Datei
+                    <code>.env</code>. Die Page-Tokens
+                    befinden sich in der ebenfalls
+                    ausgeschlossenen Datei
+                    <code>data/pages.json</code>.
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <h3>Verwaltete Seiten</h3>
+
+                <p class="card-description">
+                    Diese Seiten wurden von Facebook
+                    freigegeben und können später als
+                    Zielseiten ausgewählt werden.
+                </p>
+
+                {% if facebook_pages %}
+
+                    <div class="page-list">
+
+                        {% for page in facebook_pages %}
+
+                            <div class="page-item">
+                                <div class="page-name">
+                                    {{ page.name }}
+                                </div>
+
+                                <div class="page-id">
+                                    Seiten-ID:
+                                    {{ page.page_id }}
+                                </div>
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                {% else %}
+
+                    <div class="empty-state">
+                        Noch keine Facebook-Seiten
+                        verbunden.
+                    </div>
+
+                {% endif %}
+
+            </section>
+
+        </div>
+
+    </div>
+
+<section class="card" style="margin-top:24px;">
+  <h2>Social-Media-Konten</h2>
+  <p>Diese Konten stehen in der Veröffentlichungsplanung zur Auswahl. Verbundene Facebook-Seiten werden automatisch übernommen.</p>
+  {% if account_saved %}<div class="success">Konto gespeichert.</div>{% endif %}
+  {% if account_deleted %}<div class="success">Konto gelöscht.</div>{% endif %}
+  {% if account_error %}<div class="error">{{ account_error }}</div>{% endif %}
+  <form method="post" action="/settings/accounts" style="display:grid;grid-template-columns:180px 1fr 1fr auto;gap:12px;align-items:end;margin:18px 0;">
+    <div><label for="platform">Plattform</label><select id="platform" name="platform" style="width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:9px"><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="x">X</option><option value="tiktok">TikTok</option></select></div>
+    <div><label for="account_name">Name</label><input id="account_name" name="name" required placeholder="z. B. FPÖ Bezirk Gänserndorf"></div>
+    <div><label for="external_id">Externe ID (optional)</label><input id="external_id" name="external_id" placeholder="Seiten- oder Konto-ID"></div>
+    <button class="primary" type="submit">Konto hinzufügen</button>
+  </form>
+  {% if social_accounts %}
+  <div style="display:grid;gap:10px;">
+  {% for account in social_accounts %}<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px;border:1px solid #e4e7ec;border-radius:10px"><div><strong>{{ account.name }}</strong><br><span style="color:#667085;font-size:13px">{{ account.platform|capitalize }} · {% if account.connection_status == 'connected' %}verbunden{% else %}manuell{% endif %} · {% if account.active %}aktiv{% else %}inaktiv{% endif %}</span></div>{% if account.connection_status != 'connected' %}<div style="display:flex;gap:8px"><form method="post" action="/settings/accounts/{{ account.id }}/toggle"><button type="submit">{% if account.active %}Deaktivieren{% else %}Aktivieren{% endif %}</button></form><form method="post" action="/settings/accounts/{{ account.id }}/delete" onsubmit="return confirm('Konto löschen?')"><button type="submit">Löschen</button></form></div>{% endif %}</div>{% endfor %}
+  </div>{% else %}<p>Noch keine Konten angelegt.</p>{% endif %}
+</section>
+</main>
+
+</body>
+</html>

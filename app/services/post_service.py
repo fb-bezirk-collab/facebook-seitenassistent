@@ -97,6 +97,20 @@ class PostService:
 
         return None
 
+
+    def mark_published(self, post_id: str) -> ManagedPost | None:
+        posts = self._load_all()
+        for post in posts:
+            if post.id != post_id:
+                continue
+            post.status = "published"
+            post.published_at = utc_now_iso()
+            post.error_message = ""
+            post.updated_at = utc_now_iso()
+            self._save_all(posts)
+            return post
+        return None
+
     def delete_draft(self, post_id: str) -> bool:
         posts = self._load_all()
 

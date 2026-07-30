@@ -1,16 +1,10 @@
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from app.config import (
-    BASE_DIR,
-    FACEBOOK_CONNECTION_FILE,
-    META_TOKEN_FILE,
-)
-from app.models.facebook_connection import FacebookConnection
+from app.config import BASE_DIR, META_TOKEN_FILE
 
 
 ENV_FILE = BASE_DIR / ".env"
@@ -26,23 +20,13 @@ class MetaConfig:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.app_id and self.app_secret and self.redirect_uri)
-
-    @property
-    def uses_business_login(self) -> bool:
-        return bool(self.config_id)
+        return bool(self.app_id and self.app_secret and self.config_id and self.redirect_uri)
 
 
 class MetaConfigService:
-    def __init__(
-        self,
-        env_file: Path = ENV_FILE,
-        token_file: Path = META_TOKEN_FILE,
-        connection_file: Path = FACEBOOK_CONNECTION_FILE,
-    ):
+    def __init__(self, env_file: Path = ENV_FILE, token_file: Path = META_TOKEN_FILE):
         self.env_file = env_file
         self.token_file = token_file
-        self.connection_file = connection_file
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
 
     def load(self) -> MetaConfig:
@@ -69,31 +53,6 @@ class MetaConfigService:
         clean_token = token.strip()
         if not clean_token:
             raise ValueError("Das Facebook-Zugriffstoken ist leer.")
+
         self.token_file.write_text(clean_token, encoding="utf-8")
         os.environ["META_USER_ACCESS_TOKEN"] = clean_token
-
-    def delete_user_access_token(self) -> None:
-        try:
-            self.token_file.unlink(missing_ok=True)
-        except OSError:
-            pass
-        os.environ.pop("META_USER_ACCESS_TOKEN", None)
-
-    def load_connection(self) -> FacebookConnection:
-        try:
-            raw = json.loads(self.connection_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return FacebookConnection()
-        return FacebookConnection.from_dict(raw) if isinstance(raw, dict) else FacebookConnection()
-
-    def save_connection(self, connection: FacebookConnection) -> None:
-        self.connection_file.write_text(
-            json.dumps(connection.to_dict(), ensure_ascii=False, indent=4),
-            encoding="utf-8",
-        )
-
-    def delete_connection(self) -> None:
-        try:
-            self.connection_file.unlink(missing_ok=True)
-        except OSError:
-            pass

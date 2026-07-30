@@ -46,6 +46,43 @@ class PublicationService:
                 return item
         return None
 
+
+    def mark_published(
+        self,
+        publication_id: str,
+        *,
+        external_post_id: str,
+        published_at: str,
+    ) -> Publication | None:
+        items = self._load_all()
+        for item in items:
+            if item.id != publication_id:
+                continue
+            item.status = "published"
+            item.external_post_id = external_post_id
+            item.error_message = ""
+            item.published_at = published_at
+            item.updated_at = utc_now_iso()
+            self._save_all(items)
+            return item
+        return None
+
+    def mark_failed(
+        self,
+        publication_id: str,
+        error_message: str,
+    ) -> Publication | None:
+        items = self._load_all()
+        for item in items:
+            if item.id != publication_id:
+                continue
+            item.status = "failed"
+            item.error_message = error_message.strip()[:1000]
+            item.updated_at = utc_now_iso()
+            self._save_all(items)
+            return item
+        return None
+
     def delete(self, publication_id: str) -> bool:
         items = self._load_all()
         remaining = [item for item in items if item.id != publication_id]

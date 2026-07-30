@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -8,15 +10,40 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.auth import auth_status, get_auth_settings, is_authenticated
 from app.config import STATIC_DIR, UPLOADS_DIR, create_required_directories
 from app.routers import ai, auth, home, importer, planning, posts, publish, settings
+from app.services.publication_runner import PublicationRunner
 
 
 create_required_directories()
 auth_settings = get_auth_settings()
+publication_runner = PublicationRunner()
+
+
+async def publication_scheduler() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(publication_runner.publish_due)
+        except Exception as exc:
+            print(f"Fehler im Veröffentlichungs-Scheduler: {exc}", flush=True)
+        await asyncio.sleep(30)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    scheduler_task = asyncio.create_task(publication_scheduler())
+    try:
+        yield
+    finally:
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
+
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="1.3.0",
+    version="1.4.0",
+    lifespan=lifespan,
 )
+
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
@@ -40,8 +67,6 @@ async def require_login(request: Request, call_next):
     )
 
 
-# SessionMiddleware muss außerhalb der Login-Prüfung liegen, damit
-# request.session bereits in require_login verfügbar ist.
 app.add_middleware(
     SessionMiddleware,
     secret_key=auth_settings.session_secret,
@@ -50,7 +75,6 @@ app.add_middleware(
     same_site="lax",
     https_only=auth_settings.secure_cookie,
 )
-
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -67,4 +91,4 @@ app.include_router(planning.router)
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "1.3.0", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "1.4.0", "auth": auth_status()})
