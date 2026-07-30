@@ -123,7 +123,10 @@ def entwurf_bearbeiten(
     post_id: str,
     saved: int = 0,
     planned: int = 0,
+    planned_count: int = 0,
     published: int = 0,
+    published_count: int = 0,
+    failed_count: int = 0,
     publish_error: str | None = None,
 ):
     draft = post_service.get_post(post_id)
@@ -142,7 +145,10 @@ def entwurf_bearbeiten(
             "saved": bool(saved),
             "image_urls": _create_image_urls(draft.images),
             "planned": bool(planned),
+            "planned_count": planned_count,
             "published": bool(published),
+            "published_count": published_count,
+            "failed_count": failed_count,
             "publish_error": publish_error,
             "publications": publication_service.list_publications(post_id),
             "social_accounts": account_service.list_accounts(

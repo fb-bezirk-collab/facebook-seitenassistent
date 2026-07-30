@@ -50,27 +50,41 @@ def planning(
 def publication_create(
     request: Request,
     post_id: str,
-    account_id: str = Form(...),
+    account_ids: list[str] = Form(default=[]),
     publish_at: str = Form(...),
 ):
     post = post_service.get_post(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Beitrag nicht gefunden.")
-    account = account_service.get(account_id)
-    if not account or not account.active:
-        raise HTTPException(status_code=400, detail="Das ausgewählte Konto ist nicht verfügbar.")
+    if not account_ids:
+        raise HTTPException(status_code=400, detail="Bitte mindestens eine Facebook-Seite auswählen.")
+
+    accounts = []
+    invalid_accounts = []
+    for account_id in dict.fromkeys(account_ids):
+        account = account_service.get(account_id)
+        if not account or not account.active:
+            invalid_accounts.append(account_id)
+            continue
+        accounts.append(account)
+
+    if invalid_accounts:
+        raise HTTPException(status_code=400, detail="Mindestens eine ausgewählte Seite ist nicht mehr verfügbar.")
+
     try:
-        publication_service.create(
+        created = publication_service.create_many(
             post_id=post_id,
-            platform=account.platform,
-            account_id=account.id,
-            account_name=account.name,
+            accounts=accounts,
             publish_at=publish_at,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return RedirectResponse(
-        url=str(request.url_for("entwurf_bearbeiten", post_id=post_id)) + "?planned=1",
+        url=(
+            str(request.url_for("entwurf_bearbeiten", post_id=post_id))
+            + f"?planned=1&planned_count={len(created)}"
+        ),
         status_code=303,
     )
 

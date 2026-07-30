@@ -31,8 +31,47 @@ class PublicationService:
             account_id=account_id, account_name=account_name,
             publish_at=publish_at, created_at=now, updated_at=now,
         )
-        items = self._load_all(); items.append(item); self._save_all(items)
+        items = self._load_all()
+        items.append(item)
+        self._save_all(items)
         return item
+
+    def create_many(self, *, post_id: str, accounts: list, publish_at: str) -> list[Publication]:
+        """Erstellt für jedes ausgewählte Konto eine eigene Veröffentlichung.
+
+        Ein bereits identischer Eintrag (Beitrag, Konto und Zeitpunkt) wird nicht
+        doppelt angelegt. Damit kann ein Formular gefahrlos erneut abgesendet werden.
+        """
+        self._validate_datetime(publish_at)
+        items = self._load_all()
+        existing = {
+            (item.post_id, item.account_id, item.publish_at)
+            for item in items
+        }
+        created: list[Publication] = []
+        now = utc_now_iso()
+
+        for account in accounts:
+            key = (post_id, account.id, publish_at)
+            if key in existing:
+                continue
+            publication = Publication(
+                id=str(uuid4()),
+                post_id=post_id,
+                platform=account.platform,
+                account_id=account.id,
+                account_name=account.name,
+                publish_at=publish_at,
+                created_at=now,
+                updated_at=now,
+            )
+            items.append(publication)
+            created.append(publication)
+            existing.add(key)
+
+        if created:
+            self._save_all(items)
+        return created
 
     def update(self, publication_id: str, *, publish_at: str, status: str) -> Publication | None:
         self._validate_datetime(publish_at)
