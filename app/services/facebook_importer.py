@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -107,10 +108,18 @@ class FacebookImporter:
                 # Facebook kürzt längere Beitragstexte zunächst mit "Mehr anzeigen".
                 # Vor dem Auslesen wird diese Erweiterung gezielt im Hauptbeitrag
                 # geöffnet, damit der vollständige Text gespeichert wird.
-                self._expand_video_text(page)
+                self._expand_video_text(
+                    page,
+                    text_url=text_url,
+                    video_url=requested_video_url,
+                )
 
                 final_url = page.url or text_url
-                text = self._extract_video_text(page)
+                text = self._extract_video_text(
+                    page,
+                    text_url=text_url,
+                    video_url=requested_video_url,
+                )
                 stored_video_url = requested_video_url or self._preferred_video_page_url(
                     page,
                     fallback=final_url,
@@ -148,103 +157,289 @@ class FacebookImporter:
             return ""
         return FacebookImporter._best_text(blocks)
 
-    def _expand_video_text(self, page) -> None:
-        """Öffnet einen gekürzten Beitragstext im ersten Facebook-Artikel.
+    @staticmethod
+    def _video_id_from_url(url: str) -> str:
+        """Liest die Facebook-Video-ID aus unterschiedlichen URL-Formen."""
 
-        Facebook zeigt längere Beschreibungen häufig nur bis "…" und blendet
-        den Rest erst nach einem Klick auf "Mehr anzeigen" ein. Die Suche ist
-        absichtlich auf den ersten Artikel bzw. dessen Nachrichtenblock begrenzt,
-        damit nicht versehentlich ein Kommentar aufgeklappt wird.
-        """
+        if not url:
+            return ""
+
+        patterns = (
+            r"/reel/(\d+)",
+            r"/videos/(\d+)",
+            r"[?&]v=(\d+)",
+            r"fb\.watch/([^/?#]+)",
+        )
+
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+
+        return ""
+
+    def _find_video_article(
+        self,
+        page,
+        *,
+        text_url: str = "",
+        video_url: str = "",
+    ):
+        """Sucht den Artikel, der zur übergebenen Video-ID gehört."""
+
+        video_ids = {
+            value
+            for value in (
+                self._video_id_from_url(text_url),
+                self._video_id_from_url(video_url),
+            )
+            if value
+        }
+
         try:
             articles = page.locator("div[role='article']")
-            if not articles.count():
-                return
-            article = articles.first
+            article_count = articles.count()
         except Exception:
+            return None
+
+        if article_count == 0:
+            return None
+
+        if not video_ids:
+            return articles.first
+
+        for index in range(min(article_count, 15)):
+            article = articles.nth(index)
+
+            try:
+                html = article.inner_html()
+            except Exception:
+                html = ""
+
+            try:
+                links = article.locator("a[href]").evaluate_all(
+                    """
+                    links => links
+                        .map(link => link.href || "")
+                        .filter(Boolean)
+                    """
+                )
+            except Exception:
+                links = []
+
+            combined = " ".join([html, *links])
+
+            if any(video_id in combined for video_id in video_ids):
+                return article
+
+        return articles.first
+
+    def _expand_video_text(
+        self,
+        page,
+        *,
+        text_url: str = "",
+        video_url: str = "",
+    ) -> None:
+        """Öffnet „Mehr anzeigen“ ausschließlich im passenden Video-Beitrag."""
+
+        article = self._find_video_article(
+            page,
+            text_url=text_url,
+            video_url=video_url,
+        )
+
+        if article is None:
             return
 
-        selectors = (
-            "[data-ad-preview='message']",
-            "[data-ad-comet-preview='message']",
-        )
-
-        roots = []
-        for selector in selectors:
-            try:
-                locator = article.locator(selector)
-                if locator.count():
-                    roots.append(locator.first)
-            except Exception:
-                pass
-        roots.append(article)
-
         labels = (
-            "Mehr anzeigen",
-            "Mehr ansehen",
-            "See more",
-            "Voir plus",
-            "Mostra altro",
+            "mehr anzeigen",
+            "mehr ansehen",
+            "see more",
+            "voir plus",
+            "mostra altro",
         )
 
-        for root in roots:
-            for label in labels:
-                for selector in (
-                    f"div[role='button']:has-text(\"{label}\")",
-                    f"span[role='button']:has-text(\"{label}\")",
-                    f"text=/{label}/i",
-                ):
-                    try:
-                        button = root.locator(selector).first
-                        if button.count() and button.is_visible():
-                            button.click(timeout=2_000)
-                            page.wait_for_timeout(600)
-                            return
-                    except Exception:
-                        pass
+        for _attempt in range(4):
+            roots = []
 
-    def _extract_video_text(self, page) -> str:
-        """Liest ausschließlich die vollständige Beschreibung des Video-Posts.
+            for selector in (
+                "[data-ad-preview='message']",
+                "[data-ad-comet-preview='message']",
+            ):
+                try:
+                    locator = article.locator(selector)
+                    for index in range(min(locator.count(), 5)):
+                        roots.append(locator.nth(index))
+                except Exception:
+                    pass
 
-        Kommentare dürfen nicht als Beitragstext übernommen werden. Facebook liefert
-        Kommentare ebenfalls in ``div[dir=auto]`` aus; deshalb wird keine seitenweite
-        Suche verwendet. Längere Texte werden zuvor über "Mehr anzeigen" geöffnet.
-        """
+            roots.append(article)
+            clicked = False
 
-        # Facebook kennzeichnet den eigentlichen Beitragstext häufig ausdrücklich
-        # mit data-ad-preview="message". Das ist die verlässlichste Quelle.
-        for selector in (
-            "div[role='article'] [data-ad-preview='message']",
-            "div[role='article'] [data-ad-comet-preview='message']",
-            "[data-ad-preview='message']",
-            "[data-ad-comet-preview='message']",
-        ):
+            for root in roots:
+                try:
+                    buttons = root.locator(
+                        "div[role='button'], "
+                        "span[role='button'], "
+                        "button, "
+                        "[tabindex='0']"
+                    )
+
+                    for index in range(min(buttons.count(), 80)):
+                        button = buttons.nth(index)
+
+                        try:
+                            label = " ".join(
+                                (button.inner_text() or "").split()
+                            ).strip().lower()
+                        except Exception:
+                            label = ""
+
+                        if not label:
+                            try:
+                                label = " ".join(
+                                    (
+                                        button.get_attribute("aria-label") or ""
+                                    ).split()
+                                ).strip().lower()
+                            except Exception:
+                                label = ""
+
+                        if not any(value in label for value in labels):
+                            continue
+
+                        try:
+                            if button.is_visible():
+                                button.click(timeout=3_000, force=True)
+                                clicked = True
+                                break
+                        except Exception:
+                            try:
+                                button.evaluate("element => element.click()")
+                                clicked = True
+                                break
+                            except Exception:
+                                pass
+
+                    if clicked:
+                        break
+
+                except Exception:
+                    pass
+
+            if clicked:
+                page.wait_for_timeout(1_500)
+            else:
+                page.wait_for_timeout(1_000)
+
             try:
-                locator = page.locator(selector)
-                texts: list[str] = []
-                for index in range(min(locator.count(), 5)):
-                    node = locator.nth(index)
+                message_nodes = article.locator(
+                    "[data-ad-preview='message'], "
+                    "[data-ad-comet-preview='message']"
+                )
+
+                visible_texts = []
+
+                for index in range(min(message_nodes.count(), 5)):
                     try:
-                        value = node.inner_text()
+                        value = message_nodes.nth(index).inner_text()
                         if value:
-                            texts.append(value)
+                            visible_texts.append(value)
                     except Exception:
                         pass
-                    try:
-                        value = node.text_content()
-                        if value:
-                            texts.append(value)
-                    except Exception:
-                        pass
-                text = self._best_plausible_text(texts)
-                if text:
-                    return text
+
+                if visible_texts:
+                    best = self._best_plausible_text(visible_texts)
+                    if best and not self._looks_truncated(best):
+                        return
             except Exception:
                 pass
 
-        # Open-Graph-Metadaten sind nur ein Fallback. Facebook kürzt sie manchmal,
-        # deshalb werden sie erst nach dem sichtbaren Hauptbeitrag ausgewertet.
-        metadata_candidates: list[str] = []
+    def _extract_video_text(
+        self,
+        page,
+        *,
+        text_url: str = "",
+        video_url: str = "",
+    ) -> str:
+        """Liest den vollständigsten Text aus dem passenden Video-Beitrag."""
+
+        article = self._find_video_article(
+            page,
+            text_url=text_url,
+            video_url=video_url,
+        )
+
+        all_candidates: list[str] = []
+
+        if article is not None:
+            for selector in (
+                "[data-ad-preview='message']",
+                "[data-ad-comet-preview='message']",
+            ):
+                try:
+                    locator = article.locator(selector)
+
+                    for index in range(min(locator.count(), 10)):
+                        node = locator.nth(index)
+
+                        try:
+                            value = node.inner_text()
+                            if value:
+                                all_candidates.append(value)
+                        except Exception:
+                            pass
+
+                        try:
+                            value = node.text_content()
+                            if value:
+                                all_candidates.append(value)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            try:
+                blocks = article.locator("div[dir='auto']")
+                for index in range(min(blocks.count(), 30)):
+                    try:
+                        value = blocks.nth(index).inner_text()
+                        if value:
+                            all_candidates.append(value)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            try:
+                article_text = article.inner_text()
+
+                if article_text:
+                    control_markers = (
+                        "\nGefällt mir",
+                        "\nKommentieren",
+                        "\nTeilen",
+                        "\nAlle Reaktionen",
+                        "\nLike",
+                        "\nComment",
+                        "\nShare",
+                    )
+
+                    shortened_article_text = article_text
+                    positions = [
+                        shortened_article_text.find(marker)
+                        for marker in control_markers
+                        if marker in shortened_article_text
+                    ]
+
+                    if positions:
+                        shortened_article_text = shortened_article_text[:min(positions)]
+
+                    all_candidates.append(shortened_article_text)
+            except Exception:
+                pass
+
         for selector in (
             "meta[property='og:description']",
             "meta[name='twitter:description']",
@@ -253,25 +448,31 @@ class FacebookImporter:
             try:
                 value = page.locator(selector).first.get_attribute("content")
                 if value:
-                    metadata_candidates.append(value)
+                    all_candidates.append(value)
             except Exception:
                 pass
 
-        metadata_text = self._best_plausible_text(metadata_candidates)
-        if metadata_text:
-            return metadata_text
+        cleaned_candidates: list[str] = []
 
-        # Letzter Fallback: nur der erste Artikel. Weitere role=article-Elemente
-        # sind bei Facebook regelmäßig Kommentare.
-        try:
-            articles = page.locator("div[role='article']")
-            if articles.count():
-                candidates = articles.first.locator("div[dir='auto']").all_inner_texts()
-                return self._best_plausible_text(candidates)
-        except Exception:
-            pass
+        for candidate in all_candidates:
+            text = self._clean_candidate_text(candidate)
 
-        return ""
+            if text and text not in cleaned_candidates:
+                cleaned_candidates.append(text)
+
+        if not cleaned_candidates:
+            return ""
+
+        complete_candidates = [
+            text
+            for text in cleaned_candidates
+            if not self._looks_truncated(text)
+        ]
+
+        if complete_candidates:
+            return max(complete_candidates, key=len)
+
+        return max(cleaned_candidates, key=len)
 
     @staticmethod
     def _best_plausible_text(candidates: list[str]) -> str:
