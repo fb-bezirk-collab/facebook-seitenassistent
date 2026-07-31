@@ -144,35 +144,80 @@ class FacebookImporter:
         return FacebookImporter._best_text(blocks)
 
     def _extract_video_text(self, page) -> str:
-        candidates: list[str] = []
+        """Liest ausschließlich die Beschreibung des eigentlichen Video-Posts.
 
-        try:
-            articles = page.locator("div[role='article']")
-            for index in range(min(articles.count(), 3)):
-                candidates.extend(
-                    articles.nth(index).locator("div[dir='auto']").all_inner_texts()
-                )
-        except Exception:
-            pass
+        Kommentare dürfen nicht als Beitragstext übernommen werden. Facebook liefert
+        Kommentare ebenfalls in ``div[dir=auto]`` aus; deshalb wird die frühere
+        seitenweite Suche bewusst nicht mehr verwendet.
+        """
 
+        # Facebook kennzeichnet den eigentlichen Beitragstext häufig ausdrücklich
+        # mit data-ad-preview="message". Das ist die verlässlichste Quelle.
+        for selector in (
+            "div[role='article'] [data-ad-preview='message']",
+            "div[role='article'] [data-ad-comet-preview='message']",
+            "[data-ad-preview='message']",
+            "[data-ad-comet-preview='message']",
+        ):
+            try:
+                texts = page.locator(selector).all_inner_texts()
+                text = self._first_plausible_text(texts)
+                if text:
+                    return text
+            except Exception:
+                pass
+
+        # Die Open-Graph-Beschreibung gehört zur aufgerufenen Video-Seite und nicht
+        # zu einem darunterstehenden Kommentar. Sie ist daher der nächste Fallback.
+        metadata_candidates: list[str] = []
         for selector in (
             "meta[property='og:description']",
-            "meta[name='description']",
             "meta[name='twitter:description']",
+            "meta[name='description']",
         ):
             try:
                 value = page.locator(selector).first.get_attribute("content")
                 if value:
-                    candidates.append(value)
+                    metadata_candidates.append(value)
             except Exception:
                 pass
 
+        metadata_text = self._first_plausible_text(metadata_candidates)
+        if metadata_text:
+            return metadata_text
+
+        # Letzter Fallback: nur der erste Artikel. Weitere role=article-Elemente
+        # sind bei Facebook regelmäßig Kommentare.
         try:
-            candidates.extend(page.locator("div[dir='auto']").all_inner_texts())
+            articles = page.locator("div[role='article']")
+            if articles.count():
+                candidates = articles.first.locator("div[dir='auto']").all_inner_texts()
+                return self._first_plausible_text(candidates)
         except Exception:
             pass
 
-        return self._best_text(candidates)
+        return ""
+
+    @staticmethod
+    def _first_plausible_text(candidates: list[str]) -> str:
+        ignored = {
+            "Gefällt mir", "Kommentieren", "Teilen", "Abspielen", "Pause",
+            "Facebook", "Anmelden", "Neues Konto erstellen",
+        }
+        for candidate in candidates:
+            text = " ".join(str(candidate).split()).strip()
+            if not text or text in ignored or len(text) < 20:
+                continue
+
+            # Häufige Meta-Beschreibungs-Zusätze entfernen, ohne den eigentlichen
+            # Beitragstext zu verändern.
+            for suffix in (" | Facebook", " - Facebook"):
+                if text.endswith(suffix):
+                    text = text[:-len(suffix)].strip()
+
+            if len(text) >= 20:
+                return text
+        return ""
 
     @staticmethod
     def _best_text(candidates: list[str]) -> str:
