@@ -355,12 +355,14 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Kompakte Debug-Ausgabe: jedes Fundstück erhält eine eigene Logzeile.
+        """Untersucht gezielt den Reel-Dialog und seine Text-/Aufklapp-Struktur.
 
-        Railway kürzt sehr lange einzelne JSON-Zeilen. Die frühere Debug-Version
-        schrieb den gesamten DOM in eine einzige Zeile; dadurch waren oft nur die
-        letzten Meldungen sichtbar. Diese Variante protokolliert Artikel,
-        Nachrichtenblöcke, Aufklapp-Schalter und Metadaten getrennt.
+        Diese Debug-Version ändert die Textextraktion noch nicht. Sie protokolliert:
+        - den einzigen role="dialog"-Container,
+        - seine direkten Kinder,
+        - längere Textknoten innerhalb des Dialogs,
+        - alle „See more“-/„Mehr anzeigen“-Knoten samt Elternkette,
+        - die räumliche Lage relativ zum Video.
         """
 
         def emit(label: str, payload) -> None:
@@ -370,140 +372,347 @@ class FacebookImporter:
                 rendered = repr(payload)
             print(f"FB_IMPORT_DEBUG|{stage}|{label}|{rendered}", flush=True)
 
-        def shorten(value: str, limit: int = 900) -> str:
+        def shorten(value: str, limit: int = 1000) -> str:
             value = re.sub(r"\s+", " ", value or "").strip()
             if len(value) > limit:
                 return value[:limit] + f" …[{len(value)}]"
             return value
 
-        emit("PAGE", {
-            "text_url": text_url,
-            "video_url": video_url,
-            "page_url": getattr(page, "url", ""),
-            "video_ids": [v for v in (
-                self._video_id_from_url(text_url),
-                self._video_id_from_url(video_url),
-            ) if v],
-        })
-
-        try:
-            counts = page.evaluate(
-                """() => ({
-                    articles: document.querySelectorAll("[role='article']").length,
-                    messages: document.querySelectorAll(
-                        "[data-ad-preview='message'],[data-ad-comet-preview='message']"
-                    ).length,
-                    videos: document.querySelectorAll("video").length,
-                    main_nodes: document.querySelectorAll("main").length,
-                    dialogs: document.querySelectorAll("[role='dialog']").length
-                })"""
-            )
-            emit("COUNTS", counts)
-        except Exception as error:
-            emit("COUNTS_ERROR", str(error))
-
-        try:
-            articles = page.locator("[role='article']")
-            for index in range(min(articles.count(), 30)):
-                article = articles.nth(index)
-                try:
-                    info = article.evaluate(
-                        """(article, index) => {
-                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
-                            const links = Array.from(article.querySelectorAll('a[href]'))
-                                .map(a => a.href || '')
-                                .filter(h => /reel|videos|watch|fb\.watch/i.test(h))
-                                .slice(0, 10);
-                            const directMessages = Array.from(article.querySelectorAll(
-                                "[data-ad-preview='message'],[data-ad-comet-preview='message']"
-                            )).filter(n => n.closest("[role='article']") === article);
-                            return {
-                                index,
-                                text_length: clean(article.innerText).length,
-                                text: clean(article.innerText),
-                                has_video: !!article.querySelector('video'),
-                                links,
-                                direct_message_count: directMessages.length,
-                                html_has_more: /mehr anzeigen|mehr ansehen|see more|read more/i.test(article.innerHTML)
-                            };
-                        }""",
-                        index,
+        emit(
+            "PAGE",
+            {
+                "text_url": text_url,
+                "video_url": video_url,
+                "page_url": getattr(page, "url", ""),
+                "video_ids": [
+                    value
+                    for value in (
+                        self._video_id_from_url(text_url),
+                        self._video_id_from_url(video_url),
                     )
-                    info["text"] = shorten(info.get("text", ""))
-                    emit(f"ARTICLE_{index}", info)
-                except Exception as error:
-                    emit(f"ARTICLE_{index}_ERROR", str(error))
-        except Exception as error:
-            emit("ARTICLES_ERROR", str(error))
+                    if value
+                ],
+            },
+        )
 
         try:
-            messages = page.locator(
-                "[data-ad-preview='message'], [data-ad-comet-preview='message']"
-            )
-            for index in range(min(messages.count(), 50)):
-                node = messages.nth(index)
-                try:
-                    info = node.evaluate(
-                        """(node, index) => {
-                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
-                            const article = node.closest("[role='article']");
-                            const allArticles = Array.from(document.querySelectorAll("[role='article']"));
+            snapshot = page.evaluate(
+                r"""() => {
+                    const clean = value =>
+                        (value || "").replace(/\s+/g, " ").trim();
+
+                    const rect = element => {
+                        if (!element || !element.getBoundingClientRect) {
+                            return null;
+                        }
+
+                        const box = element.getBoundingClientRect();
+                        return {
+                            x: Math.round(box.x),
+                            y: Math.round(box.y),
+                            width: Math.round(box.width),
+                            height: Math.round(box.height),
+                            right: Math.round(box.right),
+                            bottom: Math.round(box.bottom),
+                        };
+                    };
+
+                    const selectorHint = element => {
+                        if (!element) {
+                            return "";
+                        }
+
+                        const parts = [element.tagName.toLowerCase()];
+
+                        if (element.id) {
+                            parts.push("#" + element.id);
+                        }
+
+                        const role = element.getAttribute("role");
+                        if (role) {
+                            parts.push("[role='" + role + "']");
+                        }
+
+                        const dir = element.getAttribute("dir");
+                        if (dir) {
+                            parts.push("[dir='" + dir + "']");
+                        }
+
+                        const preview =
+                            element.getAttribute("data-ad-preview") ||
+                            element.getAttribute("data-ad-comet-preview");
+                        if (preview) {
+                            parts.push("[preview='" + preview + "']");
+                        }
+
+                        const className =
+                            typeof element.className === "string"
+                                ? element.className
+                                : "";
+
+                        if (className) {
+                            const classes = className
+                                .split(/\s+/)
+                                .filter(Boolean)
+                                .slice(0, 4);
+
+                            if (classes.length) {
+                                parts.push("." + classes.join("."));
+                            }
+                        }
+
+                        return parts.join("");
+                    };
+
+                    const dialogs = Array.from(
+                        document.querySelectorAll("[role='dialog']")
+                    );
+
+                    const dialog = dialogs.find(item => item.querySelector("video")) ||
+                        dialogs[0] ||
+                        null;
+
+                    const video = dialog
+                        ? dialog.querySelector("video")
+                        : document.querySelector("video");
+
+                    const result = {
+                        counts: {
+                            dialogs: dialogs.length,
+                            videos: document.querySelectorAll("video").length,
+                            articles: document.querySelectorAll("[role='article']").length,
+                            messages: document.querySelectorAll(
+                                "[data-ad-preview='message']," +
+                                "[data-ad-comet-preview='message']"
+                            ).length,
+                        },
+                        dialog: null,
+                        direct_children: [],
+                        long_nodes: [],
+                        expand_nodes: [],
+                    };
+
+                    if (!dialog) {
+                        return result;
+                    }
+
+                    result.dialog = {
+                        tag: dialog.tagName,
+                        role: dialog.getAttribute("role"),
+                        aria_label: dialog.getAttribute("aria-label"),
+                        text_length: clean(dialog.innerText).length,
+                        text: clean(dialog.innerText),
+                        rect: rect(dialog),
+                        html_prefix: (dialog.outerHTML || "").slice(0, 1800),
+                    };
+
+                    result.direct_children = Array.from(dialog.children)
+                        .slice(0, 40)
+                        .map((child, index) => ({
+                            index,
+                            hint: selectorHint(child),
+                            role: child.getAttribute("role"),
+                            aria_label: child.getAttribute("aria-label"),
+                            text_length: clean(child.innerText).length,
+                            text: clean(child.innerText),
+                            rect: rect(child),
+                            contains_video: !!child.querySelector("video"),
+                            child_count: child.children.length,
+                            html_prefix: (child.outerHTML || "").slice(0, 900),
+                        }));
+
+                    const allNodes = Array.from(
+                        dialog.querySelectorAll("div, span, p, h1, h2, h3")
+                    );
+
+                    const interesting = allNodes
+                        .map((node, index) => {
+                            const inner = clean(node.innerText);
+                            const content = clean(node.textContent);
+                            const style = window.getComputedStyle(node);
+
+                            return {
+                                source_index: index,
+                                hint: selectorHint(node),
+                                role: node.getAttribute("role"),
+                                aria_label: node.getAttribute("aria-label"),
+                                dir: node.getAttribute("dir"),
+                                inner_length: inner.length,
+                                content_length: content.length,
+                                inner_text: inner,
+                                text_content: content,
+                                rect: rect(node),
+                                display: style.display,
+                                visibility: style.visibility,
+                                overflow: style.overflow,
+                                line_clamp:
+                                    style.webkitLineClamp ||
+                                    node.style.webkitLineClamp ||
+                                    "",
+                                contains_video: !!node.querySelector("video"),
+                                child_count: node.children.length,
+                                depth: (() => {
+                                    let depth = 0;
+                                    let current = node;
+                                    while (current && current !== dialog) {
+                                        depth += 1;
+                                        current = current.parentElement;
+                                    }
+                                    return depth;
+                                })(),
+                                html_prefix: (node.outerHTML || "").slice(0, 1000),
+                            };
+                        })
+                        .filter(item =>
+                            item.inner_length >= 80 ||
+                            item.content_length >= 80 ||
+                            item.line_clamp
+                        )
+                        .sort((a, b) => {
+                            if (a.contains_video !== b.contains_video) {
+                                return a.contains_video ? 1 : -1;
+                            }
+                            return b.content_length - a.content_length;
+                        })
+                        .slice(0, 80);
+
+                    result.long_nodes = interesting;
+
+                    const labels = [
+                        "mehr anzeigen",
+                        "mehr ansehen",
+                        "see more",
+                        "read more",
+                    ];
+
+                    const isExpansion = text => {
+                        const normalized = clean(text).toLowerCase();
+                        return labels.some(label =>
+                            normalized === label ||
+                            normalized.endsWith(" " + label) ||
+                            normalized.includes(label)
+                        );
+                    };
+
+                    result.expand_nodes = allNodes
+                        .filter(node =>
+                            isExpansion(
+                                node.innerText ||
+                                node.textContent ||
+                                node.getAttribute("aria-label")
+                            )
+                        )
+                        .slice(0, 30)
+                        .map((node, index) => {
+                            const ancestry = [];
+                            let current = node;
+
+                            for (
+                                let level = 0;
+                                level < 10 && current && current !== dialog.parentElement;
+                                level += 1
+                            ) {
+                                ancestry.push({
+                                    level,
+                                    hint: selectorHint(current),
+                                    role: current.getAttribute("role"),
+                                    tabindex: current.getAttribute("tabindex"),
+                                    aria_label: current.getAttribute("aria-label"),
+                                    text: clean(
+                                        current.innerText ||
+                                        current.textContent
+                                    ),
+                                    rect: rect(current),
+                                    contains_video: !!current.querySelector("video"),
+                                    child_count: current.children.length,
+                                });
+
+                                if (current === dialog) {
+                                    break;
+                                }
+
+                                current = current.parentElement;
+                            }
+
+                            const nodeRect = rect(node);
+                            const videoRect = rect(video);
+
                             return {
                                 index,
-                                article_index: article ? allArticles.indexOf(article) : -1,
+                                hint: selectorHint(node),
                                 tag: node.tagName,
-                                preview: node.getAttribute('data-ad-preview'),
-                                comet_preview: node.getAttribute('data-ad-comet-preview'),
-                                inner_text_length: clean(node.innerText).length,
-                                text_content_length: clean(node.textContent).length,
-                                inner_text: clean(node.innerText),
-                                text_content: clean(node.textContent),
-                                html: node.outerHTML || ''
+                                role: node.getAttribute("role"),
+                                tabindex: node.getAttribute("tabindex"),
+                                aria_label: node.getAttribute("aria-label"),
+                                text: clean(
+                                    node.innerText ||
+                                    node.textContent ||
+                                    node.getAttribute("aria-label")
+                                ),
+                                rect: nodeRect,
+                                video_rect: videoRect,
+                                relative_to_video:
+                                    nodeRect && videoRect
+                                        ? {
+                                            left_of_video:
+                                                nodeRect.right <= videoRect.x,
+                                            right_of_video:
+                                                nodeRect.x >= videoRect.right,
+                                            above_video:
+                                                nodeRect.bottom <= videoRect.y,
+                                            below_video:
+                                                nodeRect.y >= videoRect.bottom,
+                                            overlaps_video:
+                                                !(
+                                                    nodeRect.right < videoRect.x ||
+                                                    nodeRect.x > videoRect.right ||
+                                                    nodeRect.bottom < videoRect.y ||
+                                                    nodeRect.y > videoRect.bottom
+                                                ),
+                                        }
+                                        : null,
+                                ancestry,
+                                html_prefix: (node.outerHTML || "").slice(0, 1200),
                             };
-                        }""",
-                        index,
-                    )
-                    info["inner_text"] = shorten(info.get("inner_text", ""), 1200)
-                    info["text_content"] = shorten(info.get("text_content", ""), 1200)
-                    info["html"] = shorten(info.get("html", ""), 1400)
-                    emit(f"MESSAGE_{index}", info)
-                except Exception as error:
-                    emit(f"MESSAGE_{index}_ERROR", str(error))
-        except Exception as error:
-            emit("MESSAGES_ERROR", str(error))
+                        });
 
-        try:
-            candidates = page.locator(
-                "text=/Mehr anzeigen|Mehr ansehen|See more|Read more/i"
+                    return result;
+                }"""
             )
-            for index in range(min(candidates.count(), 30)):
-                node = candidates.nth(index)
-                try:
-                    info = node.evaluate(
-                        """(node, index) => {
-                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
-                            const article = node.closest("[role='article']");
-                            const allArticles = Array.from(document.querySelectorAll("[role='article']"));
-                            return {
-                                index,
-                                article_index: article ? allArticles.indexOf(article) : -1,
-                                tag: node.tagName,
-                                role: node.getAttribute('role'),
-                                tabindex: node.getAttribute('tabindex'),
-                                aria_label: node.getAttribute('aria-label'),
-                                text: clean(node.innerText || node.textContent),
-                                html: node.outerHTML || ''
-                            };
-                        }""",
-                        index,
-                    )
-                    info["text"] = shorten(info.get("text", ""), 600)
-                    info["html"] = shorten(info.get("html", ""), 1200)
-                    emit(f"EXPAND_{index}", info)
-                except Exception as error:
-                    emit(f"EXPAND_{index}_ERROR", str(error))
         except Exception as error:
-            emit("EXPAND_ERROR", str(error))
+            emit("DIALOG_SNAPSHOT_ERROR", str(error))
+            return
+
+        emit("COUNTS", snapshot.get("counts", {}))
+
+        dialog = snapshot.get("dialog")
+        if not dialog:
+            emit("DIALOG", {"found": False})
+            return
+
+        dialog["text"] = shorten(dialog.get("text", ""), 1800)
+        dialog["html_prefix"] = shorten(dialog.get("html_prefix", ""), 1800)
+        emit("DIALOG", {"found": True, **dialog})
+
+        for child in snapshot.get("direct_children", []):
+            child["text"] = shorten(child.get("text", ""), 1200)
+            child["html_prefix"] = shorten(child.get("html_prefix", ""), 1000)
+            emit(f"DIALOG_CHILD_{child.get('index', 0)}", child)
+
+        for index, node in enumerate(snapshot.get("long_nodes", [])):
+            node["inner_text"] = shorten(node.get("inner_text", ""), 1500)
+            node["text_content"] = shorten(node.get("text_content", ""), 1500)
+            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1200)
+            emit(f"DIALOG_TEXT_{index}", node)
+
+        for node in snapshot.get("expand_nodes", []):
+            node["text"] = shorten(node.get("text", ""), 700)
+            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1200)
+
+            for ancestor in node.get("ancestry", []):
+                ancestor["text"] = shorten(ancestor.get("text", ""), 900)
+
+            emit(f"DIALOG_EXPAND_{node.get('index', 0)}", node)
 
         try:
             metadata = page.locator(
@@ -511,36 +720,22 @@ class FacebookImporter:
                 "meta[name='twitter:description'], "
                 "meta[name='description']"
             )
+
             for index in range(metadata.count()):
                 node = metadata.nth(index)
-                try:
-                    emit(f"META_{index}", {
+                emit(
+                    f"META_{index}",
+                    {
                         "property": node.get_attribute("property"),
                         "name": node.get_attribute("name"),
-                        "content": shorten(node.get_attribute("content") or "", 1500),
-                    })
-                except Exception as error:
-                    emit(f"META_{index}_ERROR", str(error))
+                        "content": shorten(
+                            node.get_attribute("content") or "",
+                            1500,
+                        ),
+                    },
+                )
         except Exception as error:
             emit("META_ERROR", str(error))
-
-        article = self._find_video_article(
-            page,
-            text_url=text_url,
-            video_url=video_url,
-        )
-        if article is None:
-            emit("SELECTED_ARTICLE", {"found": False})
-            return
-
-        try:
-            emit("SELECTED_ARTICLE", {
-                "found": True,
-                "message_texts": [shorten(v, 1500) for v in self._direct_message_texts(article)],
-                "inner_text": shorten(article.inner_text(), 1800),
-            })
-        except Exception as error:
-            emit("SELECTED_ARTICLE_ERROR", str(error))
 
     def _expand_video_text(
         self,
