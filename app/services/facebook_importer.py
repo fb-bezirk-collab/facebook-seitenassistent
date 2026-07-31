@@ -355,14 +355,15 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Untersucht ausschließlich den role=dialog-Container, der tatsächlich ein Video enthält.
+        """Durchsucht die gesamte Seite nach längeren Textcontainern.
 
-        Diese Debug-Version ändert die Textextraktion noch nicht. Sie protokolliert:
-        - den einzigen role="dialog"-Container,
-        - seine direkten Kinder,
-        - längere Textknoten innerhalb des Dialogs,
-        - alle „See more“-/„Mehr anzeigen“-Knoten samt Elternkette,
-        - die räumliche Lage relativ zum Video.
+        Diese Debug-Version verlässt sich bewusst nicht mehr auf article,
+        message oder dialog. Sie untersucht den vollständigen DOM und protokolliert:
+        - den Video-Knoten und seine Elternkette,
+        - alle längeren Textcontainer auf der Seite,
+        - alle „See more“-/„Mehr anzeigen“-Elemente,
+        - Abstände und Lage relativ zum Video,
+        - script-/JSON-Inhalte mit möglichen Beschreibungstexten.
         """
 
         def emit(label: str, payload) -> None:
@@ -372,7 +373,7 @@ class FacebookImporter:
                 rendered = repr(payload)
             print(f"FB_IMPORT_DEBUG|{stage}|{label}|{rendered}", flush=True)
 
-        def shorten(value: str, limit: int = 1000) -> str:
+        def shorten(value: str, limit: int = 1200) -> str:
             value = re.sub(r"\s+", " ", value or "").strip()
             if len(value) > limit:
                 return value[:limit] + f" …[{len(value)}]"
@@ -438,13 +439,6 @@ class FacebookImporter:
                             parts.push("[dir='" + dir + "']");
                         }
 
-                        const preview =
-                            element.getAttribute("data-ad-preview") ||
-                            element.getAttribute("data-ad-comet-preview");
-                        if (preview) {
-                            parts.push("[preview='" + preview + "']");
-                        }
-
                         const className =
                             typeof element.className === "string"
                                 ? element.className
@@ -454,7 +448,7 @@ class FacebookImporter:
                             const classes = className
                                 .split(/\s+/)
                                 .filter(Boolean)
-                                .slice(0, 4);
+                                .slice(0, 5);
 
                             if (classes.length) {
                                 parts.push("." + classes.join("."));
@@ -464,138 +458,180 @@ class FacebookImporter:
                         return parts.join("");
                     };
 
-                    const dialogs = Array.from(
-                        document.querySelectorAll("[role='dialog']")
-                    );
+                    const video = document.querySelector("video");
+                    const videoRect = rect(video);
 
-                    const pageVideo = document.querySelector("video");
+                    const relativeToVideo = nodeRect => {
+                        if (!nodeRect || !videoRect) {
+                            return null;
+                        }
 
-                    const videoDialog = dialogs.find(item => item.querySelector("video")) || null;
+                        const horizontalGap =
+                            nodeRect.right < videoRect.x
+                                ? videoRect.x - nodeRect.right
+                                : nodeRect.x > videoRect.right
+                                    ? nodeRect.x - videoRect.right
+                                    : 0;
 
-                    const nearestVideoDialog = pageVideo
-                        ? pageVideo.closest("[role='dialog']")
-                        : null;
+                        const verticalGap =
+                            nodeRect.bottom < videoRect.y
+                                ? videoRect.y - nodeRect.bottom
+                                : nodeRect.y > videoRect.bottom
+                                    ? nodeRect.y - videoRect.bottom
+                                    : 0;
 
-                    const dialog = videoDialog || nearestVideoDialog || null;
-
-                    const video = dialog
-                        ? dialog.querySelector("video")
-                        : pageVideo;
+                        return {
+                            left_of_video: nodeRect.right <= videoRect.x,
+                            right_of_video: nodeRect.x >= videoRect.right,
+                            above_video: nodeRect.bottom <= videoRect.y,
+                            below_video: nodeRect.y >= videoRect.bottom,
+                            overlaps_video:
+                                !(
+                                    nodeRect.right < videoRect.x ||
+                                    nodeRect.x > videoRect.right ||
+                                    nodeRect.bottom < videoRect.y ||
+                                    nodeRect.y > videoRect.bottom
+                                ),
+                            horizontal_gap: Math.round(horizontalGap),
+                            vertical_gap: Math.round(verticalGap),
+                        };
+                    };
 
                     const result = {
                         counts: {
-                            dialogs: dialogs.length,
-                            video_dialogs: dialogs.filter(item => item.querySelector("video")).length,
+                            all_elements: document.querySelectorAll("*").length,
                             videos: document.querySelectorAll("video").length,
+                            dialogs: document.querySelectorAll("[role='dialog']").length,
                             articles: document.querySelectorAll("[role='article']").length,
                             messages: document.querySelectorAll(
                                 "[data-ad-preview='message']," +
                                 "[data-ad-comet-preview='message']"
                             ).length,
+                            scripts: document.querySelectorAll("script").length,
                         },
-                        dialog: null,
-                        direct_children: [],
+                        video: null,
+                        video_ancestry: [],
                         long_nodes: [],
                         expand_nodes: [],
+                        script_matches: [],
                     };
 
-                    if (!dialog) {
-                        result.dialog = {
-                            found: false,
-                            reason: "No role=dialog containing a video was found",
-                            page_video_found: !!pageVideo,
-                            all_dialog_summaries: dialogs.slice(0, 20).map((item, index) => ({
-                                index,
-                                contains_video: !!item.querySelector("video"),
-                                text: clean(item.innerText).slice(0, 300),
-                                aria_label: item.getAttribute("aria-label"),
-                                rect: rect(item),
-                            })),
+                    if (video) {
+                        result.video = {
+                            hint: selectorHint(video),
+                            rect: videoRect,
+                            src: video.currentSrc || video.src || "",
+                            poster: video.poster || "",
+                            outer_html: (video.outerHTML || "").slice(0, 1600),
                         };
-                        return result;
+
+                        let current = video;
+                        for (let level = 0; level < 14 && current; level += 1) {
+                            const nodeRect = rect(current);
+                            result.video_ancestry.push({
+                                level,
+                                hint: selectorHint(current),
+                                role: current.getAttribute("role"),
+                                aria_label: current.getAttribute("aria-label"),
+                                text_length: clean(current.innerText).length,
+                                text: clean(current.innerText),
+                                rect: nodeRect,
+                                child_count: current.children ? current.children.length : 0,
+                                html_prefix: (current.outerHTML || "").slice(0, 1000),
+                            });
+                            current = current.parentElement;
+                        }
                     }
 
-                    result.dialog = {
-                        tag: dialog.tagName,
-                        role: dialog.getAttribute("role"),
-                        aria_label: dialog.getAttribute("aria-label"),
-                        text_length: clean(dialog.innerText).length,
-                        text: clean(dialog.innerText),
-                        rect: rect(dialog),
-                        html_prefix: (dialog.outerHTML || "").slice(0, 1800),
-                    };
+                    const excludedTags = new Set([
+                        "SCRIPT", "STYLE", "NOSCRIPT", "SVG", "PATH",
+                        "META", "LINK", "HEAD", "TITLE"
+                    ]);
 
-                    result.direct_children = Array.from(dialog.children)
-                        .slice(0, 40)
-                        .map((child, index) => ({
-                            index,
-                            hint: selectorHint(child),
-                            role: child.getAttribute("role"),
-                            aria_label: child.getAttribute("aria-label"),
-                            text_length: clean(child.innerText).length,
-                            text: clean(child.innerText),
-                            rect: rect(child),
-                            contains_video: !!child.querySelector("video"),
-                            child_count: child.children.length,
-                            html_prefix: (child.outerHTML || "").slice(0, 900),
-                        }));
+                    const all = Array.from(document.querySelectorAll("*"));
 
-                    const allNodes = Array.from(
-                        dialog.querySelectorAll("div, span, p, h1, h2, h3")
-                    );
-
-                    const interesting = allNodes
-                        .map((node, index) => {
+                    const candidates = all
+                        .filter(node => !excludedTags.has(node.tagName))
+                        .map((node, sourceIndex) => {
                             const inner = clean(node.innerText);
                             const content = clean(node.textContent);
                             const style = window.getComputedStyle(node);
+                            const nodeRect = rect(node);
+
+                            const directText = clean(
+                                Array.from(node.childNodes)
+                                    .filter(child => child.nodeType === Node.TEXT_NODE)
+                                    .map(child => child.textContent || "")
+                                    .join(" ")
+                            );
 
                             return {
-                                source_index: index,
+                                source_index: sourceIndex,
                                 hint: selectorHint(node),
+                                tag: node.tagName,
                                 role: node.getAttribute("role"),
                                 aria_label: node.getAttribute("aria-label"),
                                 dir: node.getAttribute("dir"),
                                 inner_length: inner.length,
                                 content_length: content.length,
+                                direct_text_length: directText.length,
                                 inner_text: inner,
                                 text_content: content,
-                                rect: rect(node),
+                                direct_text: directText,
+                                rect: nodeRect,
                                 display: style.display,
                                 visibility: style.visibility,
+                                opacity: style.opacity,
                                 overflow: style.overflow,
                                 line_clamp:
                                     style.webkitLineClamp ||
                                     node.style.webkitLineClamp ||
                                     "",
-                                contains_video: !!node.querySelector("video"),
-                                child_count: node.children.length,
-                                depth: (() => {
-                                    let depth = 0;
-                                    let current = node;
-                                    while (current && current !== dialog) {
-                                        depth += 1;
-                                        current = current.parentElement;
-                                    }
-                                    return depth;
-                                })(),
-                                html_prefix: (node.outerHTML || "").slice(0, 1000),
+                                child_count: node.children ? node.children.length : 0,
+                                descendant_count: node.querySelectorAll
+                                    ? node.querySelectorAll("*").length
+                                    : 0,
+                                contains_video: !!node.querySelector?.("video"),
+                                relative_to_video: relativeToVideo(nodeRect),
+                                html_prefix: (node.outerHTML || "").slice(0, 1200),
                             };
                         })
                         .filter(item =>
                             item.inner_length >= 80 ||
                             item.content_length >= 80 ||
+                            item.direct_text_length >= 60 ||
                             item.line_clamp
                         )
+                        .filter(item => {
+                            const text = (item.inner_text || item.text_content || "").toLowerCase();
+                            const loginNoise =
+                                text.includes("email or phone number") &&
+                                text.includes("password") &&
+                                text.includes("create new account");
+
+                            return !loginNoise;
+                        })
                         .sort((a, b) => {
                             if (a.contains_video !== b.contains_video) {
                                 return a.contains_video ? 1 : -1;
                             }
+
+                            const aNear = a.relative_to_video
+                                ? a.relative_to_video.horizontal_gap + a.relative_to_video.vertical_gap
+                                : 999999;
+                            const bNear = b.relative_to_video
+                                ? b.relative_to_video.horizontal_gap + b.relative_to_video.vertical_gap
+                                : 999999;
+
+                            if (aNear !== bNear) {
+                                return aNear - bNear;
+                            }
+
                             return b.content_length - a.content_length;
                         })
-                        .slice(0, 80);
+                        .slice(0, 120);
 
-                    result.long_nodes = interesting;
+                    result.long_nodes = candidates;
 
                     const labels = [
                         "mehr anzeigen",
@@ -613,7 +649,8 @@ class FacebookImporter:
                         );
                     };
 
-                    result.expand_nodes = allNodes
+                    result.expand_nodes = all
+                        .filter(node => !excludedTags.has(node.tagName))
                         .filter(node =>
                             isExpansion(
                                 node.innerText ||
@@ -621,16 +658,13 @@ class FacebookImporter:
                                 node.getAttribute("aria-label")
                             )
                         )
-                        .slice(0, 30)
+                        .slice(0, 50)
                         .map((node, index) => {
+                            const nodeRect = rect(node);
                             const ancestry = [];
                             let current = node;
 
-                            for (
-                                let level = 0;
-                                level < 10 && current && current !== dialog.parentElement;
-                                level += 1
-                            ) {
+                            for (let level = 0; level < 12 && current; level += 1) {
                                 ancestry.push({
                                     level,
                                     hint: selectorHint(current),
@@ -642,19 +676,11 @@ class FacebookImporter:
                                         current.textContent
                                     ),
                                     rect: rect(current),
-                                    contains_video: !!current.querySelector("video"),
-                                    child_count: current.children.length,
+                                    contains_video: !!current.querySelector?.("video"),
+                                    child_count: current.children ? current.children.length : 0,
                                 });
-
-                                if (current === dialog) {
-                                    break;
-                                }
-
                                 current = current.parentElement;
                             }
-
-                            const nodeRect = rect(node);
-                            const videoRect = rect(video);
 
                             return {
                                 index,
@@ -669,73 +695,93 @@ class FacebookImporter:
                                     node.getAttribute("aria-label")
                                 ),
                                 rect: nodeRect,
-                                video_rect: videoRect,
-                                relative_to_video:
-                                    nodeRect && videoRect
-                                        ? {
-                                            left_of_video:
-                                                nodeRect.right <= videoRect.x,
-                                            right_of_video:
-                                                nodeRect.x >= videoRect.right,
-                                            above_video:
-                                                nodeRect.bottom <= videoRect.y,
-                                            below_video:
-                                                nodeRect.y >= videoRect.bottom,
-                                            overlaps_video:
-                                                !(
-                                                    nodeRect.right < videoRect.x ||
-                                                    nodeRect.x > videoRect.right ||
-                                                    nodeRect.bottom < videoRect.y ||
-                                                    nodeRect.y > videoRect.bottom
-                                                ),
-                                        }
-                                        : null,
+                                relative_to_video: relativeToVideo(nodeRect),
                                 ancestry,
-                                html_prefix: (node.outerHTML || "").slice(0, 1200),
+                                html_prefix: (node.outerHTML || "").slice(0, 1400),
                             };
                         });
+
+                    const scripts = Array.from(document.querySelectorAll("script"));
+                    const needles = [
+                        "description",
+                        "message",
+                        "caption",
+                        "creation_story",
+                        "comet_sections",
+                        "story",
+                    ];
+
+                    for (let index = 0; index < scripts.length; index += 1) {
+                        const script = scripts[index];
+                        const content = script.textContent || "";
+                        const lower = content.toLowerCase();
+
+                        if (
+                            content.length >= 100 &&
+                            needles.some(needle => lower.includes(needle))
+                        ) {
+                            const firstMatch = needles.find(needle => lower.includes(needle));
+                            const position = lower.indexOf(firstMatch);
+                            const start = Math.max(0, position - 500);
+                            const end = Math.min(content.length, position + 2500);
+
+                            result.script_matches.push({
+                                index,
+                                type: script.getAttribute("type"),
+                                id: script.id || "",
+                                length: content.length,
+                                matched: firstMatch,
+                                excerpt: content.slice(start, end),
+                            });
+
+                            if (result.script_matches.length >= 25) {
+                                break;
+                            }
+                        }
+                    }
 
                     return result;
                 }"""
             )
         except Exception as error:
-            emit("DIALOG_SNAPSHOT_ERROR", str(error))
+            emit("GLOBAL_DOM_ERROR", str(error))
             return
 
         emit("COUNTS", snapshot.get("counts", {}))
 
-        dialog = snapshot.get("dialog")
-        if not dialog:
-            emit("VIDEO_DIALOG", {"found": False})
-            return
+        video = snapshot.get("video")
+        if video:
+            video["src"] = shorten(video.get("src", ""), 700)
+            video["poster"] = shorten(video.get("poster", ""), 700)
+            video["outer_html"] = shorten(video.get("outer_html", ""), 1800)
+            emit("VIDEO", {"found": True, **video})
+        else:
+            emit("VIDEO", {"found": False})
 
-        if dialog.get("found") is False:
-            emit("VIDEO_DIALOG", dialog)
-            return
-
-        dialog["text"] = shorten(dialog.get("text", ""), 1800)
-        dialog["html_prefix"] = shorten(dialog.get("html_prefix", ""), 1800)
-        emit("VIDEO_DIALOG", {"found": True, **dialog})
-
-        for child in snapshot.get("direct_children", []):
-            child["text"] = shorten(child.get("text", ""), 1200)
-            child["html_prefix"] = shorten(child.get("html_prefix", ""), 1000)
-            emit(f"VIDEO_DIALOG_CHILD_{child.get('index', 0)}", child)
+        for item in snapshot.get("video_ancestry", []):
+            item["text"] = shorten(item.get("text", ""), 1200)
+            item["html_prefix"] = shorten(item.get("html_prefix", ""), 1200)
+            emit(f"VIDEO_PARENT_{item.get('level', 0)}", item)
 
         for index, node in enumerate(snapshot.get("long_nodes", [])):
-            node["inner_text"] = shorten(node.get("inner_text", ""), 1500)
-            node["text_content"] = shorten(node.get("text_content", ""), 1500)
-            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1200)
-            emit(f"VIDEO_DIALOG_TEXT_{index}", node)
+            node["inner_text"] = shorten(node.get("inner_text", ""), 1800)
+            node["text_content"] = shorten(node.get("text_content", ""), 1800)
+            node["direct_text"] = shorten(node.get("direct_text", ""), 1000)
+            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1500)
+            emit(f"GLOBAL_TEXT_{index}", node)
 
         for node in snapshot.get("expand_nodes", []):
-            node["text"] = shorten(node.get("text", ""), 700)
-            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1200)
+            node["text"] = shorten(node.get("text", ""), 900)
+            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1600)
 
             for ancestor in node.get("ancestry", []):
-                ancestor["text"] = shorten(ancestor.get("text", ""), 900)
+                ancestor["text"] = shorten(ancestor.get("text", ""), 1000)
 
-            emit(f"VIDEO_DIALOG_EXPAND_{node.get('index', 0)}", node)
+            emit(f"GLOBAL_EXPAND_{node.get('index', 0)}", node)
+
+        for index, script in enumerate(snapshot.get("script_matches", [])):
+            script["excerpt"] = shorten(script.get("excerpt", ""), 2600)
+            emit(f"SCRIPT_MATCH_{index}", script)
 
         try:
             metadata = page.locator(
@@ -753,7 +799,7 @@ class FacebookImporter:
                         "name": node.get_attribute("name"),
                         "content": shorten(
                             node.get_attribute("content") or "",
-                            1500,
+                            1800,
                         ),
                     },
                 )
