@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from pathlib import Path
@@ -105,6 +106,16 @@ class FacebookImporter:
                 page.goto(text_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(10_000)
 
+                # DEBUG: Vor dem Aufklappen wird der tatsächliche Facebook-DOM
+                # strukturiert in die Railway-Logs geschrieben. So lassen sich
+                # funktionierende und gekürzte Reels direkt vergleichen.
+                self._debug_video_dom(
+                    page,
+                    stage="BEFORE_EXPAND",
+                    text_url=text_url,
+                    video_url=requested_video_url,
+                )
+
                 # Facebook kürzt längere Beitragstexte zunächst mit "Mehr anzeigen".
                 # Vor dem Auslesen wird diese Erweiterung gezielt im Hauptbeitrag
                 # geöffnet, damit der vollständige Text gespeichert wird.
@@ -114,11 +125,30 @@ class FacebookImporter:
                     video_url=requested_video_url,
                 )
 
+                self._debug_video_dom(
+                    page,
+                    stage="AFTER_EXPAND",
+                    text_url=text_url,
+                    video_url=requested_video_url,
+                )
+
                 final_url = page.url or text_url
                 text = self._extract_video_text(
                     page,
                     text_url=text_url,
                     video_url=requested_video_url,
+                )
+                print(
+                    "FB_IMPORT_DEBUG|FINAL_TEXT|"
+                    + json.dumps(
+                        {
+                            "length": len(text),
+                            "looks_truncated": self._looks_truncated(text),
+                            "text": text,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
                 )
                 stored_video_url = requested_video_url or self._preferred_video_page_url(
                     page,
@@ -317,6 +347,217 @@ class FacebookImporter:
         except Exception:
             return []
 
+    def _debug_video_dom(
+        self,
+        page,
+        *,
+        stage: str,
+        text_url: str = "",
+        video_url: str = "",
+    ) -> None:
+        """Schreibt relevante Reel-/Video-DOM-Daten in die Railway-Logs.
+
+        Die Ausgabe enthält keine Cookies und keine Zugangsdaten. Erfasst werden
+        Artikel, Nachrichtencontainer, mögliche „Mehr anzeigen“-Elemente sowie
+        deren direkte DOM-Eigenschaften. Lange HTML- und Textwerte werden bewusst
+        begrenzt, damit die Railway-Logs lesbar bleiben.
+        """
+
+        def emit(label: str, payload) -> None:
+            try:
+                rendered = json.dumps(payload, ensure_ascii=False, default=str)
+            except Exception:
+                rendered = repr(payload)
+            print(f"FB_IMPORT_DEBUG|{stage}|{label}|{rendered}", flush=True)
+
+        emit(
+            "PAGE",
+            {
+                "requested_text_url": text_url,
+                "requested_video_url": video_url,
+                "page_url": getattr(page, "url", ""),
+                "video_ids": [
+                    value
+                    for value in (
+                        self._video_id_from_url(text_url),
+                        self._video_id_from_url(video_url),
+                    )
+                    if value
+                ],
+            },
+        )
+
+        try:
+            payload = page.evaluate(
+                """
+                ({ textUrl, videoUrl }) => {
+                    const compact = value => (value || "")
+                        .replace(/\s+/g, " ")
+                        .trim();
+
+                    const shorten = (value, limit = 1500) => {
+                        const text = compact(value);
+                        return text.length > limit
+                            ? text.slice(0, limit) + ` …[${text.length}]`
+                            : text;
+                    };
+
+                    const attrs = element => {
+                        const result = {};
+                        for (const name of [
+                            "role", "dir", "tabindex", "aria-label",
+                            "data-ad-preview", "data-ad-comet-preview",
+                            "data-pagelet", "href"
+                        ]) {
+                            const value = element.getAttribute(name);
+                            if (value !== null) result[name] = value;
+                        }
+                        return result;
+                    };
+
+                    const closestArticleIndex = (element, articles) => {
+                        const own = element.closest("[role='article']");
+                        return own ? articles.indexOf(own) : -1;
+                    };
+
+                    const articles = Array.from(
+                        document.querySelectorAll("[role='article']")
+                    ).slice(0, 25);
+
+                    const articleData = articles.map((article, index) => {
+                        const messageNodes = Array.from(article.querySelectorAll(
+                            "[data-ad-preview='message'], " +
+                            "[data-ad-comet-preview='message']"
+                        ));
+
+                        const directMessages = messageNodes
+                            .filter(node => node.closest("[role='article']") === article)
+                            .map((node, messageIndex) => ({
+                                message_index: messageIndex,
+                                tag: node.tagName,
+                                attrs: attrs(node),
+                                inner_text_length: compact(node.innerText).length,
+                                text_content_length: compact(node.textContent).length,
+                                inner_text: shorten(node.innerText),
+                                text_content: shorten(node.textContent),
+                                html: shorten(node.outerHTML, 2200),
+                            }));
+
+                        const links = Array.from(article.querySelectorAll("a[href]"))
+                            .map(link => link.href || "")
+                            .filter(Boolean)
+                            .filter(href => /reel|videos|watch|fb\.watch/i.test(href))
+                            .slice(0, 20);
+
+                        return {
+                            article_index: index,
+                            direct_text_length: compact(article.innerText).length,
+                            direct_text: shorten(article.innerText, 1800),
+                            has_video: Boolean(article.querySelector("video")),
+                            relevant_links: links,
+                            direct_messages: directMessages,
+                        };
+                    });
+
+                    const expansionLabels = [
+                        "mehr anzeigen", "mehr ansehen", "see more",
+                        "read more", "voir plus", "mostra altro"
+                    ];
+
+                    const expansionCandidates = Array.from(
+                        document.querySelectorAll("button, [role='button'], [tabindex], a, span, div")
+                    )
+                        .map(element => ({
+                            element,
+                            text: compact(
+                                element.innerText ||
+                                element.textContent ||
+                                element.getAttribute("aria-label")
+                            )
+                        }))
+                        .filter(item => {
+                            const lower = item.text.toLowerCase();
+                            return expansionLabels.some(label => lower.includes(label));
+                        })
+                        .slice(0, 100)
+                        .map((item, index) => ({
+                            candidate_index: index,
+                            article_index: closestArticleIndex(item.element, articles),
+                            tag: item.element.tagName,
+                            attrs: attrs(item.element),
+                            text: shorten(item.text, 500),
+                            parent_tag: item.element.parentElement?.tagName || "",
+                            parent_attrs: item.element.parentElement
+                                ? attrs(item.element.parentElement)
+                                : {},
+                            outer_html: shorten(item.element.outerHTML, 1600),
+                        }));
+
+                    const globalMessageNodes = Array.from(document.querySelectorAll(
+                        "[data-ad-preview='message'], " +
+                        "[data-ad-comet-preview='message']"
+                    )).slice(0, 100).map((node, index) => ({
+                        node_index: index,
+                        article_index: closestArticleIndex(node, articles),
+                        tag: node.tagName,
+                        attrs: attrs(node),
+                        inner_text_length: compact(node.innerText).length,
+                        text_content_length: compact(node.textContent).length,
+                        inner_text: shorten(node.innerText),
+                        text_content: shorten(node.textContent),
+                        outer_html: shorten(node.outerHTML, 1800),
+                    }));
+
+                    return {
+                        title: document.title,
+                        location: location.href,
+                        article_count: document.querySelectorAll("[role='article']").length,
+                        articles: articleData,
+                        expansion_candidates: expansionCandidates,
+                        global_message_nodes: globalMessageNodes,
+                        metadata: Array.from(document.querySelectorAll(
+                            "meta[property='og:description'], " +
+                            "meta[name='twitter:description'], " +
+                            "meta[name='description']"
+                        )).map(meta => ({
+                            selector: meta.getAttribute("property") || meta.getAttribute("name"),
+                            content_length: compact(meta.content).length,
+                            content: shorten(meta.content, 1800),
+                        })),
+                    };
+                }
+                """,
+                {"textUrl": text_url, "videoUrl": video_url},
+            )
+            emit("DOM", payload)
+        except Exception as error:
+            emit("ERROR", {"type": type(error).__name__, "message": str(error)})
+
+        article = self._find_video_article(
+            page,
+            text_url=text_url,
+            video_url=video_url,
+        )
+        if article is None:
+            emit("SELECTED_ARTICLE", {"found": False})
+            return
+
+        try:
+            emit(
+                "SELECTED_ARTICLE",
+                {
+                    "found": True,
+                    "message_texts": self._direct_message_texts(article),
+                    "inner_text": article.inner_text()[:2500],
+                    "inner_html": article.inner_html()[:4000],
+                },
+            )
+        except Exception as error:
+            emit(
+                "SELECTED_ARTICLE_ERROR",
+                {"type": type(error).__name__, "message": str(error)},
+            )
+
     def _expand_video_text(
         self,
         page,
@@ -324,7 +565,14 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Öffnet „Mehr anzeigen“ nur im eigentlichen Video-Beitrag."""
+        """Öffnet „Mehr anzeigen“ im Haupttext des eigentlichen Video-Beitrags.
+
+        Facebook setzt den Schalter nicht immer als button oder role="button" um.
+        Teilweise ist nur ein normaler span-/div-Knoten sichtbar, dessen anklickbares
+        Elternelement erst mehrere Ebenen darüber liegt. Deshalb wird der Textknoten
+        gesucht und anschließend das nächste anklickbare Elternelement ausgelöst.
+        Verschachtelte Kommentar-Artikel werden dabei ausdrücklich ausgeschlossen.
+        """
 
         article = self._find_video_article(
             page,
@@ -335,7 +583,7 @@ class FacebookImporter:
         if article is None:
             return
 
-        for _attempt in range(4):
+        for _attempt in range(5):
             try:
                 clicked = article.evaluate(
                     """
@@ -344,31 +592,114 @@ class FacebookImporter:
                             "mehr anzeigen",
                             "mehr ansehen",
                             "see more",
+                            "read more",
                             "voir plus",
                             "mostra altro"
                         ];
 
-                        const candidates = article.querySelectorAll(
-                            "div[role='button'], span[role='button'], button, [tabindex='0']"
+                        const belongsToMainArticle = element =>
+                            element.closest("[role='article']") === article;
+
+                        const normalizedText = element => (
+                            element.innerText ||
+                            element.textContent ||
+                            element.getAttribute("aria-label") ||
+                            ""
+                        ).replace(/\\s+/g, " ").trim().toLowerCase();
+
+                        const isExpansionText = text =>
+                            labels.some(label =>
+                                text === label ||
+                                text.endsWith(" " + label) ||
+                                text.includes(label)
+                            );
+
+                        const clickElement = element => {
+                            try {
+                                element.scrollIntoView({
+                                    block: "center",
+                                    inline: "nearest"
+                                });
+                            } catch (_) {}
+
+                            try {
+                                element.click();
+                                return true;
+                            } catch (_) {}
+
+                            try {
+                                element.dispatchEvent(new MouseEvent("click", {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window
+                                }));
+                                return true;
+                            } catch (_) {}
+
+                            return false;
+                        };
+
+                        // Zuerst alle ausdrücklich anklickbaren Elemente prüfen.
+                        const clickableCandidates = article.querySelectorAll(
+                            "button, [role='button'], [tabindex], a"
                         );
 
-                        for (const element of candidates) {
-                            if (element.closest("[role='article']") !== article) {
+                        for (const element of clickableCandidates) {
+                            if (!belongsToMainArticle(element)) {
                                 continue;
                             }
 
-                            const text = (
-                                element.innerText ||
-                                element.getAttribute("aria-label") ||
-                                ""
-                            ).trim().toLowerCase();
+                            if (isExpansionText(normalizedText(element)) &&
+                                clickElement(element)) {
+                                return true;
+                            }
+                        }
 
-                            if (!labels.some(label => text.includes(label))) {
+                        // Facebook verwendet teilweise einen normalen span/div
+                        // mit dem Text „Mehr anzeigen“. Dann wird vom Textknoten
+                        // zum nächsten anklickbaren Elternelement hochgegangen.
+                        const allElements = article.querySelectorAll("span, div");
+
+                        for (const element of allElements) {
+                            if (!belongsToMainArticle(element)) {
                                 continue;
                             }
 
-                            element.click();
-                            return true;
+                            const ownText = normalizedText(element);
+                            if (!isExpansionText(ownText)) {
+                                continue;
+                            }
+
+                            let current = element;
+
+                            for (let level = 0; level < 8 && current; level++) {
+                                if (!belongsToMainArticle(current)) {
+                                    break;
+                                }
+
+                                const role = current.getAttribute("role");
+                                const tabindex = current.getAttribute("tabindex");
+                                const tag = current.tagName.toLowerCase();
+
+                                if (
+                                    tag === "button" ||
+                                    tag === "a" ||
+                                    role === "button" ||
+                                    tabindex !== null ||
+                                    typeof current.onclick === "function"
+                                ) {
+                                    if (clickElement(current)) {
+                                        return true;
+                                    }
+                                }
+
+                                current = current.parentElement;
+                            }
+
+                            // Letzter Versuch: den Textknoten selbst anklicken.
+                            if (clickElement(element)) {
+                                return true;
+                            }
                         }
 
                         return false;
@@ -378,7 +709,7 @@ class FacebookImporter:
             except Exception:
                 clicked = False
 
-            page.wait_for_timeout(1_500 if clicked else 1_000)
+            page.wait_for_timeout(2_000 if clicked else 1_200)
 
             visible_texts = self._direct_message_texts(article)
             if visible_texts:
