@@ -355,12 +355,12 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Schreibt relevante Reel-/Video-DOM-Daten in die Railway-Logs.
+        """Kompakte Debug-Ausgabe: jedes Fundstück erhält eine eigene Logzeile.
 
-        Die Ausgabe enthält keine Cookies und keine Zugangsdaten. Erfasst werden
-        Artikel, Nachrichtencontainer, mögliche „Mehr anzeigen“-Elemente sowie
-        deren direkte DOM-Eigenschaften. Lange HTML- und Textwerte werden bewusst
-        begrenzt, damit die Railway-Logs lesbar bleiben.
+        Railway kürzt sehr lange einzelne JSON-Zeilen. Die frühere Debug-Version
+        schrieb den gesamten DOM in eine einzige Zeile; dadurch waren oft nur die
+        letzten Meldungen sichtbar. Diese Variante protokolliert Artikel,
+        Nachrichtenblöcke, Aufklapp-Schalter und Metadaten getrennt.
         """
 
         def emit(label: str, payload) -> None:
@@ -370,168 +370,159 @@ class FacebookImporter:
                 rendered = repr(payload)
             print(f"FB_IMPORT_DEBUG|{stage}|{label}|{rendered}", flush=True)
 
-        emit(
-            "PAGE",
-            {
-                "requested_text_url": text_url,
-                "requested_video_url": video_url,
-                "page_url": getattr(page, "url", ""),
-                "video_ids": [
-                    value
-                    for value in (
-                        self._video_id_from_url(text_url),
-                        self._video_id_from_url(video_url),
-                    )
-                    if value
-                ],
-            },
-        )
+        def shorten(value: str, limit: int = 900) -> str:
+            value = re.sub(r"\s+", " ", value or "").strip()
+            if len(value) > limit:
+                return value[:limit] + f" …[{len(value)}]"
+            return value
+
+        emit("PAGE", {
+            "text_url": text_url,
+            "video_url": video_url,
+            "page_url": getattr(page, "url", ""),
+            "video_ids": [v for v in (
+                self._video_id_from_url(text_url),
+                self._video_id_from_url(video_url),
+            ) if v],
+        })
 
         try:
-            payload = page.evaluate(
-                """
-                ({ textUrl, videoUrl }) => {
-                    const compact = value => (value || "")
-                        .replace(/\s+/g, " ")
-                        .trim();
-
-                    const shorten = (value, limit = 1500) => {
-                        const text = compact(value);
-                        return text.length > limit
-                            ? text.slice(0, limit) + ` …[${text.length}]`
-                            : text;
-                    };
-
-                    const attrs = element => {
-                        const result = {};
-                        for (const name of [
-                            "role", "dir", "tabindex", "aria-label",
-                            "data-ad-preview", "data-ad-comet-preview",
-                            "data-pagelet", "href"
-                        ]) {
-                            const value = element.getAttribute(name);
-                            if (value !== null) result[name] = value;
-                        }
-                        return result;
-                    };
-
-                    const closestArticleIndex = (element, articles) => {
-                        const own = element.closest("[role='article']");
-                        return own ? articles.indexOf(own) : -1;
-                    };
-
-                    const articles = Array.from(
-                        document.querySelectorAll("[role='article']")
-                    ).slice(0, 25);
-
-                    const articleData = articles.map((article, index) => {
-                        const messageNodes = Array.from(article.querySelectorAll(
-                            "[data-ad-preview='message'], " +
-                            "[data-ad-comet-preview='message']"
-                        ));
-
-                        const directMessages = messageNodes
-                            .filter(node => node.closest("[role='article']") === article)
-                            .map((node, messageIndex) => ({
-                                message_index: messageIndex,
-                                tag: node.tagName,
-                                attrs: attrs(node),
-                                inner_text_length: compact(node.innerText).length,
-                                text_content_length: compact(node.textContent).length,
-                                inner_text: shorten(node.innerText),
-                                text_content: shorten(node.textContent),
-                                html: shorten(node.outerHTML, 2200),
-                            }));
-
-                        const links = Array.from(article.querySelectorAll("a[href]"))
-                            .map(link => link.href || "")
-                            .filter(Boolean)
-                            .filter(href => /reel|videos|watch|fb\.watch/i.test(href))
-                            .slice(0, 20);
-
-                        return {
-                            article_index: index,
-                            direct_text_length: compact(article.innerText).length,
-                            direct_text: shorten(article.innerText, 1800),
-                            has_video: Boolean(article.querySelector("video")),
-                            relevant_links: links,
-                            direct_messages: directMessages,
-                        };
-                    });
-
-                    const expansionLabels = [
-                        "mehr anzeigen", "mehr ansehen", "see more",
-                        "read more", "voir plus", "mostra altro"
-                    ];
-
-                    const expansionCandidates = Array.from(
-                        document.querySelectorAll("button, [role='button'], [tabindex], a, span, div")
-                    )
-                        .map(element => ({
-                            element,
-                            text: compact(
-                                element.innerText ||
-                                element.textContent ||
-                                element.getAttribute("aria-label")
-                            )
-                        }))
-                        .filter(item => {
-                            const lower = item.text.toLowerCase();
-                            return expansionLabels.some(label => lower.includes(label));
-                        })
-                        .slice(0, 100)
-                        .map((item, index) => ({
-                            candidate_index: index,
-                            article_index: closestArticleIndex(item.element, articles),
-                            tag: item.element.tagName,
-                            attrs: attrs(item.element),
-                            text: shorten(item.text, 500),
-                            parent_tag: item.element.parentElement?.tagName || "",
-                            parent_attrs: item.element.parentElement
-                                ? attrs(item.element.parentElement)
-                                : {},
-                            outer_html: shorten(item.element.outerHTML, 1600),
-                        }));
-
-                    const globalMessageNodes = Array.from(document.querySelectorAll(
-                        "[data-ad-preview='message'], " +
-                        "[data-ad-comet-preview='message']"
-                    )).slice(0, 100).map((node, index) => ({
-                        node_index: index,
-                        article_index: closestArticleIndex(node, articles),
-                        tag: node.tagName,
-                        attrs: attrs(node),
-                        inner_text_length: compact(node.innerText).length,
-                        text_content_length: compact(node.textContent).length,
-                        inner_text: shorten(node.innerText),
-                        text_content: shorten(node.textContent),
-                        outer_html: shorten(node.outerHTML, 1800),
-                    }));
-
-                    return {
-                        title: document.title,
-                        location: location.href,
-                        article_count: document.querySelectorAll("[role='article']").length,
-                        articles: articleData,
-                        expansion_candidates: expansionCandidates,
-                        global_message_nodes: globalMessageNodes,
-                        metadata: Array.from(document.querySelectorAll(
-                            "meta[property='og:description'], " +
-                            "meta[name='twitter:description'], " +
-                            "meta[name='description']"
-                        )).map(meta => ({
-                            selector: meta.getAttribute("property") || meta.getAttribute("name"),
-                            content_length: compact(meta.content).length,
-                            content: shorten(meta.content, 1800),
-                        })),
-                    };
-                }
-                """,
-                {"textUrl": text_url, "videoUrl": video_url},
+            counts = page.evaluate(
+                """() => ({
+                    articles: document.querySelectorAll("[role='article']").length,
+                    messages: document.querySelectorAll(
+                        "[data-ad-preview='message'],[data-ad-comet-preview='message']"
+                    ).length,
+                    videos: document.querySelectorAll("video").length,
+                    main_nodes: document.querySelectorAll("main").length,
+                    dialogs: document.querySelectorAll("[role='dialog']").length
+                })"""
             )
-            emit("DOM", payload)
+            emit("COUNTS", counts)
         except Exception as error:
-            emit("ERROR", {"type": type(error).__name__, "message": str(error)})
+            emit("COUNTS_ERROR", str(error))
+
+        try:
+            articles = page.locator("[role='article']")
+            for index in range(min(articles.count(), 30)):
+                article = articles.nth(index)
+                try:
+                    info = article.evaluate(
+                        """(article, index) => {
+                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
+                            const links = Array.from(article.querySelectorAll('a[href]'))
+                                .map(a => a.href || '')
+                                .filter(h => /reel|videos|watch|fb\.watch/i.test(h))
+                                .slice(0, 10);
+                            const directMessages = Array.from(article.querySelectorAll(
+                                "[data-ad-preview='message'],[data-ad-comet-preview='message']"
+                            )).filter(n => n.closest("[role='article']") === article);
+                            return {
+                                index,
+                                text_length: clean(article.innerText).length,
+                                text: clean(article.innerText),
+                                has_video: !!article.querySelector('video'),
+                                links,
+                                direct_message_count: directMessages.length,
+                                html_has_more: /mehr anzeigen|mehr ansehen|see more|read more/i.test(article.innerHTML)
+                            };
+                        }""",
+                        index,
+                    )
+                    info["text"] = shorten(info.get("text", ""))
+                    emit(f"ARTICLE_{index}", info)
+                except Exception as error:
+                    emit(f"ARTICLE_{index}_ERROR", str(error))
+        except Exception as error:
+            emit("ARTICLES_ERROR", str(error))
+
+        try:
+            messages = page.locator(
+                "[data-ad-preview='message'], [data-ad-comet-preview='message']"
+            )
+            for index in range(min(messages.count(), 50)):
+                node = messages.nth(index)
+                try:
+                    info = node.evaluate(
+                        """(node, index) => {
+                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
+                            const article = node.closest("[role='article']");
+                            const allArticles = Array.from(document.querySelectorAll("[role='article']"));
+                            return {
+                                index,
+                                article_index: article ? allArticles.indexOf(article) : -1,
+                                tag: node.tagName,
+                                preview: node.getAttribute('data-ad-preview'),
+                                comet_preview: node.getAttribute('data-ad-comet-preview'),
+                                inner_text_length: clean(node.innerText).length,
+                                text_content_length: clean(node.textContent).length,
+                                inner_text: clean(node.innerText),
+                                text_content: clean(node.textContent),
+                                html: node.outerHTML || ''
+                            };
+                        }""",
+                        index,
+                    )
+                    info["inner_text"] = shorten(info.get("inner_text", ""), 1200)
+                    info["text_content"] = shorten(info.get("text_content", ""), 1200)
+                    info["html"] = shorten(info.get("html", ""), 1400)
+                    emit(f"MESSAGE_{index}", info)
+                except Exception as error:
+                    emit(f"MESSAGE_{index}_ERROR", str(error))
+        except Exception as error:
+            emit("MESSAGES_ERROR", str(error))
+
+        try:
+            candidates = page.locator(
+                "text=/Mehr anzeigen|Mehr ansehen|See more|Read more/i"
+            )
+            for index in range(min(candidates.count(), 30)):
+                node = candidates.nth(index)
+                try:
+                    info = node.evaluate(
+                        """(node, index) => {
+                            const clean = v => (v || '').replace(/\s+/g, ' ').trim();
+                            const article = node.closest("[role='article']");
+                            const allArticles = Array.from(document.querySelectorAll("[role='article']"));
+                            return {
+                                index,
+                                article_index: article ? allArticles.indexOf(article) : -1,
+                                tag: node.tagName,
+                                role: node.getAttribute('role'),
+                                tabindex: node.getAttribute('tabindex'),
+                                aria_label: node.getAttribute('aria-label'),
+                                text: clean(node.innerText || node.textContent),
+                                html: node.outerHTML || ''
+                            };
+                        }""",
+                        index,
+                    )
+                    info["text"] = shorten(info.get("text", ""), 600)
+                    info["html"] = shorten(info.get("html", ""), 1200)
+                    emit(f"EXPAND_{index}", info)
+                except Exception as error:
+                    emit(f"EXPAND_{index}_ERROR", str(error))
+        except Exception as error:
+            emit("EXPAND_ERROR", str(error))
+
+        try:
+            metadata = page.locator(
+                "meta[property='og:description'], "
+                "meta[name='twitter:description'], "
+                "meta[name='description']"
+            )
+            for index in range(metadata.count()):
+                node = metadata.nth(index)
+                try:
+                    emit(f"META_{index}", {
+                        "property": node.get_attribute("property"),
+                        "name": node.get_attribute("name"),
+                        "content": shorten(node.get_attribute("content") or "", 1500),
+                    })
+                except Exception as error:
+                    emit(f"META_{index}_ERROR", str(error))
+        except Exception as error:
+            emit("META_ERROR", str(error))
 
         article = self._find_video_article(
             page,
@@ -543,20 +534,13 @@ class FacebookImporter:
             return
 
         try:
-            emit(
-                "SELECTED_ARTICLE",
-                {
-                    "found": True,
-                    "message_texts": self._direct_message_texts(article),
-                    "inner_text": article.inner_text()[:2500],
-                    "inner_html": article.inner_html()[:4000],
-                },
-            )
+            emit("SELECTED_ARTICLE", {
+                "found": True,
+                "message_texts": [shorten(v, 1500) for v in self._direct_message_texts(article)],
+                "inner_text": shorten(article.inner_text(), 1800),
+            })
         except Exception as error:
-            emit(
-                "SELECTED_ARTICLE_ERROR",
-                {"type": type(error).__name__, "message": str(error)},
-            )
+            emit("SELECTED_ARTICLE_ERROR", str(error))
 
     def _expand_video_text(
         self,
