@@ -185,7 +185,7 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ):
-        """Sucht den Artikel, der zur übergebenen Video-ID gehört."""
+        """Sucht den eigentlichen Video-Beitrag und nicht einen Kommentar."""
 
         video_ids = {
             value
@@ -205,11 +205,12 @@ class FacebookImporter:
         if article_count == 0:
             return None
 
-        if not video_ids:
-            return articles.first
+        best_article = None
+        best_score = -1
 
-        for index in range(min(article_count, 15)):
+        for index in range(min(article_count, 20)):
             article = articles.nth(index)
+            score = 0
 
             try:
                 html = article.inner_html()
@@ -227,12 +228,94 @@ class FacebookImporter:
             except Exception:
                 links = []
 
-            combined = " ".join([html, *links])
+            combined = " ".join([html, *links]).lower()
 
-            if any(video_id in combined for video_id in video_ids):
-                return article
+            if video_ids and any(video_id in combined for video_id in video_ids):
+                score += 100
 
-        return articles.first
+            try:
+                if article.locator("video").count():
+                    score += 60
+            except Exception:
+                pass
+
+            try:
+                if article.locator(
+                    "a[href*='/reel/'], "
+                    "a[href*='/videos/'], "
+                    "a[href*='watch/?v='], "
+                    "a[href*='fb.watch']"
+                ).count():
+                    score += 40
+            except Exception:
+                pass
+
+            try:
+                direct_messages = article.locator(
+                    ":scope > div [data-ad-preview='message'], "
+                    ":scope > div [data-ad-comet-preview='message']"
+                )
+                if direct_messages.count():
+                    score += 20
+            except Exception:
+                pass
+
+            try:
+                if article.locator(
+                    "[aria-label*='Gefällt mir'], "
+                    "[aria-label*='Antworten'], "
+                    "[aria-label*='Reply']"
+                ).count() and score < 40:
+                    score -= 20
+            except Exception:
+                pass
+
+            if score > best_score:
+                best_score = score
+                best_article = article
+
+        if best_score < 20:
+            return None
+
+        return best_article
+
+    def _direct_message_texts(self, article) -> list[str]:
+        """Liest nur Nachrichtenblöcke des Hauptartikels, ohne Unterartikel."""
+
+        if article is None:
+            return []
+
+        try:
+            return article.evaluate(
+                """
+                article => {
+                    const selectors = [
+                        "[data-ad-preview='message']",
+                        "[data-ad-comet-preview='message']"
+                    ];
+
+                    const values = [];
+
+                    for (const selector of selectors) {
+                        for (const node of article.querySelectorAll(selector)) {
+                            const ownArticle = node.closest("[role='article']");
+                            if (ownArticle !== article) {
+                                continue;
+                            }
+
+                            const value = (node.innerText || node.textContent || "").trim();
+                            if (value) {
+                                values.push(value);
+                            }
+                        }
+                    }
+
+                    return values;
+                }
+                """
+            )
+        except Exception:
+            return []
 
     def _expand_video_text(
         self,
@@ -241,7 +324,7 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Öffnet „Mehr anzeigen“ ausschließlich im passenden Video-Beitrag."""
+        """Öffnet „Mehr anzeigen“ nur im eigentlichen Video-Beitrag."""
 
         article = self._find_video_article(
             page,
@@ -252,109 +335,56 @@ class FacebookImporter:
         if article is None:
             return
 
-        labels = (
-            "mehr anzeigen",
-            "mehr ansehen",
-            "see more",
-            "voir plus",
-            "mostra altro",
-        )
-
         for _attempt in range(4):
-            roots = []
-
-            for selector in (
-                "[data-ad-preview='message']",
-                "[data-ad-comet-preview='message']",
-            ):
-                try:
-                    locator = article.locator(selector)
-                    for index in range(min(locator.count(), 5)):
-                        roots.append(locator.nth(index))
-                except Exception:
-                    pass
-
-            roots.append(article)
-            clicked = False
-
-            for root in roots:
-                try:
-                    buttons = root.locator(
-                        "div[role='button'], "
-                        "span[role='button'], "
-                        "button, "
-                        "[tabindex='0']"
-                    )
-
-                    for index in range(min(buttons.count(), 80)):
-                        button = buttons.nth(index)
-
-                        try:
-                            label = " ".join(
-                                (button.inner_text() or "").split()
-                            ).strip().lower()
-                        except Exception:
-                            label = ""
-
-                        if not label:
-                            try:
-                                label = " ".join(
-                                    (
-                                        button.get_attribute("aria-label") or ""
-                                    ).split()
-                                ).strip().lower()
-                            except Exception:
-                                label = ""
-
-                        if not any(value in label for value in labels):
-                            continue
-
-                        try:
-                            if button.is_visible():
-                                button.click(timeout=3_000, force=True)
-                                clicked = True
-                                break
-                        except Exception:
-                            try:
-                                button.evaluate("element => element.click()")
-                                clicked = True
-                                break
-                            except Exception:
-                                pass
-
-                    if clicked:
-                        break
-
-                except Exception:
-                    pass
-
-            if clicked:
-                page.wait_for_timeout(1_500)
-            else:
-                page.wait_for_timeout(1_000)
-
             try:
-                message_nodes = article.locator(
-                    "[data-ad-preview='message'], "
-                    "[data-ad-comet-preview='message']"
+                clicked = article.evaluate(
+                    """
+                    article => {
+                        const labels = [
+                            "mehr anzeigen",
+                            "mehr ansehen",
+                            "see more",
+                            "voir plus",
+                            "mostra altro"
+                        ];
+
+                        const candidates = article.querySelectorAll(
+                            "div[role='button'], span[role='button'], button, [tabindex='0']"
+                        );
+
+                        for (const element of candidates) {
+                            if (element.closest("[role='article']") !== article) {
+                                continue;
+                            }
+
+                            const text = (
+                                element.innerText ||
+                                element.getAttribute("aria-label") ||
+                                ""
+                            ).trim().toLowerCase();
+
+                            if (!labels.some(label => text.includes(label))) {
+                                continue;
+                            }
+
+                            element.click();
+                            return true;
+                        }
+
+                        return false;
+                    }
+                    """
                 )
-
-                visible_texts = []
-
-                for index in range(min(message_nodes.count(), 5)):
-                    try:
-                        value = message_nodes.nth(index).inner_text()
-                        if value:
-                            visible_texts.append(value)
-                    except Exception:
-                        pass
-
-                if visible_texts:
-                    best = self._best_plausible_text(visible_texts)
-                    if best and not self._looks_truncated(best):
-                        return
             except Exception:
-                pass
+                clicked = False
+
+            page.wait_for_timeout(1_500 if clicked else 1_000)
+
+            visible_texts = self._direct_message_texts(article)
+            if visible_texts:
+                best = self._best_plausible_text(visible_texts)
+                if best and not self._looks_truncated(best):
+                    return
 
     def _extract_video_text(
         self,
@@ -363,7 +393,7 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> str:
-        """Liest den vollständigsten Text aus dem passenden Video-Beitrag."""
+        """Liest ausschließlich den Haupttext des Video-Beitrags."""
 
         article = self._find_video_article(
             page,
@@ -371,74 +401,13 @@ class FacebookImporter:
             video_url=video_url,
         )
 
-        all_candidates: list[str] = []
+        message_candidates = self._direct_message_texts(article)
+        message_text = self._best_plausible_text(message_candidates)
 
-        if article is not None:
-            for selector in (
-                "[data-ad-preview='message']",
-                "[data-ad-comet-preview='message']",
-            ):
-                try:
-                    locator = article.locator(selector)
+        if message_text:
+            return message_text
 
-                    for index in range(min(locator.count(), 10)):
-                        node = locator.nth(index)
-
-                        try:
-                            value = node.inner_text()
-                            if value:
-                                all_candidates.append(value)
-                        except Exception:
-                            pass
-
-                        try:
-                            value = node.text_content()
-                            if value:
-                                all_candidates.append(value)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-            try:
-                blocks = article.locator("div[dir='auto']")
-                for index in range(min(blocks.count(), 30)):
-                    try:
-                        value = blocks.nth(index).inner_text()
-                        if value:
-                            all_candidates.append(value)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            try:
-                article_text = article.inner_text()
-
-                if article_text:
-                    control_markers = (
-                        "\nGefällt mir",
-                        "\nKommentieren",
-                        "\nTeilen",
-                        "\nAlle Reaktionen",
-                        "\nLike",
-                        "\nComment",
-                        "\nShare",
-                    )
-
-                    shortened_article_text = article_text
-                    positions = [
-                        shortened_article_text.find(marker)
-                        for marker in control_markers
-                        if marker in shortened_article_text
-                    ]
-
-                    if positions:
-                        shortened_article_text = shortened_article_text[:min(positions)]
-
-                    all_candidates.append(shortened_article_text)
-            except Exception:
-                pass
+        metadata_candidates: list[str] = []
 
         for selector in (
             "meta[property='og:description']",
@@ -448,31 +417,11 @@ class FacebookImporter:
             try:
                 value = page.locator(selector).first.get_attribute("content")
                 if value:
-                    all_candidates.append(value)
+                    metadata_candidates.append(value)
             except Exception:
                 pass
 
-        cleaned_candidates: list[str] = []
-
-        for candidate in all_candidates:
-            text = self._clean_candidate_text(candidate)
-
-            if text and text not in cleaned_candidates:
-                cleaned_candidates.append(text)
-
-        if not cleaned_candidates:
-            return ""
-
-        complete_candidates = [
-            text
-            for text in cleaned_candidates
-            if not self._looks_truncated(text)
-        ]
-
-        if complete_candidates:
-            return max(complete_candidates, key=len)
-
-        return max(cleaned_candidates, key=len)
+        return self._best_plausible_text(metadata_candidates)
 
     @staticmethod
     def _best_plausible_text(candidates: list[str]) -> str:
