@@ -355,7 +355,7 @@ class FacebookImporter:
         text_url: str = "",
         video_url: str = "",
     ) -> None:
-        """Untersucht gezielt den Reel-Dialog und seine Text-/Aufklapp-Struktur.
+        """Untersucht ausschließlich den role=dialog-Container, der tatsächlich ein Video enthält.
 
         Diese Debug-Version ändert die Textextraktion noch nicht. Sie protokolliert:
         - den einzigen role="dialog"-Container,
@@ -468,17 +468,24 @@ class FacebookImporter:
                         document.querySelectorAll("[role='dialog']")
                     );
 
-                    const dialog = dialogs.find(item => item.querySelector("video")) ||
-                        dialogs[0] ||
-                        null;
+                    const pageVideo = document.querySelector("video");
+
+                    const videoDialog = dialogs.find(item => item.querySelector("video")) || null;
+
+                    const nearestVideoDialog = pageVideo
+                        ? pageVideo.closest("[role='dialog']")
+                        : null;
+
+                    const dialog = videoDialog || nearestVideoDialog || null;
 
                     const video = dialog
                         ? dialog.querySelector("video")
-                        : document.querySelector("video");
+                        : pageVideo;
 
                     const result = {
                         counts: {
                             dialogs: dialogs.length,
+                            video_dialogs: dialogs.filter(item => item.querySelector("video")).length,
                             videos: document.querySelectorAll("video").length,
                             articles: document.querySelectorAll("[role='article']").length,
                             messages: document.querySelectorAll(
@@ -493,6 +500,18 @@ class FacebookImporter:
                     };
 
                     if (!dialog) {
+                        result.dialog = {
+                            found: false,
+                            reason: "No role=dialog containing a video was found",
+                            page_video_found: !!pageVideo,
+                            all_dialog_summaries: dialogs.slice(0, 20).map((item, index) => ({
+                                index,
+                                contains_video: !!item.querySelector("video"),
+                                text: clean(item.innerText).slice(0, 300),
+                                aria_label: item.getAttribute("aria-label"),
+                                rect: rect(item),
+                            })),
+                        };
                         return result;
                     }
 
@@ -687,23 +706,27 @@ class FacebookImporter:
 
         dialog = snapshot.get("dialog")
         if not dialog:
-            emit("DIALOG", {"found": False})
+            emit("VIDEO_DIALOG", {"found": False})
+            return
+
+        if dialog.get("found") is False:
+            emit("VIDEO_DIALOG", dialog)
             return
 
         dialog["text"] = shorten(dialog.get("text", ""), 1800)
         dialog["html_prefix"] = shorten(dialog.get("html_prefix", ""), 1800)
-        emit("DIALOG", {"found": True, **dialog})
+        emit("VIDEO_DIALOG", {"found": True, **dialog})
 
         for child in snapshot.get("direct_children", []):
             child["text"] = shorten(child.get("text", ""), 1200)
             child["html_prefix"] = shorten(child.get("html_prefix", ""), 1000)
-            emit(f"DIALOG_CHILD_{child.get('index', 0)}", child)
+            emit(f"VIDEO_DIALOG_CHILD_{child.get('index', 0)}", child)
 
         for index, node in enumerate(snapshot.get("long_nodes", [])):
             node["inner_text"] = shorten(node.get("inner_text", ""), 1500)
             node["text_content"] = shorten(node.get("text_content", ""), 1500)
             node["html_prefix"] = shorten(node.get("html_prefix", ""), 1200)
-            emit(f"DIALOG_TEXT_{index}", node)
+            emit(f"VIDEO_DIALOG_TEXT_{index}", node)
 
         for node in snapshot.get("expand_nodes", []):
             node["text"] = shorten(node.get("text", ""), 700)
@@ -712,7 +735,7 @@ class FacebookImporter:
             for ancestor in node.get("ancestry", []):
                 ancestor["text"] = shorten(ancestor.get("text", ""), 900)
 
-            emit(f"DIALOG_EXPAND_{node.get('index', 0)}", node)
+            emit(f"VIDEO_DIALOG_EXPAND_{node.get('index', 0)}", node)
 
         try:
             metadata = page.locator(
