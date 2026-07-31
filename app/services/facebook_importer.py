@@ -104,6 +104,11 @@ class FacebookImporter:
                 page.goto(text_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(10_000)
 
+                # Facebook kürzt längere Beitragstexte zunächst mit "Mehr anzeigen".
+                # Vor dem Auslesen wird diese Erweiterung gezielt im Hauptbeitrag
+                # geöffnet, damit der vollständige Text gespeichert wird.
+                self._expand_video_text(page)
+
                 final_url = page.url or text_url
                 text = self._extract_video_text(page)
                 stored_video_url = requested_video_url or self._preferred_video_page_url(
@@ -143,12 +148,67 @@ class FacebookImporter:
             return ""
         return FacebookImporter._best_text(blocks)
 
+    def _expand_video_text(self, page) -> None:
+        """Öffnet einen gekürzten Beitragstext im ersten Facebook-Artikel.
+
+        Facebook zeigt längere Beschreibungen häufig nur bis "…" und blendet
+        den Rest erst nach einem Klick auf "Mehr anzeigen" ein. Die Suche ist
+        absichtlich auf den ersten Artikel bzw. dessen Nachrichtenblock begrenzt,
+        damit nicht versehentlich ein Kommentar aufgeklappt wird.
+        """
+        try:
+            articles = page.locator("div[role='article']")
+            if not articles.count():
+                return
+            article = articles.first
+        except Exception:
+            return
+
+        selectors = (
+            "[data-ad-preview='message']",
+            "[data-ad-comet-preview='message']",
+        )
+
+        roots = []
+        for selector in selectors:
+            try:
+                locator = article.locator(selector)
+                if locator.count():
+                    roots.append(locator.first)
+            except Exception:
+                pass
+        roots.append(article)
+
+        labels = (
+            "Mehr anzeigen",
+            "Mehr ansehen",
+            "See more",
+            "Voir plus",
+            "Mostra altro",
+        )
+
+        for root in roots:
+            for label in labels:
+                for selector in (
+                    f"div[role='button']:has-text(\"{label}\")",
+                    f"span[role='button']:has-text(\"{label}\")",
+                    f"text=/{label}/i",
+                ):
+                    try:
+                        button = root.locator(selector).first
+                        if button.count() and button.is_visible():
+                            button.click(timeout=2_000)
+                            page.wait_for_timeout(600)
+                            return
+                    except Exception:
+                        pass
+
     def _extract_video_text(self, page) -> str:
-        """Liest ausschließlich die Beschreibung des eigentlichen Video-Posts.
+        """Liest ausschließlich die vollständige Beschreibung des Video-Posts.
 
         Kommentare dürfen nicht als Beitragstext übernommen werden. Facebook liefert
-        Kommentare ebenfalls in ``div[dir=auto]`` aus; deshalb wird die frühere
-        seitenweite Suche bewusst nicht mehr verwendet.
+        Kommentare ebenfalls in ``div[dir=auto]`` aus; deshalb wird keine seitenweite
+        Suche verwendet. Längere Texte werden zuvor über "Mehr anzeigen" geöffnet.
         """
 
         # Facebook kennzeichnet den eigentlichen Beitragstext häufig ausdrücklich
@@ -160,15 +220,30 @@ class FacebookImporter:
             "[data-ad-comet-preview='message']",
         ):
             try:
-                texts = page.locator(selector).all_inner_texts()
-                text = self._first_plausible_text(texts)
+                locator = page.locator(selector)
+                texts: list[str] = []
+                for index in range(min(locator.count(), 5)):
+                    node = locator.nth(index)
+                    try:
+                        value = node.inner_text()
+                        if value:
+                            texts.append(value)
+                    except Exception:
+                        pass
+                    try:
+                        value = node.text_content()
+                        if value:
+                            texts.append(value)
+                    except Exception:
+                        pass
+                text = self._best_plausible_text(texts)
                 if text:
                     return text
             except Exception:
                 pass
 
-        # Die Open-Graph-Beschreibung gehört zur aufgerufenen Video-Seite und nicht
-        # zu einem darunterstehenden Kommentar. Sie ist daher der nächste Fallback.
+        # Open-Graph-Metadaten sind nur ein Fallback. Facebook kürzt sie manchmal,
+        # deshalb werden sie erst nach dem sichtbaren Hauptbeitrag ausgewertet.
         metadata_candidates: list[str] = []
         for selector in (
             "meta[property='og:description']",
@@ -182,7 +257,7 @@ class FacebookImporter:
             except Exception:
                 pass
 
-        metadata_text = self._first_plausible_text(metadata_candidates)
+        metadata_text = self._best_plausible_text(metadata_candidates)
         if metadata_text:
             return metadata_text
 
@@ -192,30 +267,57 @@ class FacebookImporter:
             articles = page.locator("div[role='article']")
             if articles.count():
                 candidates = articles.first.locator("div[dir='auto']").all_inner_texts()
-                return self._first_plausible_text(candidates)
+                return self._best_plausible_text(candidates)
         except Exception:
             pass
 
         return ""
 
     @staticmethod
-    def _first_plausible_text(candidates: list[str]) -> str:
+    def _best_plausible_text(candidates: list[str]) -> str:
+        cleaned: list[str] = []
+        for candidate in candidates:
+            text = FacebookImporter._clean_candidate_text(candidate)
+            if text and text not in cleaned:
+                cleaned.append(text)
+        if not cleaned:
+            return ""
+
+        # Vollständige Varianten ohne abschließende Auslassung werden bevorzugt.
+        complete = [text for text in cleaned if not FacebookImporter._looks_truncated(text)]
+        return max(complete or cleaned, key=len)
+
+    @staticmethod
+    def _looks_truncated(text: str) -> bool:
+        stripped = text.rstrip()
+        return stripped.endswith(("...", "…", " um...", " um…"))
+
+    @staticmethod
+    def _clean_candidate_text(candidate: str) -> str:
         ignored = {
             "Gefällt mir", "Kommentieren", "Teilen", "Abspielen", "Pause",
-            "Facebook", "Anmelden", "Neues Konto erstellen",
+            "Facebook", "Anmelden", "Neues Konto erstellen", "Mehr anzeigen",
+            "Mehr ansehen", "See more",
         }
+        text = " ".join(str(candidate).split()).strip()
+        if not text or text in ignored or len(text) < 20:
+            return ""
+
+        # Ein eventuell mitkopierter Bedienhinweis gehört nicht zum Beitragstext.
+        for marker in (" Mehr anzeigen", " Mehr ansehen", " See more"):
+            if text.endswith(marker):
+                text = text[:-len(marker)].rstrip()
+
+        for suffix in (" | Facebook", " - Facebook"):
+            if text.endswith(suffix):
+                text = text[:-len(suffix)].strip()
+        return text if len(text) >= 20 else ""
+
+    @staticmethod
+    def _first_plausible_text(candidates: list[str]) -> str:
         for candidate in candidates:
-            text = " ".join(str(candidate).split()).strip()
-            if not text or text in ignored or len(text) < 20:
-                continue
-
-            # Häufige Meta-Beschreibungs-Zusätze entfernen, ohne den eigentlichen
-            # Beitragstext zu verändern.
-            for suffix in (" | Facebook", " - Facebook"):
-                if text.endswith(suffix):
-                    text = text[:-len(suffix)].strip()
-
-            if len(text) >= 20:
+            text = FacebookImporter._clean_candidate_text(candidate)
+            if text:
                 return text
         return ""
 
