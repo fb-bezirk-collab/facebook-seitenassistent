@@ -1,0 +1,19 @@
+Facebook-Seitenassistent 1.6.1 – KI-Textvarianten
+
+Railway-Variable:
+OPENAI_API_KEY = dein OpenAI-API-Schlüssel
+
+Optional:
+OPENAI_MODEL = gpt-5-mini
+
+Die tatsächlich verwendeten HTML-Dateien liegen direkt unter:
+templates/index.html
+templates/draft_edit.html
+
+Es gibt bewusst keine doppelten Template-Ordner mehr.
+
+Nach dem Deployment:
+1. Beitrag importieren oder Entwurf öffnen.
+2. Optional eine Vorgabe eingeben.
+3. „KI-Textvarianten erzeugen“ anklicken.
+4. Gewünschte Variante übernehmen und bei Bedarf manuell bearbeiten.
