@@ -44,6 +44,8 @@ def einstellungen(
     account_saved: int = 0,
     account_deleted: int = 0,
     account_error: str | None = None,
+    instagram_count: int = 0,
+    instagram_warning: str | None = None,
 ):
     meta_config = meta_config_service.load()
     facebook_pages = settings_service.load_pages()
@@ -100,6 +102,8 @@ def einstellungen(
                 account_deleted
             ),
             "account_error": account_error,
+            "instagram_count": instagram_count,
+            "instagram_warning": instagram_warning,
         },
     )
 
@@ -261,6 +265,13 @@ def facebook_callback(
 
         settings_service.save_pages(pages)
 
+        instagram_accounts, instagram_warnings = (
+            facebook_api.get_instagram_accounts(pages)
+        )
+        social_account_service.sync_meta_instagram_accounts(
+            instagram_accounts
+        )
+
     except FacebookApiError as error:
         response = RedirectResponse(
             url=(
@@ -276,8 +287,19 @@ def facebook_callback(
 
         return response
 
+    target = (
+        "/settings?connected=true"
+        f"&instagram_count={len(instagram_accounts)}"
+    )
+
+    if instagram_warnings:
+        target += (
+            "&instagram_warning="
+            + quote(instagram_warnings[0])
+        )
+
     response = RedirectResponse(
-        url="/settings?connected=true",
+        url=target,
         status_code=303,
     )
 
