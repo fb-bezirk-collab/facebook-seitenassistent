@@ -112,6 +112,44 @@ class SocialAccountService:
         self._save_all(accounts)
         return account
 
+    def sync_meta_instagram_accounts(
+        self,
+        instagram_accounts,
+    ) -> None:
+        """Ersetzt automatisch geladene Instagram-Konten durch den aktuellen Meta-Stand."""
+        accounts = [
+            account
+            for account in self._load_all()
+            if not (
+                account.platform == "instagram"
+                and account.source == "meta"
+            )
+        ]
+
+        existing_ids = {account.id for account in accounts}
+
+        for instagram in instagram_accounts:
+            account_id = f"instagram:{instagram.instagram_id}"
+            if account_id in existing_ids:
+                continue
+
+            accounts.append(
+                SocialAccount(
+                    id=account_id,
+                    platform="instagram",
+                    name=instagram.display_name,
+                    external_id=instagram.instagram_id,
+                    username=instagram.username,
+                    active=True,
+                    connection_status="connected",
+                    source="meta",
+                    can_publish=False,
+                )
+            )
+            existing_ids.add(account_id)
+
+        self._save_all(accounts)
+
     def toggle(
         self,
         account_id: str,
@@ -151,8 +189,8 @@ class SocialAccountService:
     ) -> list[SocialAccount]:
         """Führt alle automatisch verbundenen Plattformkonten zusammen.
 
-        Derzeit werden Facebook-Seiten aus der bestehenden Meta-Verbindung
-        eingelesen. Instagram wird im nächsten Schritt hier ergänzt.
+        Facebook-Seiten werden dynamisch aus der bestehenden Meta-Verbindung
+        eingelesen. Instagram-Konten werden beim erneuten Meta-Login synchronisiert.
         """
         known = {
             (account.platform, account.external_id)

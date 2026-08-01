@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 import requests
 
 from app.models.facebook_page import FacebookPage
+from app.models.instagram_account import InstagramAccount
 from app.services.meta_config_service import MetaConfig
 
 
@@ -216,6 +217,65 @@ class FacebookApiService:
             parameters = None
 
         return pages
+
+    def get_instagram_accounts(
+        self,
+        pages: list[FacebookPage],
+    ) -> tuple[list[InstagramAccount], list[str]]:
+        """Lädt Instagram-Business-/Creator-Konten, die mit Seiten verbunden sind."""
+        accounts: list[InstagramAccount] = []
+        warnings: list[str] = []
+        known_ids: set[str] = set()
+
+        for page in pages:
+            url = GRAPH_API_BASE_URL + f"/{page.page_id}"
+            parameters = {
+                "access_token": page.access_token,
+                "fields": (
+                    "instagram_business_account"
+                    "{id,username,name,profile_picture_url}"
+                ),
+            }
+
+            try:
+                data = self._request_json(
+                    method="GET",
+                    url=url,
+                    params=parameters,
+                )
+            except FacebookApiError as error:
+                warnings.append(
+                    f"Instagram konnte für {page.name} nicht geprüft werden: {error}"
+                )
+                continue
+
+            instagram = data.get("instagram_business_account")
+            if not isinstance(instagram, dict):
+                continue
+
+            instagram_id = str(instagram.get("id", "")).strip()
+            if not instagram_id or instagram_id in known_ids:
+                continue
+
+            username = str(instagram.get("username", "")).strip()
+            name = str(instagram.get("name", "")).strip()
+            profile_picture_url = str(
+                instagram.get("profile_picture_url", "")
+            ).strip()
+
+            accounts.append(
+                InstagramAccount(
+                    instagram_id=instagram_id,
+                    username=username,
+                    name=name,
+                    profile_picture_url=profile_picture_url,
+                    connected_page_id=page.page_id,
+                    connected_page_name=page.name,
+                )
+            )
+            known_ids.add(instagram_id)
+
+        return accounts, warnings
 
     @staticmethod
     def _request_json(
