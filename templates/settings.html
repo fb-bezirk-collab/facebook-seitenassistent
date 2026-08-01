@@ -83,7 +83,18 @@
 <main>
 <div class="container">
     {% if connected %}
-        <div class="message success">Die Meta-Verbindung wurde erfolgreich aktualisiert.</div>
+        <div class="message success">
+            Die Meta-Verbindung wurde erfolgreich aktualisiert.
+            {% if instagram_count %}
+                {{ instagram_count }} Instagram-Konto{% if instagram_count != 1 %}en{% endif %}
+                wurde{% if instagram_count != 1 %}n{% endif %} erkannt.
+            {% else %}
+                Es wurde noch kein verknüpftes Instagram-Business-Konto erkannt.
+            {% endif %}
+        </div>
+    {% endif %}
+    {% if instagram_warning %}
+        <div class="message error"><strong>Instagram-Hinweis:</strong> {{ instagram_warning }}</div>
     {% endif %}
     {% if facebook_error %}
         <div class="message error"><strong>Meta-Verbindung fehlgeschlagen:</strong> {{ facebook_error }}</div>
@@ -134,8 +145,8 @@
                 <strong>Neue Plattformstruktur</strong><br><br>
                 Konten werden ab jetzt unabhängig von ihrer Plattform
                 einheitlich gespeichert und in der Planung verwendet.
-                Facebook bleibt vollständig funktionsfähig. Instagram wird
-                als Nächstes automatisch über Meta eingelesen.
+                Facebook und Instagram werden über dieselbe Meta-Verbindung
+                automatisch eingelesen. Weitere Plattformen folgen später.
             </div>
         </div>
     </section>
