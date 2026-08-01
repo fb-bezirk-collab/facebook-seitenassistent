@@ -3,14 +3,132 @@
 <title>{{ draft.title }} – Entwurf</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f8;color:#1f2937}.header{background:#fff;border-bottom:1px solid #dfe3e8;padding:20px 0}.container{width:min(1180px,calc(100% - 40px));margin:0 auto}.header-row{display:flex;justify-content:space-between;align-items:center;gap:20px}h1{margin:0 0 6px;font-size:27px}.subtitle{margin:0;color:#667085}.nav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.nav a{color:#344054;text-decoration:none;padding:10px 14px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;font-weight:700}main{padding:40px 0}.notice{margin-bottom:20px;padding:14px 16px;border:1px solid #a6f4c5;background:#ecfdf3;color:#067647;border-radius:10px}.error-notice{margin-bottom:20px;padding:14px 16px;border:1px solid #fda29b;background:#fef3f2;color:#b42318;border-radius:10px}.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:28px}.card{background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:28px;margin-bottom:28px}h2{margin-top:0}label{display:block;margin-bottom:8px;font-weight:700}.field{margin-bottom:20px}input[type=text],input[type=datetime-local],select,textarea{width:100%;padding:13px 15px;border:1px solid #cfd6df;border-radius:10px;font-size:16px}textarea{min-height:390px;resize:vertical;font-family:Arial,Helvetica,sans-serif;line-height:1.55}.post-image{display:block;width:100%;max-height:520px;object-fit:contain;border-radius:12px;background:#111827;margin-bottom:15px}.video-card{padding:22px;border-radius:12px;background:#f0f5ff;border:1px solid #c7d7fe}.video-card a,.source{color:#1877f2;font-weight:700;overflow-wrap:anywhere}.no-image{padding:20px;border-radius:10px;background:#f0f2f5;color:#667085}.footer-card{display:flex;justify-content:space-between;align-items:center;gap:20px}.buttons{display:flex;gap:10px;flex-wrap:wrap}button,.button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 18px;border:0;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;cursor:pointer}.save{color:#fff;background:#1877f2}.back{color:#344054;background:#fff;border:1px solid #d0d5dd}.delete{color:#b42318;background:#fee4e2}.planning-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(240px,.6fr);gap:18px}.account-list{display:grid;gap:10px;max-height:430px;overflow:auto;padding:12px;border:1px solid #d0d5dd;border-radius:12px;background:#f9fafb}.account-option{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e4e7ec;border-radius:10px;background:#fff;cursor:pointer}.account-option:hover{border-color:#84adff;background:#f5f8ff}.account-option input{width:20px;height:20px;flex:0 0 auto}.account-meta{display:flex;flex-direction:column;gap:2px}.bulk-actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:10px 0}.link-button{border:0;background:transparent;color:#1877f2;min-height:auto;padding:0;font-size:14px}.plan-submit{display:flex;align-items:end}.summary-bar{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:14px 16px;margin-top:18px;background:#f0f5ff;border:1px solid #c7d7fe;border-radius:12px}.publication{border:1px solid #e4e7ec;border-radius:12px;padding:16px;margin-top:12px}.publication-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.badge{padding:5px 9px;border-radius:999px;background:#eef4ff;color:#3538cd;font-size:12px;font-weight:700;text-transform:capitalize}.small{font-size:13px;color:#667085}.inline-form{display:grid;grid-template-columns:1fr 150px auto;gap:10px;align-items:end;margin-top:12px}.empty-plan{padding:18px;background:#f9fafb;border-radius:10px;color:#667085}.hint{padding:14px;background:#fffaeb;border:1px solid #fedf89;border-radius:10px;color:#93370d}@media(max-width:850px){.grid,.planning-grid{grid-template-columns:1fr}.header-row,.footer-card{flex-direction:column;align-items:stretch}.inline-form{grid-template-columns:1fr}.buttons{flex-direction:column}}
+
+        .ai-panel { margin-top: 18px; padding: 18px; border: 1px solid #b7d7c7; border-radius: 12px; background: #f3fbf7; }
+        .ai-panel label { margin-top: 0; }
+        .ai-panel input { margin-bottom: 10px; }
+        .ai-status { min-height: 22px; margin: 12px 0 0; color: #475467; font-size: 14px; line-height: 1.45; }
+        .ai-status.error-text { color: #b42318; }
+        .ai-results { display: grid; gap: 14px; margin-top: 16px; }
+        .ai-result { padding: 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; }
+        .ai-result h3 { margin: 0 0 10px; font-size: 17px; }
+        .ai-result-text { white-space: pre-wrap; line-height: 1.5; color: #344054; }
+        .ai-result button { min-height: 42px; margin-top: 14px; background: #1877f2; color: #fff; }
+        .button-ai.loading { opacity: .7; cursor: wait; }
 </style></head><body>
 <header class="header"><div class="container header-row"><div><h1>Entwurf bearbeiten</h1><p class="subtitle">Text, Medien und Veröffentlichungen verwalten</p></div><nav class="nav"><a href="{{ url_for('startseite') }}">Import</a><a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a><a href="{{ url_for('veroeffentlichungsplanung') }}">Planung</a><a href="/settings">Einstellungen</a><form method="post" action="/logout" style="margin:0"><button type="submit" class="back">Abmelden</button></form></nav></div></header>
 <main><div class="container">
 {% if saved %}<div class="notice">Der Entwurf wurde gespeichert.</div>{% endif %}{% if planned %}<div class="notice">{% if planned_count %}{{ planned_count }} Veröffentlichungen wurden geplant.{% else %}Die Veröffentlichungsplanung wurde aktualisiert.{% endif %}</div>{% endif %}{% if published %}<div class="notice">{% if published_count %}{{ published_count }} Veröffentlichung{% if published_count != 1 %}en{% endif %} erfolgreich abgeschlossen.{% else %}Der Beitrag wurde erfolgreich auf Facebook veröffentlicht.{% endif %}{% if failed_count %} {{ failed_count }} Veröffentlichung{% if failed_count != 1 %}en{% endif %} ist fehlgeschlagen.{% endif %}</div>{% endif %}{% if publish_error %}<div class="error-notice"><strong>Veröffentlichung fehlgeschlagen:</strong> {{ publish_error }}{% if failed_count and published_count %}<br><span class="small">Die übrigen {{ published_count }} Veröffentlichungen waren erfolgreich.</span>{% endif %}</div>{% endif %}
-<form method="post" action="/drafts/{{ draft.id }}"><div class="grid"><section class="card"><h2>Beitrag</h2><div class="field"><label for="title">Interner Titel</label><input type="text" id="title" name="title" maxlength="120" value="{{ draft.title }}"></div><div class="field"><label for="text">Beitragstext</label><textarea id="text" name="text">{{ draft.text }}</textarea></div></section><section class="card"><h2>Medien</h2>{% if image_urls %}{% for image_url in image_urls %}<img src="{{ image_url }}" alt="Entwurfsbild" class="post-image"><input type="hidden" name="images" value="{{ draft.images[loop.index0] }}">{% endfor %}{% endif %}{% if draft.video_url %}<div class="video-card"><strong>🎥 Originalvideo</strong><br><br><a href="{{ draft.video_url }}" target="_blank" rel="noopener noreferrer">Video auf Facebook öffnen</a><p>Das Video wird nicht lokal gespeichert.</p></div><input type="hidden" name="video_url" value="{{ draft.video_url }}">{% endif %}{% if not image_urls and not draft.video_url %}<div class="no-image">Dieser Entwurf enthält keine Bilder oder Videos.</div>{% endif %}</section></div><input type="hidden" name="page_id" value="{{ draft.page_id }}"><input type="hidden" name="source_url" value="{{ draft.source_url }}"><section class="card footer-card"><div><strong>Quelle</strong><br>{% if draft.source_url %}<a class="source" href="{{ draft.source_url }}" target="_blank" rel="noopener noreferrer">{{ draft.source_url }}</a>{% else %}<span>Keine Quelle hinterlegt</span>{% endif %}</div><div class="buttons"><a class="button back" href="{{ url_for('entwuerfe_anzeigen') }}">Zurück</a><button class="save" type="submit">Änderungen speichern</button></div></section></form>
+<form method="post" action="/drafts/{{ draft.id }}"><div class="grid"><section class="card"><h2>Beitrag</h2><div class="field"><label for="title">Interner Titel</label><input type="text" id="title" name="title" maxlength="120" value="{{ draft.title }}"></div><div class="field"><label for="text">Beitragstext</label><textarea id="text" name="text">{{ draft.text }}</textarea></div>
+                    <div class="ai-panel" id="ai-panel-draft">
+                        <label for="ai-instructions-draft">Optionale Vorgabe für die KI</label>
+                        <input type="text" id="ai-instructions-draft" maxlength="1000"
+                               placeholder="z. B. kürzer, kritischer oder ohne Emojis">
+                        <button type="button" class="button-ai" id="ai-button-draft">
+                            KI-Textvarianten erzeugen
+                        </button>
+                        <p class="ai-status" id="ai-status-draft"></p>
+                        <div class="ai-results" id="ai-results-draft" hidden></div>
+                    </div>
+</section><section class="card"><h2>Medien</h2>{% if image_urls %}{% for image_url in image_urls %}<img src="{{ image_url }}" alt="Entwurfsbild" class="post-image"><input type="hidden" name="images" value="{{ draft.images[loop.index0] }}">{% endfor %}{% endif %}{% if draft.video_url %}<div class="video-card"><strong>🎥 Originalvideo</strong><br><br><a href="{{ draft.video_url }}" target="_blank" rel="noopener noreferrer">Video auf Facebook öffnen</a><p>Das Video wird nicht lokal gespeichert.</p></div><input type="hidden" name="video_url" value="{{ draft.video_url }}">{% endif %}{% if not image_urls and not draft.video_url %}<div class="no-image">Dieser Entwurf enthält keine Bilder oder Videos.</div>{% endif %}</section></div><input type="hidden" name="page_id" value="{{ draft.page_id }}"><input type="hidden" name="source_url" value="{{ draft.source_url }}"><section class="card footer-card"><div><strong>Quelle</strong><br>{% if draft.source_url %}<a class="source" href="{{ draft.source_url }}" target="_blank" rel="noopener noreferrer">{{ draft.source_url }}</a>{% else %}<span>Keine Quelle hinterlegt</span>{% endif %}</div><div class="buttons"><a class="button back" href="{{ url_for('entwuerfe_anzeigen') }}">Zurück</a><button class="save" type="submit">Änderungen speichern</button></div></section></form>
 <section class="card"><h2>Veröffentlichungsplanung</h2><p class="small">Wähle eine oder mehrere Facebook-Seiten. Für jede Seite wird eine eigene Veröffentlichung mit eigenem Status angelegt.</p>{% if social_accounts %}<form method="post" action="/drafts/{{ draft.id }}/publications" class="planning-grid" id="multi-plan-form"><div><label>Facebook-Seiten</label><div class="bulk-actions"><span class="small" id="selection-count">0 Seiten ausgewählt</span><div><button type="button" class="link-button" onclick="setAllAccounts(true)">Alle auswählen</button> · <button type="button" class="link-button" onclick="setAllAccounts(false)">Auswahl aufheben</button></div></div><div class="account-list">{% for account in social_accounts %}<label class="account-option"><input type="checkbox" name="account_ids" value="{{ account.id }}" onchange="updateSelectionCount()"><span class="account-meta"><strong>{{ account.name }}</strong><span class="small">{{ account.platform|capitalize }}</span></span></label>{% endfor %}</div></div><div><label for="publish_at">Datum und Uhrzeit</label><input type="datetime-local" id="publish_at" name="publish_at" required><div class="plan-submit" style="margin-top:18px"><button class="save" type="submit">Für ausgewählte Seiten planen</button></div></div></form>{% else %}<div class="hint">Noch kein Konto vorhanden. Lege unter <a href="/settings">Einstellungen</a> zuerst ein Facebook-Konto an.</div>{% endif %}
 {% if publications %}<div class="summary-bar"><div><strong>{{ publications|length }} Veröffentlichung{% if publications|length != 1 %}en{% endif %}</strong><div class="small">Jede Seite wird unabhängig verarbeitet.</div></div>{% set open_count = publications|rejectattr('status', 'equalto', 'published')|rejectattr('status', 'equalto', 'cancelled')|list|length %}{% if open_count %}<form method="post" action="/publish/post/{{ draft.id }}/now" onsubmit="return confirm('Diesen Beitrag jetzt auf allen {{ open_count }} offenen Seiten veröffentlichen?')"><button class="save" type="submit">Jetzt auf allen offenen Seiten veröffentlichen</button></form>{% endif %}</div>{% for publication in publications %}<article class="publication"><div class="publication-head"><div><strong>{{ publication.account_name }}</strong><div class="small">{{ publication.platform|capitalize }}</div></div><span class="badge">{{ publication.status }}</span></div><form method="post" action="/publications/{{ publication.id }}" class="inline-form"><div><label>Zeitpunkt</label><input type="datetime-local" name="publish_at" value="{{ publication.publish_at }}" required></div><div><label>Status</label><select name="status"><option value="planned" {% if publication.status=='planned' %}selected{% endif %}>Geplant</option><option value="ready" {% if publication.status=='ready' %}selected{% endif %}>Bereit</option><option value="cancelled" {% if publication.status=='cancelled' %}selected{% endif %}>Storniert</option><option value="failed" {% if publication.status=='failed' %}selected{% endif %}>Fehlgeschlagen</option><option value="published" {% if publication.status=='published' %}selected{% endif %}>Veröffentlicht</option></select></div><button class="save" type="submit">Speichern</button></form>{% if publication.error_message %}<div class="error-notice" style="margin-top:12px;margin-bottom:0"><strong>Fehler:</strong> {{ publication.error_message }}</div>{% endif %}{% if publication.external_post_id %}<div class="small" style="margin-top:12px">Facebook-Beitrags-ID: {{ publication.external_post_id }}</div>{% endif %}<div class="buttons" style="margin-top:12px;justify-content:flex-end">{% if publication.status != 'published' and publication.status != 'cancelled' %}<form method="post" action="/publish/{{ publication.id }}/now" onsubmit="return confirm('Diesen Beitrag jetzt sofort auf {{ publication.account_name }} veröffentlichen?')"><button class="save" type="submit">Nur hier jetzt veröffentlichen</button></form>{% endif %}<form method="post" action="/publications/{{ publication.id }}/delete" onsubmit="return confirm('Diese Planung wirklich löschen?')"><button class="delete" type="submit">Planung löschen</button></form></div></article>{% endfor %}{% else %}<div class="empty-plan">Für diesen Entwurf ist noch keine Veröffentlichung geplant.</div>{% endif %}</section>
 <script>
+
+    function initializeAiRewrite_draft() {
+        const textarea = document.getElementById('text');
+        const button = document.getElementById('ai-button-draft');
+        const instructions = document.getElementById('ai-instructions-draft');
+        const status = document.getElementById('ai-status-draft');
+        const results = document.getElementById('ai-results-draft');
+
+        if (!textarea || !button || !instructions || !status || !results) {
+            return;
+        }
+
+        button.addEventListener('click', async () => {
+            const sourceText = textarea.value.trim();
+            if (!sourceText) {
+                status.textContent = 'Bitte zuerst einen Beitragstext eingeben.';
+                status.classList.add('error-text');
+                return;
+            }
+
+            button.disabled = true;
+            button.classList.add('loading');
+            button.textContent = 'KI arbeitet …';
+            status.textContent = 'Drei Textvarianten werden erstellt.';
+            status.classList.remove('error-text');
+            results.hidden = true;
+            results.replaceChildren();
+
+            try {
+                const response = await fetch('/ai/rewrite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: sourceText,
+                        instructions: instructions.value.trim()
+                    })
+                });
+
+                let payload;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    throw new Error('Der Server hat keine lesbare KI-Antwort geliefert.');
+                }
+
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Die KI-Anfrage ist fehlgeschlagen.');
+                }
+
+                const variants = Array.isArray(payload.variants) ? payload.variants : [];
+                if (!variants.length) {
+                    throw new Error('Es wurden keine Textvarianten geliefert.');
+                }
+
+                variants.forEach((variant) => {
+                    const card = document.createElement('article');
+                    card.className = 'ai-result';
+
+                    const title = document.createElement('h3');
+                    title.textContent = variant.title || 'Variante';
+
+                    const text = document.createElement('div');
+                    text.className = 'ai-result-text';
+                    text.textContent = variant.text || '';
+
+                    const useButton = document.createElement('button');
+                    useButton.type = 'button';
+                    useButton.textContent = 'Diese Variante übernehmen';
+                    useButton.addEventListener('click', () => {
+                        textarea.value = variant.text || '';
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        textarea.focus();
+                        status.textContent = 'Die Variante wurde in den Beitragstext übernommen.';
+                        status.classList.remove('error-text');
+                    });
+
+                    card.append(title, text, useButton);
+                    results.appendChild(card);
+                });
+
+                results.hidden = false;
+                status.textContent = 'Wähle eine Variante aus oder bearbeite den Text weiter.';
+            } catch (error) {
+                status.textContent = error instanceof Error ? error.message : String(error);
+                status.classList.add('error-text');
+            } finally {
+                button.disabled = false;
+                button.classList.remove('loading');
+                button.textContent = 'KI-Textvarianten erzeugen';
+            }
+        });
+    }
+
+    initializeAiRewrite_draft();
+
 function updateSelectionCount(){const count=document.querySelectorAll('input[name="account_ids"]:checked').length;document.getElementById('selection-count').textContent=count+(count===1?' Seite ausgewählt':' Seiten ausgewählt');}
 function setAllAccounts(checked){document.querySelectorAll('input[name="account_ids"]').forEach(el=>el.checked=checked);updateSelectionCount();}
 document.getElementById('multi-plan-form')?.addEventListener('submit',function(event){if(!document.querySelector('input[name="account_ids"]:checked')){event.preventDefault();alert('Bitte mindestens eine Facebook-Seite auswählen.');}});

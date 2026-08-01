@@ -30,6 +30,18 @@
         .button-secondary { color: #fff; background: #344054; }
         .button-ai { width: 100%; color: #fff; background: #168353; margin-top: 16px; }
         .button-ai:disabled { background: #9ca3af; cursor: not-allowed; }
+
+        .ai-panel { margin-top: 18px; padding: 18px; border: 1px solid #b7d7c7; border-radius: 12px; background: #f3fbf7; }
+        .ai-panel label { margin-top: 0; }
+        .ai-panel input { margin-bottom: 10px; }
+        .ai-status { min-height: 22px; margin: 12px 0 0; color: #475467; font-size: 14px; line-height: 1.45; }
+        .ai-status.error-text { color: #b42318; }
+        .ai-results { display: grid; gap: 14px; margin-top: 16px; }
+        .ai-result { padding: 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; }
+        .ai-result h3 { margin: 0 0 10px; font-size: 17px; }
+        .ai-result-text { white-space: pre-wrap; line-height: 1.5; color: #344054; }
+        .ai-result button { min-height: 42px; margin-top: 14px; background: #1877f2; color: #fff; }
+        .button-ai.loading { opacity: .7; cursor: wait; }
         .error { margin-top: 20px; padding: 15px 18px; border-radius: 10px; background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
         .content-grid { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(320px,.7fr); gap: 28px; }
         h2 { margin-top: 0; margin-bottom: 18px; font-size: 21px; }
@@ -117,8 +129,18 @@
                         <label for="post_text">Beitragstext</label>
                         <textarea id="post_text" name="text">{{ post.text }}</textarea>
                     </div>
-                    <button type="button" class="button-ai" disabled>KI-Text erzeugen</button>
-                    <p class="hint">Die KI-Funktion ergänzen wir in einem späteren Schritt.</p>
+
+                    <div class="ai-panel" id="ai-panel-import">
+                        <label for="ai-instructions-import">Optionale Vorgabe für die KI</label>
+                        <input type="text" id="ai-instructions-import" maxlength="1000"
+                               placeholder="z. B. kürzer, kritischer oder ohne Emojis">
+                        <button type="button" class="button-ai" id="ai-button-import">
+                            KI-Textvarianten erzeugen
+                        </button>
+                        <p class="ai-status" id="ai-status-import"></p>
+                        <div class="ai-results" id="ai-results-import" hidden></div>
+                    </div>
+
                 </section>
 
                 <section class="card">
@@ -171,6 +193,100 @@
 
     typeInputs.forEach(input => input.addEventListener('change', updateImportFields));
     updateImportFields();
+
+    function initializeAiRewrite_import() {
+        const textarea = document.getElementById('post_text');
+        const button = document.getElementById('ai-button-import');
+        const instructions = document.getElementById('ai-instructions-import');
+        const status = document.getElementById('ai-status-import');
+        const results = document.getElementById('ai-results-import');
+
+        if (!textarea || !button || !instructions || !status || !results) {
+            return;
+        }
+
+        button.addEventListener('click', async () => {
+            const sourceText = textarea.value.trim();
+            if (!sourceText) {
+                status.textContent = 'Bitte zuerst einen Beitragstext eingeben.';
+                status.classList.add('error-text');
+                return;
+            }
+
+            button.disabled = true;
+            button.classList.add('loading');
+            button.textContent = 'KI arbeitet …';
+            status.textContent = 'Drei Textvarianten werden erstellt.';
+            status.classList.remove('error-text');
+            results.hidden = true;
+            results.replaceChildren();
+
+            try {
+                const response = await fetch('/ai/rewrite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: sourceText,
+                        instructions: instructions.value.trim()
+                    })
+                });
+
+                let payload;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    throw new Error('Der Server hat keine lesbare KI-Antwort geliefert.');
+                }
+
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Die KI-Anfrage ist fehlgeschlagen.');
+                }
+
+                const variants = Array.isArray(payload.variants) ? payload.variants : [];
+                if (!variants.length) {
+                    throw new Error('Es wurden keine Textvarianten geliefert.');
+                }
+
+                variants.forEach((variant) => {
+                    const card = document.createElement('article');
+                    card.className = 'ai-result';
+
+                    const title = document.createElement('h3');
+                    title.textContent = variant.title || 'Variante';
+
+                    const text = document.createElement('div');
+                    text.className = 'ai-result-text';
+                    text.textContent = variant.text || '';
+
+                    const useButton = document.createElement('button');
+                    useButton.type = 'button';
+                    useButton.textContent = 'Diese Variante übernehmen';
+                    useButton.addEventListener('click', () => {
+                        textarea.value = variant.text || '';
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        textarea.focus();
+                        status.textContent = 'Die Variante wurde in den Beitragstext übernommen.';
+                        status.classList.remove('error-text');
+                    });
+
+                    card.append(title, text, useButton);
+                    results.appendChild(card);
+                });
+
+                results.hidden = false;
+                status.textContent = 'Wähle eine Variante aus oder bearbeite den Text weiter.';
+            } catch (error) {
+                status.textContent = error instanceof Error ? error.message : String(error);
+                status.classList.add('error-text');
+            } finally {
+                button.disabled = false;
+                button.classList.remove('loading');
+                button.textContent = 'KI-Textvarianten erzeugen';
+            }
+        });
+    }
+
+    initializeAiRewrite_import();
 </script>
 </body>
 </html>
