@@ -61,17 +61,16 @@ class FacebookImporter:
                 page.goto(url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(8_000)
 
-                posts = page.locator("div[role='article']")
-                if posts.count() == 0:
+                final_url = page.url or url
+                post = self._primary_article(page, final_url)
+                if post is None:
                     raise RuntimeError(
                         "Auf der Facebook-Seite wurde kein Bild-/Textbeitrag gefunden. "
                         "Für Reels oder Videos bitte 'Videobeitrag' auswählen."
                     )
 
-                post = posts.first
                 text = self._extract_article_text(post)
                 cookies = self._cookies_as_dict(context)
-                final_url = page.url or url
 
                 local_images = self._download_images(
                     self._filter_post_images(image_urls),
@@ -148,11 +147,48 @@ class FacebookImporter:
 
     @staticmethod
     def _extract_article_text(post) -> str:
+        """Liest ausschließlich den Haupttext eines Bild-/Textbeitrags.
+
+        Kommentare sind bei Facebook häufig als verschachtelte ``role=article``-
+        Elemente im Hauptbeitrag enthalten. Deshalb werden nur Textknoten verwendet,
+        deren nächster Artikel tatsächlich der ausgewählte Hauptbeitrag ist.
+        """
         try:
-            blocks = post.locator("div[dir='auto']").all_inner_texts()
+            candidates = post.evaluate(
+                """root => {
+                    const values = [];
+                    const selectors = [
+                        "[data-ad-preview='message']",
+                        "[data-ad-comet-preview='message']"
+                    ];
+
+                    for (const selector of selectors) {
+                        for (const node of root.querySelectorAll(selector)) {
+                            if (node.closest("[role='article']") !== root) {
+                                continue;
+                            }
+                            const value = (node.innerText || node.textContent || "").trim();
+                            if (value) values.push(value);
+                        }
+                    }
+
+                    if (values.length) return values;
+
+                    for (const node of root.querySelectorAll("div[dir='auto']")) {
+                        if (node.closest("[role='article']") !== root) {
+                            continue;
+                        }
+                        const value = (node.innerText || node.textContent || "").trim();
+                        if (value) values.push(value);
+                    }
+
+                    return values;
+                }"""
+            )
         except Exception:
             return ""
-        return FacebookImporter._best_text(blocks)
+
+        return FacebookImporter._best_plausible_text(candidates)
 
     def _primary_article(self, page, source_url: str = ""):
         """Ermittelt den Artikel, der zum angeforderten Video gehört.
