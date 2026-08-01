@@ -43,6 +43,7 @@
         .no-image, .empty-plan { padding: 18px; border-radius: 10px; background: #f9fafb; color: #667085; }
         .footer-card, .summary-bar { justify-content: space-between; }
         .save { color: #fff; background: #1877f2; }
+        .publish-selected-now { background: #067647; }
         .delete { color: #b42318; background: #fee4e2; }
         .link-button { min-height: auto; padding: 0; background: transparent; color: #1877f2; }
         .ai-panel { margin-top: 18px; padding: 18px; border: 1px solid #b7d7c7; border-radius: 12px; background: #f3fbf7; }
@@ -206,9 +207,17 @@
 
             <div>
                 <label for="publish_at">Datum und Uhrzeit</label>
-                <input type="datetime-local" id="publish_at" name="publish_at" required>
-                <div style="margin-top:18px">
-                    <button class="save" type="submit">Ausgewählte Seiten planen</button>
+                <input type="datetime-local" id="publish_at" name="publish_at">
+                <p class="small">Ein Termin ist nur beim Planen erforderlich.</p>
+                <div class="buttons" style="margin-top:18px">
+                    <button class="save" type="submit" name="action" value="plan">
+                        Ausgewählte Seiten planen
+                    </button>
+                    <button class="save publish-selected-now" type="submit"
+                            name="action" value="publish_now"
+                            onclick="return confirm('Den Beitrag jetzt sofort auf allen ausgewählten Seiten veröffentlichen?')">
+                        Auf ausgewählten Seiten sofort veröffentlichen
+                    </button>
                 </div>
             </div>
         </form>
@@ -443,6 +452,16 @@
         if (!selectedAccountCheckboxes().length) {
             event.preventDefault();
             alert('Bitte mindestens eine Facebook-Seite auswählen.');
+            return;
+        }
+
+        const action = event.submitter?.value || 'plan';
+        const publishAt = document.getElementById('publish_at');
+
+        if (action === 'plan' && !publishAt.value) {
+            event.preventDefault();
+            alert('Bitte für die Planung Datum und Uhrzeit auswählen.');
+            publishAt.focus();
         }
     });
 
