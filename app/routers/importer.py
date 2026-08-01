@@ -51,6 +51,34 @@ def beitrag_importieren(
     selected_type = "video" if import_type == "video" else "image"
 
     try:
+        if selected_type == "video":
+            from app.models.facebook_post import FacebookPost
+
+            cleaned_video_url = (video_url or facebook_url).strip()
+            if not cleaned_video_url:
+                raise ValueError("Bitte einen Reel- oder Videolink eingeben.")
+
+            post = FacebookPost(
+                text="",
+                images=[],
+                videos=[],
+                video_url=cleaned_video_url,
+                source_url=cleaned_video_url,
+            )
+
+            return templates.TemplateResponse(
+                request=request,
+                name="index.html",
+                context={
+                    "post": post,
+                    "image_urls": [],
+                    "error": None,
+                    "facebook_url": cleaned_video_url,
+                    "video_url": cleaned_video_url,
+                    "import_type": selected_type,
+                },
+            )
+
         importer = FacebookImporter()
         post = importer.import_from_url(
             facebook_url,
@@ -62,7 +90,6 @@ def beitrag_importieren(
 
         for image_path in post.images:
             image_url = _image_path_to_url(image_path)
-
             if image_url:
                 image_urls.append(image_url)
 
@@ -74,7 +101,7 @@ def beitrag_importieren(
                 "image_urls": image_urls,
                 "error": None,
                 "facebook_url": facebook_url,
-                "video_url": video_url,
+                "video_url": "",
                 "import_type": selected_type,
             },
         )
