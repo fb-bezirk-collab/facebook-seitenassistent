@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -8,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import TEMPLATES_DIR
 from app.services.post_service import PostService
 from app.services.publication_service import PublicationService
+from app.services.publication_runner import PublicationRunner
 from app.services.social_account_service import SocialAccountService
 
 
@@ -16,6 +18,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 post_service = PostService()
 publication_service = PublicationService()
 account_service = SocialAccountService()
+publication_runner = PublicationRunner()
 
 
 def _available_texts(post) -> list[dict[str, str]]:
@@ -84,12 +87,12 @@ async def publication_create(
         )
 
     form = await request.form()
+    action = str(form.get("action", "plan")).strip().lower()
     account_ids = [
         str(value)
         for value in form.getlist("account_ids")
         if str(value).strip()
     ]
-    publish_at = str(form.get("publish_at", "")).strip()
 
     if not account_ids:
         raise HTTPException(
@@ -136,6 +139,11 @@ async def publication_create(
             ),
         )
 
+    if action == "publish_now":
+        publish_at = datetime.now().isoformat(timespec="seconds")
+    else:
+        publish_at = str(form.get("publish_at", "")).strip()
+
     try:
         created = publication_service.create_many(
             post_id=post_id,
@@ -148,16 +156,47 @@ async def publication_create(
             detail=str(exc),
         ) from exc
 
-    return RedirectResponse(
-        url=(
-            str(
-                request.url_for(
-                    "entwurf_bearbeiten",
-                    post_id=post_id,
+    target = str(
+        request.url_for(
+            "entwurf_bearbeiten",
+            post_id=post_id,
+        )
+    )
+
+    if action != "publish_now":
+        return RedirectResponse(
+            url=target + f"?planned=1&planned_count={len(created)}",
+            status_code=303,
+        )
+
+    published_count = 0
+    failed_count = 0
+    first_error = ""
+
+    for publication in created:
+        result = publication_runner.publish_one(publication.id)
+
+        if result.status == "published":
+            published_count += 1
+        else:
+            failed_count += 1
+            if not first_error:
+                first_error = (
+                    result.error_message
+                    or "Veröffentlichung fehlgeschlagen."
                 )
-            )
-            + f"?planned=1&planned_count={len(created)}"
-        ),
+
+    query = (
+        f"published={1 if published_count else 0}"
+        f"&published_count={published_count}"
+        f"&failed_count={failed_count}"
+    )
+
+    if first_error:
+        query += "&publish_error=" + quote(first_error)
+
+    return RedirectResponse(
+        url=target + "?" + query,
         status_code=303,
     )
 
