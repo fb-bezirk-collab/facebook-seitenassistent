@@ -1,4 +1,5 @@
 import threading
+from dataclasses import replace
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -67,8 +68,12 @@ class PublicationRunner:
             ) or publication
 
         try:
+            publication_post = replace(
+                post,
+                text=publication.text.strip() or post.text,
+            )
             external_post_id = self.facebook_publisher.publish(
-                post=post,
+                post=publication_post,
                 page_id=publication.account_id.removeprefix("facebook:"),
             )
         except (FacebookApiError, OSError, ValueError) as exc:

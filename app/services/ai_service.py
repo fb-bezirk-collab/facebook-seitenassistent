@@ -23,7 +23,7 @@ class AiVariant:
 
 
 class AiService:
-    """Erstellt drei abgewandelte Facebook-Texte über die OpenAI Responses API."""
+    """Erstellt sechs abgewandelte Facebook-Texte über die OpenAI Responses API."""
 
     api_url = "https://api.openai.com/v1/responses"
 
@@ -137,50 +137,63 @@ Die Beiträge dürfen pointiert und angriffig sein, dürfen aber nicht:
 
 AUSGABE
 
-Erstelle genau drei unterschiedliche Varianten.
+Erstelle genau sechs eigenständige Varianten.
+
+Alle sechs Varianten müssen dieselben belegbaren Fakten und dieselbe politische
+Kernaussage bewahren. Sie müssen sich jedoch deutlich unterscheiden bei:
+
+- Einstieg,
+- Satzbau,
+- Reihenfolge der Argumente,
+- Länge,
+- Wortwahl,
+- Zuspitzung,
+- Verwendung von Emojis.
+
+Es dürfen nicht sechs fast gleichlautende Texte entstehen. Jede Variante muss
+wie ein eigenständig verfasster Facebook-Beitrag wirken.
+
 
 VARIANTE 1 – KLAR UND SACHLICH
-
 - professionell,
 - politisch eindeutig,
-- nachvollziehbar argumentiert,
-- für eine offizielle FPÖ-Ortsgruppenseite geeignet,
-- ungefähr in der Länge des Ausgangstextes.
+- nachvollziehbar argumentiert.
 
-VARIANTE 2 – POINTIERT UND FACEBOOK-GERECHT
-
-- emotionaler und zugespitzter,
-- klare politische Botschaft,
+VARIANTE 2 – POINTIERT
 - kräftiger Einstieg,
-- kurze, gut lesbare Absätze,
-- höchstens wenige passende Emojis,
-- keine künstliche Übertreibung.
+- klarer politischer Gegensatz,
+- gut lesbare Absätze.
 
-VARIANTE 3 – KURZ UND PRÄGNANT
+VARIANTE 3 – BÜRGERNAH
+- einfache, direkte Sprache,
+- Fokus auf konkrete Auswirkungen für die Bürger,
+- verständlich und nahbar.
 
-- deutlich kürzer als der Ausgangstext,
-- auf die wichtigste Aussage konzentriert,
-- klare politische Position,
-- ideal für einen rasch erfassbaren Facebook-Beitrag.
+VARIANTE 4 – KURZ UND ZUGESPITZT
+- deutlich kürzer,
+- Konzentration auf die wichtigste Aussage,
+- starke Schlussbotschaft.
 
-Die drei Varianten müssen sich erkennbar voneinander unterscheiden. Sie dürfen nicht bloß leicht umgestellte Fassungen desselben Textes sein.
+VARIANTE 5 – EMOTIONAL
+- emotionaler Einstieg,
+- sparsame passende Emojis,
+- klarer freiheitlicher Standpunkt ohne künstliche Übertreibung.
+
+VARIANTE 6 – ARGUMENTATIV
+- stärkere Begründung der politischen Position,
+- klare Verantwortlichkeiten,
+- sachlich-pointierter Abschluss.
 
 Antworte ausschließlich als gültiges JSON-Objekt in genau dieser Struktur:
 
 {
   "variants": [
-    {
-      "title": "Klar und sachlich",
-      "text": "Vollständiger Beitragstext"
-    },
-    {
-      "title": "Pointiert und Facebook-gerecht",
-      "text": "Vollständiger Beitragstext"
-    },
-    {
-      "title": "Kurz und prägnant",
-      "text": "Vollständiger Beitragstext"
-    }
+    {"title": "Variante 1 – Klar und sachlich", "text": "..."},
+    {"title": "Variante 2 – Pointiert", "text": "..."},
+    {"title": "Variante 3 – Bürgernah", "text": "..."},
+    {"title": "Variante 4 – Kurz und zugespitzt", "text": "..."},
+    {"title": "Variante 5 – Emotional", "text": "..."},
+    {"title": "Variante 6 – Argumentativ", "text": "..."}
   ]
 }
 
@@ -224,7 +237,7 @@ Füge vor oder nach dem JSON keine Erklärung, keine Markdown-Formatierung und k
                     "content": user_prompt,
                 },
             ],
-            "max_output_tokens": 2600,
+            "max_output_tokens": 5200,
         }
 
         try:
@@ -256,9 +269,9 @@ Füge vor oder nach dem JSON keine Erklärung, keine Markdown-Formatierung und k
         output_text = self._extract_output_text(data)
         variants = self._parse_variants(output_text)
 
-        if len(variants) != 3:
+        if len(variants) != 6:
             raise AiGenerationError(
-                "Die KI-Antwort enthielt nicht genau drei verwendbare Varianten."
+                "Die KI-Antwort enthielt nicht genau sechs verwendbare Varianten."
             )
 
         return variants
@@ -276,7 +289,7 @@ ZUSÄTZLICHE VORGABE DER BENUTZERIN:
 
 {extra}
 
-Erstelle nun genau die drei im Grundprompt verlangten Varianten.
+Erstelle nun genau die sechs im Grundprompt verlangten Varianten.
 """.strip()
 
     @staticmethod
@@ -343,7 +356,7 @@ Erstelle nun genau die drei im Grundprompt verlangten Varianten.
                     )
                 )
 
-        return variants[:3]
+        return variants[:6]
 
     @staticmethod
     def _api_error_message(response: requests.Response) -> str:

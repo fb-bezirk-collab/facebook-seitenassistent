@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -61,11 +62,43 @@ def _create_image_urls(images: list[str]) -> list[str]:
     return image_urls
 
 
+def _parse_text_variants(raw_value: str) -> list[dict[str, str]]:
+    if not raw_value.strip():
+        return []
+
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(value, list):
+        return []
+
+    variants: list[dict[str, str]] = []
+
+    for index, item in enumerate(value[:6], start=1):
+        if not isinstance(item, dict):
+            continue
+
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+
+        title = (
+            str(item.get("title", "")).strip()
+            or f"Variante {index}"
+        )
+        variants.append({"title": title, "text": text})
+
+    return variants
+
+
 @router.post("/drafts")
 def entwurf_speichern(
     request: Request,
     title: str = Form(""),
     text: str = Form(""),
+    text_variants_json: str = Form(""),
     images: list[str] = Form(default=[]),
     videos: list[str] = Form(default=[]),
     video_url: str = Form(""),
@@ -81,6 +114,7 @@ def entwurf_speichern(
     draft = post_service.create_draft(
         title=title,
         text=text,
+        text_variants=_parse_text_variants(text_variants_json),
         images=images,
         videos=videos,
         video_url=video_url,
@@ -164,6 +198,7 @@ def entwurf_aktualisieren(
     post_id: str,
     title: str = Form(""),
     text: str = Form(""),
+    text_variants_json: str = Form(""),
     images: list[str] = Form(default=[]),
     videos: list[str] = Form(default=[]),
     video_url: str = Form(""),
@@ -174,6 +209,7 @@ def entwurf_aktualisieren(
         post_id,
         title=title,
         text=text,
+        text_variants=_parse_text_variants(text_variants_json),
         images=images,
         videos=videos,
         video_url=video_url,

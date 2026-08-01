@@ -4,7 +4,13 @@ from typing import Optional
 
 
 VALID_PLATFORMS = {"facebook", "instagram", "x", "tiktok"}
-VALID_PUBLICATION_STATUSES = {"planned", "ready", "published", "failed", "cancelled"}
+VALID_PUBLICATION_STATUSES = {
+    "planned",
+    "ready",
+    "published",
+    "failed",
+    "cancelled",
+}
 
 
 def utc_now_iso() -> str:
@@ -19,6 +25,8 @@ class Publication:
     account_id: str
     account_name: str
     publish_at: str
+    text: str = ""
+    variant_title: str = "Haupttext"
     status: str = "planned"
     external_post_id: str = ""
     error_message: str = ""
@@ -34,9 +42,11 @@ class Publication:
         platform = str(data.get("platform", "facebook")).lower().strip()
         if platform not in VALID_PLATFORMS:
             platform = "facebook"
+
         status = str(data.get("status", "planned")).lower().strip()
         if status not in VALID_PUBLICATION_STATUSES:
             status = "planned"
+
         return cls(
             id=str(data.get("id", "")),
             post_id=str(data.get("post_id", "")),
@@ -44,6 +54,10 @@ class Publication:
             account_id=str(data.get("account_id", "")),
             account_name=str(data.get("account_name", "")),
             publish_at=str(data.get("publish_at", "")),
+            text=str(data.get("text", "")),
+            variant_title=str(
+                data.get("variant_title", "Haupttext")
+            ).strip() or "Haupttext",
             status=status,
             external_post_id=str(data.get("external_post_id", "")),
             error_message=str(data.get("error_message", "")),

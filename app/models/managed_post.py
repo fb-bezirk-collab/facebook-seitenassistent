@@ -15,11 +15,35 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _load_text_variants(value) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    variants: list[dict[str, str]] = []
+
+    for index, item in enumerate(value[:6], start=1):
+        if not isinstance(item, dict):
+            continue
+
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+
+        title = str(item.get("title", "")).strip() or f"Variante {index}"
+        variants.append({
+            "title": title[:100],
+            "text": text,
+        })
+
+    return variants
+
+
 @dataclass
 class ManagedPost:
     id: str
     title: str = ""
     text: str = ""
+    text_variants: list[dict[str, str]] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
     videos: list[str] = field(default_factory=list)
     video_url: str = ""
@@ -50,7 +74,11 @@ class ManagedPost:
             videos = []
 
         video_url = str(data.get("video_url", "")).strip()
-        if not video_url and videos and str(videos[0]).startswith(("http://", "https://")):
+        if (
+            not video_url
+            and videos
+            and str(videos[0]).startswith(("http://", "https://"))
+        ):
             video_url = str(videos[0])
             videos = videos[1:]
 
@@ -58,6 +86,7 @@ class ManagedPost:
             id=str(data.get("id", "")),
             title=str(data.get("title", "")),
             text=str(data.get("text", "")),
+            text_variants=_load_text_variants(data.get("text_variants", [])),
             images=[str(item) for item in images if item],
             videos=[str(item) for item in videos if item],
             video_url=video_url,
