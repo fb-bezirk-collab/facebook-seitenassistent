@@ -165,6 +165,7 @@
                 </section>
             </div>
 
+            <input type="hidden" id="text_variants_json" name="text_variants_json" value="">
             <input type="hidden" name="source_url" value="{{ post.source_url }}">
             <input type="hidden" name="page_id" value="">
 
@@ -216,7 +217,7 @@
             button.disabled = true;
             button.classList.add('loading');
             button.textContent = 'KI arbeitet …';
-            status.textContent = 'Drei Textvarianten werden erstellt.';
+            status.textContent = 'Sechs eigenständige Textvarianten werden erstellt.';
             status.classList.remove('error-text');
             results.hidden = true;
             results.replaceChildren();
@@ -247,6 +248,9 @@
                     throw new Error('Es wurden keine Textvarianten geliefert.');
                 }
 
+                document.getElementById('text_variants_json').value =
+                    JSON.stringify(variants);
+
                 variants.forEach((variant) => {
                     const card = document.createElement('article');
                     card.className = 'ai-result';
@@ -274,7 +278,7 @@
                 });
 
                 results.hidden = false;
-                status.textContent = 'Wähle eine Variante aus oder bearbeite den Text weiter.';
+                status.textContent = 'Die sechs Varianten werden mit dem Entwurf gespeichert. Du kannst zusätzlich eine davon als Haupttext übernehmen.';
             } catch (error) {
                 status.textContent = error instanceof Error ? error.message : String(error);
                 status.classList.add('error-text');
