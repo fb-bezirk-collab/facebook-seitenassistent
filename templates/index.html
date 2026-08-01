@@ -97,19 +97,13 @@
                     </label>
                 </div>
 
-                <label for="facebook_url" id="source-label">Facebook-Link</label>
+                <label for="facebook_url" id="source-label">{% if import_type == "video" %}Reel-/Videolink{% else %}Facebook-Link{% endif %}</label>
                 <div class="input-row">
                     <input type="url" id="facebook_url" name="facebook_url" placeholder="https://www.facebook.com/..." value="{{ facebook_url }}" required>
                     <button type="submit" class="button-primary">Beitrag importieren</button>
                 </div>
-                <p class="hint" id="source-hint">Bei einem Videobeitrag verwendest du hier den Link, auf dem der Begleittext sichtbar ist, zum Beispiel einen fb.watch-Link.</p>
-
-                <div class="video-link-field" id="video-link-field" {% if import_type != 'video' %}hidden{% endif %}>
-                    <label for="video_url">Link zum Originalvideo/Reel</label>
-                    <input type="url" id="video_url" name="video_url" placeholder="https://www.facebook.com/reel/..." value="{{ video_url }}">
-                    <p class="hint">Das Video wird nicht heruntergeladen. Im Entwurf wird nur dieser Link gespeichert.</p>
-                </div>
-            </form>
+                <p class="hint" id="source-hint">Bei einem Videobeitrag wird nur der Reel-/Videolink gespeichert. Der Text wird nicht von Facebook übernommen und kann nach dem Import manuell eingegeben werden.</p>
+</form>
             {% if error %}
                 <div class="error"><strong>Import fehlgeschlagen:</strong> {{ error }}</div>
             {% endif %}
@@ -128,6 +122,9 @@
                     <div class="field">
                         <label for="post_text">Beitragstext</label>
                         <textarea id="post_text" name="text">{{ post.text }}</textarea>
+                        {% if import_type == "video" %}
+                            <p class="hint">Der Text wurde bei diesem Videobeitrag bewusst nicht von Facebook übernommen. Bitte gib hier deinen eigenen Beitragstext ein und erzeuge danach bei Bedarf die sechs KI-Varianten.</p>
+                        {% endif %}
                     </div>
 
                     <div class="ai-panel" id="ai-panel-import">
@@ -182,14 +179,25 @@
 </main>
 <script>
     const typeInputs = document.querySelectorAll('input[name="import_type"]');
-    const videoLinkField = document.getElementById('video-link-field');
     const sourceHint = document.getElementById('source-hint');
 
     function updateImportFields() {
         const selected = document.querySelector('input[name="import_type"]:checked')?.value;
         const isVideo = selected === 'video';
-        videoLinkField.hidden = !isVideo;
-        sourceHint.hidden = !isVideo;
+        const sourceLabel = document.getElementById('source-label');
+        const sourceInput = document.getElementById('facebook_url');
+
+        if (sourceHint) {
+            sourceHint.hidden = !isVideo;
+        }
+        if (sourceLabel) {
+            sourceLabel.textContent = isVideo ? 'Reel-/Videolink' : 'Facebook-Link';
+        }
+        if (sourceInput) {
+            sourceInput.placeholder = isVideo
+                ? 'https://www.facebook.com/reel/...'
+                : 'https://www.facebook.com/...';
+        }
     }
 
     typeInputs.forEach(input => input.addEventListener('change', updateImportFields));
