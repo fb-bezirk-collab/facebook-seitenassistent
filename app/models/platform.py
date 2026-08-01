@@ -39,8 +39,8 @@ PLATFORM_DEFINITIONS: tuple[PlatformDefinition, ...] = (
         can_publish=False,
         can_connect=False,
         description=(
-            "Instagram-Business-Konten werden im nächsten Schritt "
-            "über dieselbe Meta-Verbindung ausgelesen."
+            "Instagram-Business- und Creator-Konten werden über "
+            "dieselbe Meta-Verbindung automatisch übernommen."
         ),
     ),
     PlatformDefinition(
