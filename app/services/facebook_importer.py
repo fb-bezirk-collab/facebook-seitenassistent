@@ -1,6 +1,4 @@
-import json
 import os
-import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -106,50 +104,19 @@ class FacebookImporter:
                 page.goto(text_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(10_000)
 
-                # DEBUG: Vor dem Aufklappen wird der tatsächliche Facebook-DOM
-                # strukturiert in die Railway-Logs geschrieben. So lassen sich
-                # funktionierende und gekürzte Reels direkt vergleichen.
-                self._debug_video_dom(
-                    page,
-                    stage="BEFORE_EXPAND",
-                    text_url=text_url,
-                    video_url=requested_video_url,
-                )
-
                 # Facebook kürzt längere Beitragstexte zunächst mit "Mehr anzeigen".
                 # Vor dem Auslesen wird diese Erweiterung gezielt im Hauptbeitrag
                 # geöffnet, damit der vollständige Text gespeichert wird.
-                self._expand_video_text(
-                    page,
-                    text_url=text_url,
-                    video_url=requested_video_url,
-                )
-
-                self._debug_video_dom(
-                    page,
-                    stage="AFTER_EXPAND",
-                    text_url=text_url,
-                    video_url=requested_video_url,
-                )
+                self._expand_video_text(page, source_url=text_url)
 
                 final_url = page.url or text_url
-                text = self._extract_video_text(
-                    page,
-                    text_url=text_url,
-                    video_url=requested_video_url,
-                )
-                print(
-                    "FB_IMPORT_DEBUG|FINAL_TEXT|"
-                    + json.dumps(
-                        {
-                            "length": len(text),
-                            "looks_truncated": self._looks_truncated(text),
-                            "text": text,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+                text = self._extract_video_text(page, source_url=text_url)
+                if self._looks_truncated(text):
+                    # Facebook lädt den Rest gelegentlich erst nach einem zweiten
+                    # Klick bzw. nach zusätzlicher Wartezeit nach.
+                    self._expand_video_text(page, source_url=text_url)
+                    page.wait_for_timeout(1_500)
+                    text = self._extract_video_text(page, source_url=text_url)
                 stored_video_url = requested_video_url or self._preferred_video_page_url(
                     page,
                     fallback=final_url,
@@ -187,807 +154,134 @@ class FacebookImporter:
             return ""
         return FacebookImporter._best_text(blocks)
 
-    @staticmethod
-    def _video_id_from_url(url: str) -> str:
-        """Liest die Facebook-Video-ID aus unterschiedlichen URL-Formen."""
+    def _primary_article(self, page, source_url: str = ""):
+        """Ermittelt den Artikel, der zum angeforderten Video gehört.
 
-        if not url:
-            return ""
-
-        patterns = (
-            r"/reel/(\d+)",
-            r"/videos/(\d+)",
-            r"[?&]v=(\d+)",
-            r"fb\.watch/([^/?#]+)",
-        )
-
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                return match.group(1)
-
-        return ""
-
-    def _find_video_article(
-        self,
-        page,
-        *,
-        text_url: str = "",
-        video_url: str = "",
-    ):
-        """Sucht den eigentlichen Video-Beitrag und nicht einen Kommentar."""
-
-        video_ids = {
-            value
-            for value in (
-                self._video_id_from_url(text_url),
-                self._video_id_from_url(video_url),
-            )
-            if value
-        }
-
+        Auf Facebook können oberhalb oder neben dem eigentlichen Beitrag weitere
+        ``role=article``-Elemente stehen. Deshalb wird nicht blind der erste Artikel
+        verwendet, sondern möglichst jener, der die Video-ID im Link enthält.
+        """
+        articles = page.locator("div[role='article']")
         try:
-            articles = page.locator("div[role='article']")
-            article_count = articles.count()
+            count = articles.count()
         except Exception:
             return None
-
-        if article_count == 0:
+        if not count:
             return None
 
-        best_article = None
-        best_score = -1
-
-        for index in range(min(article_count, 20)):
-            article = articles.nth(index)
-            score = 0
-
-            try:
-                html = article.inner_html()
-            except Exception:
-                html = ""
-
-            try:
-                links = article.locator("a[href]").evaluate_all(
-                    """
-                    links => links
-                        .map(link => link.href || "")
-                        .filter(Boolean)
-                    """
-                )
-            except Exception:
-                links = []
-
-            combined = " ".join([html, *links]).lower()
-
-            if video_ids and any(video_id in combined for video_id in video_ids):
-                score += 100
-
-            try:
-                if article.locator("video").count():
-                    score += 60
-            except Exception:
-                pass
-
-            try:
-                if article.locator(
-                    "a[href*='/reel/'], "
-                    "a[href*='/videos/'], "
-                    "a[href*='watch/?v='], "
-                    "a[href*='fb.watch']"
-                ).count():
-                    score += 40
-            except Exception:
-                pass
-
-            try:
-                direct_messages = article.locator(
-                    ":scope > div [data-ad-preview='message'], "
-                    ":scope > div [data-ad-comet-preview='message']"
-                )
-                if direct_messages.count():
-                    score += 20
-            except Exception:
-                pass
-
-            try:
-                if article.locator(
-                    "[aria-label*='Gefällt mir'], "
-                    "[aria-label*='Antworten'], "
-                    "[aria-label*='Reply']"
-                ).count() and score < 40:
-                    score -= 20
-            except Exception:
-                pass
-
-            if score > best_score:
-                best_score = score
-                best_article = article
-
-        if best_score < 20:
-            return None
-
-        return best_article
-
-    def _direct_message_texts(self, article) -> list[str]:
-        """Liest nur Nachrichtenblöcke des Hauptartikels, ohne Unterartikel."""
-
-        if article is None:
-            return []
-
+        video_id = ""
         try:
-            return article.evaluate(
-                """
-                article => {
-                    const selectors = [
-                        "[data-ad-preview='message']",
-                        "[data-ad-comet-preview='message']"
-                    ];
-
-                    const values = [];
-
-                    for (const selector of selectors) {
-                        for (const node of article.querySelectorAll(selector)) {
-                            const ownArticle = node.closest("[role='article']");
-                            if (ownArticle !== article) {
-                                continue;
-                            }
-
-                            const value = (node.innerText || node.textContent || "").trim();
-                            if (value) {
-                                values.push(value);
-                            }
-                        }
-                    }
-
-                    return values;
-                }
-                """
-            )
+            parts = [part for part in urlparse(source_url).path.split("/") if part]
+            for part in reversed(parts):
+                if part.isdigit():
+                    video_id = part
+                    break
+            if not video_id:
+                query = urlparse(source_url).query
+                for token in query.split("&"):
+                    if token.startswith("v=") and token[2:].isdigit():
+                        video_id = token[2:]
+                        break
         except Exception:
-            return []
+            pass
 
-    def _debug_video_dom(
-        self,
-        page,
-        *,
-        stage: str,
-        text_url: str = "",
-        video_url: str = "",
-    ) -> None:
-        """Durchsucht die gesamte Seite nach längeren Textcontainern.
+        if video_id:
+            for index in range(min(count, 8)):
+                article = articles.nth(index)
+                try:
+                    if article.locator(f"a[href*='{video_id}']").count():
+                        return article
+                except Exception:
+                    pass
+        return articles.first
 
-        Diese Debug-Version verlässt sich bewusst nicht mehr auf article,
-        message oder dialog. Sie untersucht den vollständigen DOM und protokolliert:
-        - den Video-Knoten und seine Elternkette,
-        - alle längeren Textcontainer auf der Seite,
-        - alle „See more“-/„Mehr anzeigen“-Elemente,
-        - Abstände und Lage relativ zum Video,
-        - script-/JSON-Inhalte mit möglichen Beschreibungstexten.
+    def _expand_video_text(self, page, *, source_url: str = "") -> None:
+        """Öffnet den vollständigen Text des eigentlichen Video-Beitrags.
+
+        Der Schalter „Mehr anzeigen“ liegt bei Facebook nicht immer innerhalb des
+        Nachrichtenblocks. Daher wird im passenden Artikel nach mehreren
+        Rollen/Attributen gesucht und nötigenfalls per DOM-Klick ausgelöst.
         """
-
-        def emit(label: str, payload) -> None:
-            try:
-                rendered = json.dumps(payload, ensure_ascii=False, default=str)
-            except Exception:
-                rendered = repr(payload)
-            print(f"FB_IMPORT_DEBUG|{stage}|{label}|{rendered}", flush=True)
-
-        def shorten(value: str, limit: int = 1200) -> str:
-            value = re.sub(r"\s+", " ", value or "").strip()
-            if len(value) > limit:
-                return value[:limit] + f" …[{len(value)}]"
-            return value
-
-        emit(
-            "PAGE",
-            {
-                "text_url": text_url,
-                "video_url": video_url,
-                "page_url": getattr(page, "url", ""),
-                "video_ids": [
-                    value
-                    for value in (
-                        self._video_id_from_url(text_url),
-                        self._video_id_from_url(video_url),
-                    )
-                    if value
-                ],
-            },
-        )
-
-        try:
-            snapshot = page.evaluate(
-                r"""() => {
-                    const clean = value =>
-                        (value || "").replace(/\s+/g, " ").trim();
-
-                    const rect = element => {
-                        if (!element || !element.getBoundingClientRect) {
-                            return null;
-                        }
-
-                        const box = element.getBoundingClientRect();
-                        return {
-                            x: Math.round(box.x),
-                            y: Math.round(box.y),
-                            width: Math.round(box.width),
-                            height: Math.round(box.height),
-                            right: Math.round(box.right),
-                            bottom: Math.round(box.bottom),
-                        };
-                    };
-
-                    const selectorHint = element => {
-                        if (!element) {
-                            return "";
-                        }
-
-                        const parts = [element.tagName.toLowerCase()];
-
-                        if (element.id) {
-                            parts.push("#" + element.id);
-                        }
-
-                        const role = element.getAttribute("role");
-                        if (role) {
-                            parts.push("[role='" + role + "']");
-                        }
-
-                        const dir = element.getAttribute("dir");
-                        if (dir) {
-                            parts.push("[dir='" + dir + "']");
-                        }
-
-                        const className =
-                            typeof element.className === "string"
-                                ? element.className
-                                : "";
-
-                        if (className) {
-                            const classes = className
-                                .split(/\s+/)
-                                .filter(Boolean)
-                                .slice(0, 5);
-
-                            if (classes.length) {
-                                parts.push("." + classes.join("."));
-                            }
-                        }
-
-                        return parts.join("");
-                    };
-
-                    const video = document.querySelector("video");
-                    const videoRect = rect(video);
-
-                    const relativeToVideo = nodeRect => {
-                        if (!nodeRect || !videoRect) {
-                            return null;
-                        }
-
-                        const horizontalGap =
-                            nodeRect.right < videoRect.x
-                                ? videoRect.x - nodeRect.right
-                                : nodeRect.x > videoRect.right
-                                    ? nodeRect.x - videoRect.right
-                                    : 0;
-
-                        const verticalGap =
-                            nodeRect.bottom < videoRect.y
-                                ? videoRect.y - nodeRect.bottom
-                                : nodeRect.y > videoRect.bottom
-                                    ? nodeRect.y - videoRect.bottom
-                                    : 0;
-
-                        return {
-                            left_of_video: nodeRect.right <= videoRect.x,
-                            right_of_video: nodeRect.x >= videoRect.right,
-                            above_video: nodeRect.bottom <= videoRect.y,
-                            below_video: nodeRect.y >= videoRect.bottom,
-                            overlaps_video:
-                                !(
-                                    nodeRect.right < videoRect.x ||
-                                    nodeRect.x > videoRect.right ||
-                                    nodeRect.bottom < videoRect.y ||
-                                    nodeRect.y > videoRect.bottom
-                                ),
-                            horizontal_gap: Math.round(horizontalGap),
-                            vertical_gap: Math.round(verticalGap),
-                        };
-                    };
-
-                    const result = {
-                        counts: {
-                            all_elements: document.querySelectorAll("*").length,
-                            videos: document.querySelectorAll("video").length,
-                            dialogs: document.querySelectorAll("[role='dialog']").length,
-                            articles: document.querySelectorAll("[role='article']").length,
-                            messages: document.querySelectorAll(
-                                "[data-ad-preview='message']," +
-                                "[data-ad-comet-preview='message']"
-                            ).length,
-                            scripts: document.querySelectorAll("script").length,
-                        },
-                        video: null,
-                        video_ancestry: [],
-                        long_nodes: [],
-                        expand_nodes: [],
-                        script_matches: [],
-                    };
-
-                    if (video) {
-                        result.video = {
-                            hint: selectorHint(video),
-                            rect: videoRect,
-                            src: video.currentSrc || video.src || "",
-                            poster: video.poster || "",
-                            outer_html: (video.outerHTML || "").slice(0, 1600),
-                        };
-
-                        let current = video;
-                        for (let level = 0; level < 14 && current; level += 1) {
-                            const nodeRect = rect(current);
-                            result.video_ancestry.push({
-                                level,
-                                hint: selectorHint(current),
-                                role: current.getAttribute("role"),
-                                aria_label: current.getAttribute("aria-label"),
-                                text_length: clean(current.innerText).length,
-                                text: clean(current.innerText),
-                                rect: nodeRect,
-                                child_count: current.children ? current.children.length : 0,
-                                html_prefix: (current.outerHTML || "").slice(0, 1000),
-                            });
-                            current = current.parentElement;
-                        }
-                    }
-
-                    const excludedTags = new Set([
-                        "SCRIPT", "STYLE", "NOSCRIPT", "SVG", "PATH",
-                        "META", "LINK", "HEAD", "TITLE"
-                    ]);
-
-                    const all = Array.from(document.querySelectorAll("*"));
-
-                    const candidates = all
-                        .filter(node => !excludedTags.has(node.tagName))
-                        .map((node, sourceIndex) => {
-                            const inner = clean(node.innerText);
-                            const content = clean(node.textContent);
-                            const style = window.getComputedStyle(node);
-                            const nodeRect = rect(node);
-
-                            const directText = clean(
-                                Array.from(node.childNodes)
-                                    .filter(child => child.nodeType === Node.TEXT_NODE)
-                                    .map(child => child.textContent || "")
-                                    .join(" ")
-                            );
-
-                            return {
-                                source_index: sourceIndex,
-                                hint: selectorHint(node),
-                                tag: node.tagName,
-                                role: node.getAttribute("role"),
-                                aria_label: node.getAttribute("aria-label"),
-                                dir: node.getAttribute("dir"),
-                                inner_length: inner.length,
-                                content_length: content.length,
-                                direct_text_length: directText.length,
-                                inner_text: inner,
-                                text_content: content,
-                                direct_text: directText,
-                                rect: nodeRect,
-                                display: style.display,
-                                visibility: style.visibility,
-                                opacity: style.opacity,
-                                overflow: style.overflow,
-                                line_clamp:
-                                    style.webkitLineClamp ||
-                                    node.style.webkitLineClamp ||
-                                    "",
-                                child_count: node.children ? node.children.length : 0,
-                                descendant_count: node.querySelectorAll
-                                    ? node.querySelectorAll("*").length
-                                    : 0,
-                                contains_video: !!node.querySelector?.("video"),
-                                relative_to_video: relativeToVideo(nodeRect),
-                                html_prefix: (node.outerHTML || "").slice(0, 1200),
-                            };
-                        })
-                        .filter(item =>
-                            item.inner_length >= 80 ||
-                            item.content_length >= 80 ||
-                            item.direct_text_length >= 60 ||
-                            item.line_clamp
-                        )
-                        .filter(item => {
-                            const text = (item.inner_text || item.text_content || "").toLowerCase();
-                            const loginNoise =
-                                text.includes("email or phone number") &&
-                                text.includes("password") &&
-                                text.includes("create new account");
-
-                            return !loginNoise;
-                        })
-                        .sort((a, b) => {
-                            if (a.contains_video !== b.contains_video) {
-                                return a.contains_video ? 1 : -1;
-                            }
-
-                            const aNear = a.relative_to_video
-                                ? a.relative_to_video.horizontal_gap + a.relative_to_video.vertical_gap
-                                : 999999;
-                            const bNear = b.relative_to_video
-                                ? b.relative_to_video.horizontal_gap + b.relative_to_video.vertical_gap
-                                : 999999;
-
-                            if (aNear !== bNear) {
-                                return aNear - bNear;
-                            }
-
-                            return b.content_length - a.content_length;
-                        })
-                        .slice(0, 120);
-
-                    result.long_nodes = candidates;
-
-                    const labels = [
-                        "mehr anzeigen",
-                        "mehr ansehen",
-                        "see more",
-                        "read more",
-                    ];
-
-                    const isExpansion = text => {
-                        const normalized = clean(text).toLowerCase();
-                        return labels.some(label =>
-                            normalized === label ||
-                            normalized.endsWith(" " + label) ||
-                            normalized.includes(label)
-                        );
-                    };
-
-                    result.expand_nodes = all
-                        .filter(node => !excludedTags.has(node.tagName))
-                        .filter(node =>
-                            isExpansion(
-                                node.innerText ||
-                                node.textContent ||
-                                node.getAttribute("aria-label")
-                            )
-                        )
-                        .slice(0, 50)
-                        .map((node, index) => {
-                            const nodeRect = rect(node);
-                            const ancestry = [];
-                            let current = node;
-
-                            for (let level = 0; level < 12 && current; level += 1) {
-                                ancestry.push({
-                                    level,
-                                    hint: selectorHint(current),
-                                    role: current.getAttribute("role"),
-                                    tabindex: current.getAttribute("tabindex"),
-                                    aria_label: current.getAttribute("aria-label"),
-                                    text: clean(
-                                        current.innerText ||
-                                        current.textContent
-                                    ),
-                                    rect: rect(current),
-                                    contains_video: !!current.querySelector?.("video"),
-                                    child_count: current.children ? current.children.length : 0,
-                                });
-                                current = current.parentElement;
-                            }
-
-                            return {
-                                index,
-                                hint: selectorHint(node),
-                                tag: node.tagName,
-                                role: node.getAttribute("role"),
-                                tabindex: node.getAttribute("tabindex"),
-                                aria_label: node.getAttribute("aria-label"),
-                                text: clean(
-                                    node.innerText ||
-                                    node.textContent ||
-                                    node.getAttribute("aria-label")
-                                ),
-                                rect: nodeRect,
-                                relative_to_video: relativeToVideo(nodeRect),
-                                ancestry,
-                                html_prefix: (node.outerHTML || "").slice(0, 1400),
-                            };
-                        });
-
-                    const scripts = Array.from(document.querySelectorAll("script"));
-                    const needles = [
-                        "description",
-                        "message",
-                        "caption",
-                        "creation_story",
-                        "comet_sections",
-                        "story",
-                    ];
-
-                    for (let index = 0; index < scripts.length; index += 1) {
-                        const script = scripts[index];
-                        const content = script.textContent || "";
-                        const lower = content.toLowerCase();
-
-                        if (
-                            content.length >= 100 &&
-                            needles.some(needle => lower.includes(needle))
-                        ) {
-                            const firstMatch = needles.find(needle => lower.includes(needle));
-                            const position = lower.indexOf(firstMatch);
-                            const start = Math.max(0, position - 500);
-                            const end = Math.min(content.length, position + 2500);
-
-                            result.script_matches.push({
-                                index,
-                                type: script.getAttribute("type"),
-                                id: script.id || "",
-                                length: content.length,
-                                matched: firstMatch,
-                                excerpt: content.slice(start, end),
-                            });
-
-                            if (result.script_matches.length >= 25) {
-                                break;
-                            }
-                        }
-                    }
-
-                    return result;
-                }"""
-            )
-        except Exception as error:
-            emit("GLOBAL_DOM_ERROR", str(error))
-            return
-
-        emit("COUNTS", snapshot.get("counts", {}))
-
-        video = snapshot.get("video")
-        if video:
-            video["src"] = shorten(video.get("src", ""), 700)
-            video["poster"] = shorten(video.get("poster", ""), 700)
-            video["outer_html"] = shorten(video.get("outer_html", ""), 1800)
-            emit("VIDEO", {"found": True, **video})
-        else:
-            emit("VIDEO", {"found": False})
-
-        for item in snapshot.get("video_ancestry", []):
-            item["text"] = shorten(item.get("text", ""), 1200)
-            item["html_prefix"] = shorten(item.get("html_prefix", ""), 1200)
-            emit(f"VIDEO_PARENT_{item.get('level', 0)}", item)
-
-        for index, node in enumerate(snapshot.get("long_nodes", [])):
-            node["inner_text"] = shorten(node.get("inner_text", ""), 1800)
-            node["text_content"] = shorten(node.get("text_content", ""), 1800)
-            node["direct_text"] = shorten(node.get("direct_text", ""), 1000)
-            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1500)
-            emit(f"GLOBAL_TEXT_{index}", node)
-
-        for node in snapshot.get("expand_nodes", []):
-            node["text"] = shorten(node.get("text", ""), 900)
-            node["html_prefix"] = shorten(node.get("html_prefix", ""), 1600)
-
-            for ancestor in node.get("ancestry", []):
-                ancestor["text"] = shorten(ancestor.get("text", ""), 1000)
-
-            emit(f"GLOBAL_EXPAND_{node.get('index', 0)}", node)
-
-        for index, script in enumerate(snapshot.get("script_matches", [])):
-            script["excerpt"] = shorten(script.get("excerpt", ""), 2600)
-            emit(f"SCRIPT_MATCH_{index}", script)
-
-        try:
-            metadata = page.locator(
-                "meta[property='og:description'], "
-                "meta[name='twitter:description'], "
-                "meta[name='description']"
-            )
-
-            for index in range(metadata.count()):
-                node = metadata.nth(index)
-                emit(
-                    f"META_{index}",
-                    {
-                        "property": node.get_attribute("property"),
-                        "name": node.get_attribute("name"),
-                        "content": shorten(
-                            node.get_attribute("content") or "",
-                            1800,
-                        ),
-                    },
-                )
-        except Exception as error:
-            emit("META_ERROR", str(error))
-
-    def _expand_video_text(
-        self,
-        page,
-        *,
-        text_url: str = "",
-        video_url: str = "",
-    ) -> None:
-        """Öffnet „Mehr anzeigen“ im Haupttext des eigentlichen Video-Beitrags.
-
-        Facebook setzt den Schalter nicht immer als button oder role="button" um.
-        Teilweise ist nur ein normaler span-/div-Knoten sichtbar, dessen anklickbares
-        Elternelement erst mehrere Ebenen darüber liegt. Deshalb wird der Textknoten
-        gesucht und anschließend das nächste anklickbare Elternelement ausgelöst.
-        Verschachtelte Kommentar-Artikel werden dabei ausdrücklich ausgeschlossen.
-        """
-
-        article = self._find_video_article(
-            page,
-            text_url=text_url,
-            video_url=video_url,
-        )
-
+        article = self._primary_article(page, source_url)
         if article is None:
             return
 
-        for _attempt in range(5):
+        labels = ("Mehr anzeigen", "Mehr ansehen", "See more", "Voir plus", "Mostra altro")
+
+        # Zuerst normale Playwright-Klicks. aria-label ist oft stabiler als Text.
+        selectors = []
+        for label in labels:
+            selectors.extend((
+                f"[aria-label='{label}']",
+                f"div[role='button']:has-text(\"{label}\")",
+                f"span[role='button']:has-text(\"{label}\")",
+                f"button:has-text(\"{label}\")",
+            ))
+
+        for selector in selectors:
             try:
-                clicked = article.evaluate(
-                    """
-                    article => {
-                        const labels = [
-                            "mehr anzeigen",
-                            "mehr ansehen",
-                            "see more",
-                            "read more",
-                            "voir plus",
-                            "mostra altro"
-                        ];
-
-                        const belongsToMainArticle = element =>
-                            element.closest("[role='article']") === article;
-
-                        const normalizedText = element => (
-                            element.innerText ||
-                            element.textContent ||
-                            element.getAttribute("aria-label") ||
-                            ""
-                        ).replace(/\\s+/g, " ").trim().toLowerCase();
-
-                        const isExpansionText = text =>
-                            labels.some(label =>
-                                text === label ||
-                                text.endsWith(" " + label) ||
-                                text.includes(label)
-                            );
-
-                        const clickElement = element => {
-                            try {
-                                element.scrollIntoView({
-                                    block: "center",
-                                    inline: "nearest"
-                                });
-                            } catch (_) {}
-
-                            try {
-                                element.click();
-                                return true;
-                            } catch (_) {}
-
-                            try {
-                                element.dispatchEvent(new MouseEvent("click", {
-                                    bubbles: true,
-                                    cancelable: true,
-                                    view: window
-                                }));
-                                return true;
-                            } catch (_) {}
-
-                            return false;
-                        };
-
-                        // Zuerst alle ausdrücklich anklickbaren Elemente prüfen.
-                        const clickableCandidates = article.querySelectorAll(
-                            "button, [role='button'], [tabindex], a"
-                        );
-
-                        for (const element of clickableCandidates) {
-                            if (!belongsToMainArticle(element)) {
-                                continue;
-                            }
-
-                            if (isExpansionText(normalizedText(element)) &&
-                                clickElement(element)) {
-                                return true;
-                            }
-                        }
-
-                        // Facebook verwendet teilweise einen normalen span/div
-                        // mit dem Text „Mehr anzeigen“. Dann wird vom Textknoten
-                        // zum nächsten anklickbaren Elternelement hochgegangen.
-                        const allElements = article.querySelectorAll("span, div");
-
-                        for (const element of allElements) {
-                            if (!belongsToMainArticle(element)) {
-                                continue;
-                            }
-
-                            const ownText = normalizedText(element);
-                            if (!isExpansionText(ownText)) {
-                                continue;
-                            }
-
-                            let current = element;
-
-                            for (let level = 0; level < 8 && current; level++) {
-                                if (!belongsToMainArticle(current)) {
-                                    break;
-                                }
-
-                                const role = current.getAttribute("role");
-                                const tabindex = current.getAttribute("tabindex");
-                                const tag = current.tagName.toLowerCase();
-
-                                if (
-                                    tag === "button" ||
-                                    tag === "a" ||
-                                    role === "button" ||
-                                    tabindex !== null ||
-                                    typeof current.onclick === "function"
-                                ) {
-                                    if (clickElement(current)) {
-                                        return true;
-                                    }
-                                }
-
-                                current = current.parentElement;
-                            }
-
-                            // Letzter Versuch: den Textknoten selbst anklicken.
-                            if (clickElement(element)) {
-                                return true;
-                            }
-                        }
-
-                        return false;
-                    }
-                    """
-                )
+                candidates = article.locator(selector)
+                for index in range(min(candidates.count(), 4)):
+                    button = candidates.nth(index)
+                    if button.is_visible():
+                        button.scroll_into_view_if_needed()
+                        button.click(timeout=3_000, force=True)
+                        page.wait_for_timeout(1_000)
+                        return
             except Exception:
-                clicked = False
+                pass
 
-            page.wait_for_timeout(2_000 if clicked else 1_200)
+        # DOM-Fallback: Facebook verwendet teils verschachtelte Spans ohne Rolle.
+        try:
+            article.evaluate(
+                """(root, labels) => {
+                    const nodes = Array.from(root.querySelectorAll('*'));
+                    const target = nodes.find(el => {
+                        const txt = (el.innerText || el.textContent || '').trim();
+                        const aria = (el.getAttribute('aria-label') || '').trim();
+                        return labels.includes(txt) || labels.includes(aria);
+                    });
+                    if (!target) return false;
+                    const clickable = target.closest('[role=button],button,a') || target;
+                    clickable.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+                    clickable.click?.();
+                    return true;
+                }""",
+                list(labels),
+            )
+            page.wait_for_timeout(1_200)
+        except Exception:
+            pass
 
-            visible_texts = self._direct_message_texts(article)
-            if visible_texts:
-                best = self._best_plausible_text(visible_texts)
-                if best and not self._looks_truncated(best):
-                    return
+    def _extract_video_text(self, page, *, source_url: str = "") -> str:
+        """Liest nur die Beschreibung des passenden Video-Posts."""
+        article = self._primary_article(page, source_url)
 
-    def _extract_video_text(
-        self,
-        page,
-        *,
-        text_url: str = "",
-        video_url: str = "",
-    ) -> str:
-        """Liest ausschließlich den Haupttext des Video-Beitrags."""
+        if article is not None:
+            for selector in (
+                "[data-ad-preview='message']",
+                "[data-ad-comet-preview='message']",
+            ):
+                try:
+                    locator = article.locator(selector)
+                    texts: list[str] = []
+                    for index in range(min(locator.count(), 5)):
+                        node = locator.nth(index)
+                        for getter in (node.inner_text, node.text_content):
+                            try:
+                                value = getter()
+                                if value:
+                                    texts.append(value)
+                            except Exception:
+                                pass
+                    text = self._best_plausible_text(texts)
+                    if text:
+                        return text
+                except Exception:
+                    pass
 
-        article = self._find_video_article(
-            page,
-            text_url=text_url,
-            video_url=video_url,
-        )
-
-        message_candidates = self._direct_message_texts(article)
-        message_text = self._best_plausible_text(message_candidates)
-
-        if message_text:
-            return message_text
-
+        # Open-Graph-Metadaten bleiben ein Fallback; sie sind häufig gekürzt.
         metadata_candidates: list[str] = []
-
         for selector in (
             "meta[property='og:description']",
             "meta[name='twitter:description']",
@@ -1000,7 +294,17 @@ class FacebookImporter:
             except Exception:
                 pass
 
-        return self._best_plausible_text(metadata_candidates)
+        metadata_text = self._best_plausible_text(metadata_candidates)
+        if metadata_text:
+            return metadata_text
+
+        if article is not None:
+            try:
+                candidates = article.locator("div[dir='auto']").all_inner_texts()
+                return self._best_plausible_text(candidates)
+            except Exception:
+                pass
+        return ""
 
     @staticmethod
     def _best_plausible_text(candidates: list[str]) -> str:
