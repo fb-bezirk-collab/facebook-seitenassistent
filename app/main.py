@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager, suppress
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -47,7 +47,7 @@ app = FastAPI(
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
-    public_paths = {"/login", "/health"}
+    public_paths = {"/login", "/health", "/robots.txt"}
     public_prefixes = ("/static/", "/uploads/")
 
     if (
@@ -92,3 +92,12 @@ app.include_router(planning.router)
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
     return JSONResponse({"status": "ok", "version": "1.8.3", "auth": auth_status()})
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt() -> PlainTextResponse:
+    return PlainTextResponse(
+        "User-agent: *\n"
+        "Allow: /uploads/\n"
+        "Disallow: /\n"
+    )
