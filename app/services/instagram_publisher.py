@@ -30,10 +30,14 @@ class InstagramPublisher:
             raise InstagramApiError("PUBLIC_BASE_URL bzw. INSTAGRAM_REDIRECT_URI fehlt.")
 
         image_url = self._public_image_url(post.images[0])
+
+        debug = requests.get(image_url, timeout=30)
+        print("IG_DEBUG", {"url": image_url, "status": debug.status_code, "content_type": debug.headers.get("Content-Type"), "length": debug.headers.get("Content-Length")})
         container = self._post(
-            f"https://graph.instagram.com/{self.api_version}/{instagram_id}/media",
+            f"https://graph.facebook.com/{self.api_version}/{instagram_id}/media",
             {
                 "image_url": image_url,
+                "media_type": "IMAGE",
                 "caption": caption,
                 "access_token": account.access_token,
             },
@@ -43,7 +47,7 @@ class InstagramPublisher:
             raise InstagramApiError("Instagram hat keinen Mediencontainer erstellt.")
 
         published = self._post(
-            f"https://graph.instagram.com/{self.api_version}/{instagram_id}/media_publish",
+            f"https://graph.facebook.com/{self.api_version}/{instagram_id}/media_publish",
             {
                 "creation_id": creation_id,
                 "access_token": account.access_token,
