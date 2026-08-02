@@ -24,6 +24,9 @@ from app.services.settings_service import (
 from app.services.social_account_service import (
     SocialAccountService,
 )
+from app.services.instagram_account_service import InstagramAccountService
+from app.services.instagram_api import InstagramApiError, InstagramApiService
+from app.services.instagram_config_service import load_instagram_config
 
 
 router = APIRouter()
@@ -44,6 +47,7 @@ def einstellungen(
     account_saved: int = 0,
     account_deleted: int = 0,
     account_error: str | None = None,
+    instagram_connected: int = 0,
     instagram_count: int = 0,
     instagram_warning: str | None = None,
 ):
@@ -102,6 +106,9 @@ def einstellungen(
                 account_deleted
             ),
             "account_error": account_error,
+"instagram_connected": bool(instagram_connected),
+"instagram_is_configured": load_instagram_config().is_configured,
+"instagram_is_connected": bool(InstagramAccountService().list_accounts()),
             "instagram_count": instagram_count,
             "instagram_warning": instagram_warning,
         },
@@ -309,6 +316,85 @@ def facebook_callback(
 
     return response
 
+
+
+
+@router.get("/instagram/connect")
+def instagram_verbinden():
+    config = load_instagram_config()
+    if not config.is_configured:
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(
+                "Instagram-App ist nicht vollständig konfiguriert."
+            ),
+            status_code=303,
+        )
+    state = secrets.token_urlsafe(32)
+    try:
+        url = InstagramApiService(config).build_login_url(state)
+    except InstagramApiError as error:
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(str(error)),
+            status_code=303,
+        )
+    response = RedirectResponse(url=url, status_code=302)
+    response.set_cookie(
+        "instagram_oauth_state",
+        state,
+        max_age=600,
+        httponly=True,
+        secure=bool(os.getenv("RAILWAY_ENVIRONMENT")),
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/instagram/callback")
+def instagram_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+):
+    if error:
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(error_description or error),
+            status_code=303,
+        )
+    saved_state = request.cookies.get("instagram_oauth_state")
+    if not state or not saved_state or not secrets.compare_digest(state, saved_state):
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(
+                "Die Sicherheitsprüfung des Instagram-Logins ist fehlgeschlagen."
+            ),
+            status_code=303,
+        )
+    if not code:
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(
+                "Instagram hat keinen Anmeldecode zurückgegeben."
+            ),
+            status_code=303,
+        )
+    try:
+        config = load_instagram_config()
+        api = InstagramApiService(config)
+        short_token = api.exchange_code(code)
+        token, expires_at = api.exchange_long_lived(short_token)
+        account = api.get_profile(token, expires_at)
+        InstagramAccountService().upsert(account)
+    except InstagramApiError as error:
+        return RedirectResponse(
+            url="/settings?account_error=" + quote(str(error)),
+            status_code=303,
+        )
+    response = RedirectResponse(
+        url="/settings?instagram_connected=1",
+        status_code=303,
+    )
+    response.delete_cookie("instagram_oauth_state")
+    return response
 
 
 @router.post("/settings/accounts")

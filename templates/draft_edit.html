@@ -120,7 +120,7 @@
                 <div class="ai-panel">
                     <label for="ai-instructions-draft">Optionale Vorgabe für die KI</label>
                     <input type="text" id="ai-instructions-draft" maxlength="1000" placeholder="z. B. weniger Emojis, stärkerer Gemeindebezug oder kürzer">
-                    <button type="button" class="button-ai" id="ai-button-draft">Sechs KI-Textvarianten erzeugen</button>
+                    <button type="button" class="button-ai" id="ai-button-draft">Acht KI-Textvarianten erzeugen</button>
                     <p class="ai-status" id="ai-status-draft"></p>
                     <div class="ai-results" id="ai-results-draft" hidden></div>
                 </div>
@@ -188,7 +188,7 @@
 
                 <div class="account-list">
                     {% for account in social_accounts %}
-                    <div class="account-row">
+                    <div class="account-row" data-platform="{{ account.platform }}">
                         <input type="checkbox" name="account_ids" value="{{ account.id }}" onchange="updateSelectionCount()">
                         <span class="account-meta">
                             <strong>{{ account.name }}</strong>
@@ -197,7 +197,15 @@
                         <select class="variant-select" name="variant_choice__{{ account.id }}">
                             <option value="0">Haupttext</option>
                             {% for variant in draft.text_variants %}
-                                <option value="{{ loop.index }}">{{ variant.title }}</option>
+                                {% if account.platform == 'instagram' %}
+                                    {% if variant.title.startswith('Instagram') %}
+                                        <option value="{{ loop.index }}">{{ variant.title }}</option>
+                                    {% endif %}
+                                {% else %}
+                                    {% if not variant.title.startswith('Instagram') %}
+                                        <option value="{{ loop.index }}">{{ variant.title }}</option>
+                                    {% endif %}
+                                {% endif %}
                             {% endfor %}
                         </select>
                     </div>
@@ -369,7 +377,7 @@
         aiButton.disabled = true;
         aiButton.classList.add('loading');
         aiButton.textContent = 'KI arbeitet …';
-        statusBox.textContent = 'Sechs eigenständige Textvarianten werden erstellt.';
+        statusBox.textContent = 'Sechs Facebook- und zwei Instagram-Texte werden erstellt.';
         statusBox.classList.remove('error-text');
 
         try {
@@ -390,20 +398,20 @@
 
             const variants = Array.isArray(payload.variants) ? payload.variants : [];
 
-            if (variants.length !== 6) {
-                throw new Error('Die KI hat nicht genau sechs Varianten geliefert.');
+            if (variants.length !== 8) {
+                throw new Error('Die KI hat nicht genau acht Varianten geliefert.');
             }
 
             variantsInput.value = JSON.stringify(variants);
             renderVariants(variants);
-            statusBox.textContent = 'Die sechs Varianten wurden übernommen. Speichere jetzt den Entwurf.';
+            statusBox.textContent = 'Die acht Varianten wurden übernommen. Speichere jetzt den Entwurf.';
         } catch (error) {
             statusBox.textContent = error instanceof Error ? error.message : String(error);
             statusBox.classList.add('error-text');
         } finally {
             aiButton.disabled = false;
             aiButton.classList.remove('loading');
-            aiButton.textContent = 'Sechs KI-Textvarianten erzeugen';
+            aiButton.textContent = 'Acht KI-Textvarianten erzeugen';
         }
     });
 
@@ -451,7 +459,7 @@
     document.getElementById('multi-plan-form')?.addEventListener('submit', (event) => {
         if (!selectedAccountCheckboxes().length) {
             event.preventDefault();
-            alert('Bitte mindestens eine Facebook-Seite auswählen.');
+            alert('Bitte mindestens ein Konto auswählen.');
             return;
         }
 

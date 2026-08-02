@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import json
 from urllib.parse import urlencode
 
 import requests
@@ -150,22 +149,12 @@ class FacebookApiService:
         self,
         user_access_token: str,
     ) -> list[FacebookPage]:
-        """Lädt Facebook-Seiten und protokolliert Instagram-Verknüpfungen.
-
-        Der Instagram-Bezug wird direkt in /me/accounts angefordert. Das ist
-        robuster als eine ausschließlich nachgelagerte Abfrage je Seite.
-        Zugangstoken werden niemals in die Logs geschrieben.
-        """
         url = GRAPH_API_BASE_URL + "/me/accounts"
 
         parameters = {
             "access_token": user_access_token,
             "fields": (
-                "id,name,access_token,tasks,"
-                "instagram_business_account"
-                "{id,username,name,profile_picture_url},"
-                "connected_instagram_account"
-                "{id,username,name,profile_picture_url}"
+                "id,name,access_token,tasks"
             ),
             "limit": 100,
         }
@@ -178,8 +167,6 @@ class FacebookApiService:
                 url=url,
                 params=parameters,
             )
-
-            safe_debug_items: list[dict] = []
 
             for item in data.get("data", []):
                 if not isinstance(item, dict):
@@ -196,37 +183,6 @@ class FacebookApiService:
                 page_access_token = str(
                     item.get("access_token", "")
                 ).strip()
-
-                instagram_business = item.get(
-                    "instagram_business_account"
-                )
-                connected_instagram = item.get(
-                    "connected_instagram_account"
-                )
-
-                safe_debug_items.append({
-                    "page_id": page_id,
-                    "page_name": page_name,
-                    "tasks": item.get("tasks", []),
-                    "has_instagram_business_account": isinstance(
-                        instagram_business,
-                        dict,
-                    ),
-                    "instagram_business_account": (
-                        instagram_business
-                        if isinstance(instagram_business, dict)
-                        else None
-                    ),
-                    "has_connected_instagram_account": isinstance(
-                        connected_instagram,
-                        dict,
-                    ),
-                    "connected_instagram_account": (
-                        connected_instagram
-                        if isinstance(connected_instagram, dict)
-                        else None
-                    ),
-                })
 
                 if not (
                     page_id
@@ -247,15 +203,6 @@ class FacebookApiService:
                     )
                 )
 
-            print(
-                "META_INSTAGRAM_DEBUG|ME_ACCOUNTS|"
-                + json.dumps(
-                    safe_debug_items,
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
             paging = data.get("paging", {})
 
             if not isinstance(paging, dict):
@@ -275,12 +222,7 @@ class FacebookApiService:
         self,
         pages: list[FacebookPage],
     ) -> tuple[list[InstagramAccount], list[str]]:
-        """Lädt Instagram-Business-/Creator-Konten einer Facebook-Seite.
-
-        Zuerst werden beide bekannten Page-Felder gemeinsam abgefragt:
-        instagram_business_account und connected_instagram_account.
-        Jeder API-Schritt wird ohne Zugangstoken protokolliert.
-        """
+        """Lädt Instagram-Business-/Creator-Konten, die mit Seiten verbunden sind."""
         accounts: list[InstagramAccount] = []
         warnings: list[str] = []
         known_ids: set[str] = set()
@@ -290,10 +232,7 @@ class FacebookApiService:
             parameters = {
                 "access_token": page.access_token,
                 "fields": (
-                    "id,name,"
                     "instagram_business_account"
-                    "{id,username,name,profile_picture_url},"
-                    "connected_instagram_account"
                     "{id,username,name,profile_picture_url}"
                 ),
             }
@@ -305,232 +244,36 @@ class FacebookApiService:
                     params=parameters,
                 )
             except FacebookApiError as error:
-                warning = (
-                    f"Instagram konnte für {page.name} "
-                    f"nicht geprüft werden: {error}"
-                )
-                warnings.append(warning)
-
-                print(
-                    "META_INSTAGRAM_DEBUG|PAGE_ERROR|"
-                    + json.dumps(
-                        {
-                            "page_id": page.page_id,
-                            "page_name": page.name,
-                            "error": str(error),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
+                warnings.append(
+                    f"Instagram konnte für {page.name} nicht geprüft werden: {error}"
                 )
                 continue
 
-            instagram_business = data.get(
-                "instagram_business_account"
-            )
-            connected_instagram = data.get(
-                "connected_instagram_account"
-            )
+            instagram = data.get("instagram_business_account")
+            if not isinstance(instagram, dict):
+                continue
 
-            print(
-                "META_INSTAGRAM_DEBUG|PAGE_RESPONSE|"
-                + json.dumps(
-                    {
-                        "page_id": page.page_id,
-                        "page_name": page.name,
-                        "response_id": data.get("id"),
-                        "response_name": data.get("name"),
-                        "instagram_business_account": (
-                            instagram_business
-                            if isinstance(
-                                instagram_business,
-                                dict,
-                            )
-                            else None
-                        ),
-                        "connected_instagram_account": (
-                            connected_instagram
-                            if isinstance(
-                                connected_instagram,
-                                dict,
-                            )
-                            else None
-                        ),
-                        "returned_fields": sorted(
-                            str(key)
-                            for key in data.keys()
-                        ),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+            instagram_id = str(instagram.get("id", "")).strip()
+            if not instagram_id or instagram_id in known_ids:
+                continue
 
-            instagram_candidates = [
-                value
-                for value in (
-                    instagram_business,
-                    connected_instagram,
+            username = str(instagram.get("username", "")).strip()
+            name = str(instagram.get("name", "")).strip()
+            profile_picture_url = str(
+                instagram.get("profile_picture_url", "")
+            ).strip()
+
+            accounts.append(
+                InstagramAccount(
+                    instagram_id=instagram_id,
+                    username=username,
+                    name=name,
+                    profile_picture_url=profile_picture_url,
+                    connected_page_id=page.page_id,
+                    connected_page_name=page.name,
                 )
-                if isinstance(value, dict)
-            ]
-
-            for instagram in instagram_candidates:
-                instagram_id = str(
-                    instagram.get("id", "")
-                ).strip()
-
-                if (
-                    not instagram_id
-                    or instagram_id in known_ids
-                ):
-                    continue
-
-                username = str(
-                    instagram.get("username", "")
-                ).strip()
-
-                name = str(
-                    instagram.get("name", "")
-                ).strip()
-
-                profile_picture_url = str(
-                    instagram.get(
-                        "profile_picture_url",
-                        "",
-                    )
-                ).strip()
-
-                # Falls im Page-Feld nur die ID vorhanden ist,
-                # werden die Profildaten separat nachgeladen.
-                if not username:
-                    try:
-                        details = self._request_json(
-                            method="GET",
-                            url=(
-                                GRAPH_API_BASE_URL
-                                + f"/{instagram_id}"
-                            ),
-                            params={
-                                "access_token": (
-                                    page.access_token
-                                ),
-                                "fields": (
-                                    "id,username,name,"
-                                    "profile_picture_url"
-                                ),
-                            },
-                        )
-
-                        username = str(
-                            details.get(
-                                "username",
-                                "",
-                            )
-                        ).strip()
-
-                        name = (
-                            str(
-                                details.get(
-                                    "name",
-                                    "",
-                                )
-                            ).strip()
-                            or name
-                        )
-
-                        profile_picture_url = (
-                            str(
-                                details.get(
-                                    "profile_picture_url",
-                                    "",
-                                )
-                            ).strip()
-                            or profile_picture_url
-                        )
-
-                        print(
-                            "META_INSTAGRAM_DEBUG|IG_DETAILS|"
-                            + json.dumps(
-                                {
-                                    "instagram_id": (
-                                        instagram_id
-                                    ),
-                                    "username": username,
-                                    "name": name,
-                                    "has_profile_picture": bool(
-                                        profile_picture_url
-                                    ),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-
-                    except FacebookApiError as error:
-                        warnings.append(
-                            f"Instagram-Profil {instagram_id} "
-                            f"konnte nicht vollständig "
-                            f"geladen werden: {error}"
-                        )
-
-                        print(
-                            "META_INSTAGRAM_DEBUG|IG_DETAILS_ERROR|"
-                            + json.dumps(
-                                {
-                                    "instagram_id": (
-                                        instagram_id
-                                    ),
-                                    "error": str(error),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-
-                accounts.append(
-                    InstagramAccount(
-                        instagram_id=instagram_id,
-                        username=username,
-                        name=name,
-                        profile_picture_url=(
-                            profile_picture_url
-                        ),
-                        connected_page_id=page.page_id,
-                        connected_page_name=page.name,
-                    )
-                )
-                known_ids.add(instagram_id)
-
-        print(
-            "META_INSTAGRAM_DEBUG|FINAL|"
-            + json.dumps(
-                {
-                    "instagram_accounts_found": len(
-                        accounts
-                    ),
-                    "accounts": [
-                        {
-                            "instagram_id": (
-                                account.instagram_id
-                            ),
-                            "username": account.username,
-                            "name": account.name,
-                            "connected_page_id": (
-                                account.connected_page_id
-                            ),
-                            "connected_page_name": (
-                                account.connected_page_name
-                            ),
-                        }
-                        for account in accounts
-                    ],
-                    "warnings": warnings,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+            )
+            known_ids.add(instagram_id)
 
         return accounts, warnings
 

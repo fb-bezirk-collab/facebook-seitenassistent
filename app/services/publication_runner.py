@@ -7,6 +7,8 @@ from app.models.publication import Publication, utc_now_iso
 from app.services.facebook_api import FacebookApiError
 from app.services.facebook_publisher import FacebookPublisher
 from app.services.post_service import PostService
+from app.services.instagram_api import InstagramApiError
+from app.services.instagram_publisher import InstagramPublisher
 from app.services.publication_service import PublicationService
 
 
@@ -21,10 +23,12 @@ class PublicationRunner:
         publication_service: PublicationService | None = None,
         post_service: PostService | None = None,
         facebook_publisher: FacebookPublisher | None = None,
+        instagram_publisher: InstagramPublisher | None = None,
     ):
         self.publication_service = publication_service or PublicationService()
         self.post_service = post_service or PostService()
         self.facebook_publisher = facebook_publisher or FacebookPublisher()
+        self.instagram_publisher = instagram_publisher or InstagramPublisher()
 
     def publish_one(self, publication_id: str) -> Publication:
         with self._lock:
@@ -61,22 +65,28 @@ class PublicationRunner:
                 "Der zugehörige Entwurf wurde nicht gefunden.",
             ) or publication
 
-        if publication.platform != "facebook":
-            return self.publication_service.mark_failed(
-                publication.id,
-                f"Automatisches Veröffentlichen auf {publication.platform} ist noch nicht verfügbar.",
-            ) or publication
-
         try:
             publication_post = replace(
                 post,
                 text=publication.text.strip() or post.text,
             )
-            external_post_id = self.facebook_publisher.publish(
-                post=publication_post,
-                page_id=publication.account_id.removeprefix("facebook:"),
-            )
-        except (FacebookApiError, OSError, ValueError) as exc:
+            if publication.platform == "facebook":
+                external_post_id = self.facebook_publisher.publish(
+                    post=publication_post,
+                    page_id=publication.account_id.removeprefix("facebook:"),
+                )
+            elif publication.platform == "instagram":
+                external_post_id = self.instagram_publisher.publish(
+                    post=publication_post,
+                    instagram_id=publication.account_id.removeprefix("instagram:"),
+                    caption=publication_post.text,
+                )
+            else:
+                return self.publication_service.mark_failed(
+                    publication.id,
+                    f"Automatisches Veröffentlichen auf {publication.platform} ist noch nicht verfügbar.",
+                ) or publication
+        except (FacebookApiError, InstagramApiError, OSError, ValueError) as exc:
             return self.publication_service.mark_failed(
                 publication.id,
                 str(exc),

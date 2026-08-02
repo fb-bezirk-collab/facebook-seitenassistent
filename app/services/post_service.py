@@ -175,7 +175,7 @@ class PostService:
     ) -> list[dict[str, str]]:
         cleaned: list[dict[str, str]] = []
 
-        for index, item in enumerate(variants[:6], start=1):
+        for index, item in enumerate(variants[:8], start=1):
             if not isinstance(item, dict):
                 continue
 

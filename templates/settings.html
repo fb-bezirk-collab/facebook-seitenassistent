@@ -82,6 +82,7 @@
 
 <main>
 <div class="container">
+    {% if instagram_connected %}<div class="message success">Instagram wurde erfolgreich verbunden.</div>{% endif %}
     {% if connected %}
         <div class="message success">
             Die Meta-Verbindung wurde erfolgreich aktualisiert.
@@ -138,6 +139,23 @@
                         App-ID: {{ meta_app_id }}
                     </div>
                     <a href="/facebook/connect" class="button meta-button">Mit Meta verbinden</a>
+                {% endif %}
+            </div>
+
+            <div class="note">
+                <strong>Instagram-Verbindung</strong><br><br>
+                {% if instagram_is_configured %}
+                    {% if instagram_is_connected %}
+                        Instagram ist verbunden.<br><br>
+                        <a href="/instagram/connect" class="button" style="background:#c13584;color:#fff;border:0;width:100%">Instagram-Verbindung erneuern</a>
+                    {% else %}
+                        <a href="/instagram/connect" class="button" style="background:#c13584;color:#fff;border:0;width:100%">Mit Instagram verbinden</a>
+                    {% endif %}
+                {% else %}
+                    <strong>Railway-Variablen fehlen:</strong><br>
+                    INSTAGRAM_APP_ID<br>
+                    INSTAGRAM_APP_SECRET<br>
+                    INSTAGRAM_REDIRECT_URI
                 {% endif %}
             </div>
 

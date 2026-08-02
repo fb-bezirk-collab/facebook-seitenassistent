@@ -36,8 +36,8 @@ PLATFORM_DEFINITIONS: tuple[PlatformDefinition, ...] = (
         external_id_label="Instagram-Konto-ID",
         color="#c13584",
         connection_mode="meta",
-        can_publish=False,
-        can_connect=False,
+        can_publish=True,
+        can_connect=True,
         description=(
             "Instagram-Business- und Creator-Konten werden über "
             "dieselbe Meta-Verbindung automatisch übernommen."

@@ -26,6 +26,7 @@ POSTS_FILE = DATA_DIR / "posts.json"
 META_TOKEN_FILE = DATA_DIR / "meta_user_access_token.txt"
 PUBLICATIONS_FILE = DATA_DIR / "publications.json"
 SOCIAL_ACCOUNTS_FILE = DATA_DIR / "social_accounts.json"
+INSTAGRAM_ACCOUNTS_FILE = DATA_DIR / "instagram_accounts.json"
 
 
 def create_required_directories() -> None:

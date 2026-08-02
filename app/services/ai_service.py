@@ -23,7 +23,7 @@ class AiVariant:
 
 
 class AiService:
-    """Erstellt sechs abgewandelte Facebook-Texte über die OpenAI Responses API."""
+    """Erstellt sechs Facebook- und zwei Instagram-Texte über die OpenAI Responses API."""
 
     api_url = "https://api.openai.com/v1/responses"
 
@@ -137,7 +137,7 @@ Die Beiträge dürfen pointiert und angriffig sein, dürfen aber nicht:
 
 AUSGABE
 
-Erstelle genau sechs eigenständige Varianten.
+Erstelle genau acht eigenständige Varianten: sechs für Facebook und zwei für Instagram.
 
 Alle sechs Varianten müssen dieselben belegbaren Fakten und dieselbe politische
 Kernaussage bewahren. Sie müssen sich jedoch deutlich unterscheiden bei:
@@ -184,16 +184,29 @@ VARIANTE 6 – ARGUMENTATIV
 - klare Verantwortlichkeiten,
 - sachlich-pointierter Abschluss.
 
+INSTAGRAM-VARIANTEN
+
+Die beiden Instagram-Texte sollen:
+- kompakter als die Facebook-Texte sein,
+- mit einer starken ersten Zeile beginnen,
+- kurze, luftige Absätze verwenden,
+- wenige passende Emojis enthalten,
+- am Ende 6 bis 10 sachlich passende Hashtags enthalten,
+- immer #fpö und #fpoenoe enthalten,
+- keine erfundenen Orts- oder Themenhashtags verwenden.
+
 Antworte ausschließlich als gültiges JSON-Objekt in genau dieser Struktur:
 
 {
   "variants": [
-    {"title": "Variante 1 – Klar und sachlich", "text": "..."},
-    {"title": "Variante 2 – Pointiert", "text": "..."},
-    {"title": "Variante 3 – Bürgernah", "text": "..."},
-    {"title": "Variante 4 – Kurz und zugespitzt", "text": "..."},
-    {"title": "Variante 5 – Emotional", "text": "..."},
-    {"title": "Variante 6 – Argumentativ", "text": "..."}
+    {"title": "Facebook 1 – Klar und sachlich", "text": "..."},
+    {"title": "Facebook 2 – Pointiert", "text": "..."},
+    {"title": "Facebook 3 – Bürgernah", "text": "..."},
+    {"title": "Facebook 4 – Kurz und zugespitzt", "text": "..."},
+    {"title": "Facebook 5 – Emotional", "text": "..."},
+    {"title": "Facebook 6 – Argumentativ", "text": "..."},
+    {"title": "Instagram 1 – Kompakt und emotional", "text": "..."},
+    {"title": "Instagram 2 – Pointiert mit Hashtags", "text": "..."}
   ]
 }
 
@@ -237,7 +250,7 @@ Füge vor oder nach dem JSON keine Erklärung, keine Markdown-Formatierung und k
                     "content": user_prompt,
                 },
             ],
-            "max_output_tokens": 5200,
+            "max_output_tokens": 6500,
         }
 
         try:
@@ -269,9 +282,9 @@ Füge vor oder nach dem JSON keine Erklärung, keine Markdown-Formatierung und k
         output_text = self._extract_output_text(data)
         variants = self._parse_variants(output_text)
 
-        if len(variants) != 6:
+        if len(variants) != 8:
             raise AiGenerationError(
-                "Die KI-Antwort enthielt nicht genau sechs verwendbare Varianten."
+                "Die KI-Antwort enthielt nicht genau acht verwendbare Varianten."
             )
 
         return variants
@@ -289,7 +302,7 @@ ZUSÄTZLICHE VORGABE DER BENUTZERIN:
 
 {extra}
 
-Erstelle nun genau die sechs im Grundprompt verlangten Varianten.
+Erstelle nun genau die acht im Grundprompt verlangten Varianten.
 """.strip()
 
     @staticmethod
@@ -356,7 +369,7 @@ Erstelle nun genau die sechs im Grundprompt verlangten Varianten.
                     )
                 )
 
-        return variants[:6]
+        return variants[:8]
 
     @staticmethod
     def _api_error_message(response: requests.Response) -> str:

@@ -6,6 +6,7 @@ from app.config import SOCIAL_ACCOUNTS_FILE
 from app.models.platform import get_platform
 from app.models.social_account import SocialAccount
 from app.services.settings_service import SettingsService
+from app.services.instagram_account_service import InstagramAccountService
 
 
 class SocialAccountService:
@@ -214,6 +215,25 @@ class SocialAccountService:
                     active=True,
                     connection_status="connected",
                     source="meta",
+                    can_publish=True,
+                )
+            )
+            known.add(key)
+
+        for instagram in InstagramAccountService().list_accounts():
+            key = ("instagram", instagram.instagram_id)
+            if key in known:
+                continue
+            accounts.append(
+                SocialAccount(
+                    id=f"instagram:{instagram.instagram_id}",
+                    platform="instagram",
+                    name=instagram.name or instagram.username or "Instagram",
+                    external_id=instagram.instagram_id,
+                    username=instagram.username,
+                    active=instagram.active,
+                    connection_status="connected",
+                    source="instagram_login",
                     can_publish=True,
                 )
             )

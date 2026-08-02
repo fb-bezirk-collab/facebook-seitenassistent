@@ -21,7 +21,7 @@ def _load_text_variants(value) -> list[dict[str, str]]:
 
     variants: list[dict[str, str]] = []
 
-    for index, item in enumerate(value[:6], start=1):
+    for index, item in enumerate(value[:8], start=1):
         if not isinstance(item, dict):
             continue
 
