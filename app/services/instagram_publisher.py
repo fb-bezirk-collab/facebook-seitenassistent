@@ -76,7 +76,8 @@ class InstagramPublisher:
         )
 
         print(
-            "INSTAGRAM_PUBLISH|MEDIA_TYPE|IMAGE",
+            "INSTAGRAM_PUBLISH|CONTAINER_REQUEST|"
+            "single_image_json_bearer",
             flush=True,
         )
 
@@ -87,11 +88,10 @@ class InstagramPublisher:
                 f"{instagram_id}/media"
             ),
             {
-                "media_type": "IMAGE",
                 "image_url": image_url,
                 "caption": caption.strip(),
-                "access_token": account.access_token,
             },
+            account.access_token,
         )
 
         creation_id = str(
@@ -117,8 +117,8 @@ class InstagramPublisher:
             ),
             {
                 "creation_id": creation_id,
-                "access_token": account.access_token,
             },
+            account.access_token,
         )
 
         media_id = str(
@@ -364,12 +364,19 @@ class InstagramPublisher:
     @staticmethod
     def _post(
         url: str,
-        data: dict,
+        payload: dict,
+        access_token: str,
     ) -> dict:
         try:
             response = requests.post(
                 url,
-                data=data,
+                json=payload,
+                headers={
+                    "Authorization": (
+                        f"Bearer {access_token}"
+                    ),
+                    "Content-Type": "application/json",
+                },
                 timeout=90,
             )
         except requests.RequestException as exc:
