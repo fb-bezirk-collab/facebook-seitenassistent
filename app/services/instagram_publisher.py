@@ -77,7 +77,7 @@ class InstagramPublisher:
 
         print(
             "INSTAGRAM_PUBLISH|CONTAINER_REQUEST|"
-            "single_image_json_bearer",
+            "single_image_form_token",
             flush=True,
         )
 
@@ -246,13 +246,10 @@ class InstagramPublisher:
         width, height = image.size
         ratio = width / height
 
-        # Kleine Rundungsabweichungen tolerieren.
-        tolerance = 0.005
-
         if (
-            self.MIN_RATIO - tolerance
+            self.MIN_RATIO
             <= ratio
-            <= self.MAX_RATIO + tolerance
+            <= self.MAX_RATIO
         ):
             return image
 
@@ -367,16 +364,13 @@ class InstagramPublisher:
         payload: dict,
         access_token: str,
     ) -> dict:
+        request_data = dict(payload)
+        request_data["access_token"] = access_token
+
         try:
             response = requests.post(
                 url,
-                json=payload,
-                headers={
-                    "Authorization": (
-                        f"Bearer {access_token}"
-                    ),
-                    "Content-Type": "application/json",
-                },
+                data=request_data,
                 timeout=90,
             )
         except requests.RequestException as exc:
