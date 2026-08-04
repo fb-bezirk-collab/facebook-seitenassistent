@@ -413,72 +413,140 @@
     </section>
 
 {% if post %}
+    <section class="card source-card-result">
         <form method="post" action="/drafts">
             <div class="content-grid">
-                <section class="card">
+                <div>
                     <h2>Beitrag bearbeiten</h2>
+
                     <div class="field">
                         <label for="title">Interner Titel</label>
-                        <input type="text" id="title" name="title" maxlength="120" placeholder="z. B. Sommerfest – Einladung">
-                        <p class="hint">Der Titel dient nur deiner Übersicht und wird nicht auf Facebook veröffentlicht.</p>
+                        <input
+                            type="text"
+                            id="title"
+                            name="title"
+                            maxlength="120"
+                            placeholder="z. B. Beitrag zur Teuerung"
+                        >
                     </div>
+
                     <div class="field">
                         <label for="post_text">Beitragstext</label>
                         <textarea id="post_text" name="text">{{ post.text }}</textarea>
+
                         {% if import_type == "video" %}
-                            <p class="hint">Der Text wurde bei diesem Videobeitrag bewusst nicht von Facebook übernommen. Bitte gib hier deinen eigenen Beitragstext ein und erzeuge danach bei Bedarf die sechs KI-Varianten.</p>
+                            <p class="hint">
+                                Der Text wurde bei diesem Videobeitrag bewusst nicht von Facebook übernommen.
+                                Bitte gib hier deinen eigenen Beitragstext ein.
+                            </p>
+                        {% elif source_mode == "manual" %}
+                            <p class="hint">
+                                Du kannst den manuell eingegebenen Text hier noch bearbeiten und anschließend
+                                KI-Varianten erzeugen.
+                            </p>
                         {% endif %}
                     </div>
 
-                    <div class="ai-panel" id="ai-panel-import">
+                    <input
+                        type="hidden"
+                        id="text_variants_json"
+                        name="text_variants_json"
+                        value="[]"
+                    >
+
+                    <div class="ai-panel">
                         <label for="ai-instructions-import">Optionale Vorgabe für die KI</label>
-                        <input type="text" id="ai-instructions-import" maxlength="1000"
-                               placeholder="z. B. kürzer, kritischer oder ohne Emojis">
-                        <button type="button" class="button-ai" id="ai-button-import">
-                            KI-Textvarianten erzeugen
+                        <input
+                            type="text"
+                            id="ai-instructions-import"
+                            maxlength="1000"
+                            placeholder="z. B. kürzer, pointierter oder ohne Emojis"
+                        >
+                        <button
+                            type="button"
+                            class="button-ai"
+                            id="ai-button-import"
+                        >
+                            Acht KI-Textvarianten erzeugen
                         </button>
                         <p class="ai-status" id="ai-status-import"></p>
                         <div class="ai-results" id="ai-results-import" hidden></div>
                     </div>
+                </div>
 
-                </section>
-
-                <section class="card">
+                <div>
                     <h2>Medien</h2>
+
                     {% if image_urls %}
                         {% for image_url in image_urls %}
-                            <img src="{{ image_url }}" alt="Importiertes Facebook-Bild" class="post-image">
-                            <input type="hidden" name="images" value="{{ post.images[loop.index0] }}">
+                            <img
+                                src="{{ image_url }}"
+                                alt="Beitragsbild"
+                                class="post-image"
+                            >
+                            <input
+                                type="hidden"
+                                name="images"
+                                value="{{ post.images[loop.index0] }}"
+                            >
                         {% endfor %}
                     {% endif %}
+
+                    {% if post.videos %}
+                        {% for video in post.videos %}
+                            <div class="video-card">
+                                <strong>🎥 Hochgeladenes Video</strong><br><br>
+                                {{ video }}
+                            </div>
+                            <input
+                                type="hidden"
+                                name="videos"
+                                value="{{ video }}"
+                            >
+                        {% endfor %}
+                    {% endif %}
+
                     {% if post.video_url %}
                         <div class="video-card">
-                            <strong>🎥 Originalvideo</strong>
-                            <a href="{{ post.video_url }}" target="_blank" rel="noopener noreferrer">Video auf Facebook öffnen</a>
-                            <p class="hint">Das Video bleibt bei Facebook und wird nicht lokal gespeichert.</p>
+                            <strong>🎥 Originalvideo</strong><br><br>
+                            <a
+                                href="{{ post.video_url }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Video auf Facebook öffnen
+                            </a>
                         </div>
-                        <input type="hidden" name="video_url" value="{{ post.video_url }}">
+                        <input
+                            type="hidden"
+                            name="video_url"
+                            value="{{ post.video_url }}"
+                        >
                     {% endif %}
-                    {% if not image_urls and not post.video_url %}
-                        <div class="no-image">Zu diesem Beitrag wurden keine Bilder und kein Video-Link gefunden.</div>
+
+                    {% if not image_urls and not post.videos and not post.video_url %}
+                        <div class="no-image">
+                            Dieser Beitrag enthält keine Medien.
+                        </div>
                     {% endif %}
-                </section>
+                </div>
             </div>
 
-            <input type="hidden" id="text_variants_json" name="text_variants_json" value="">
-            <input type="hidden" name="source_url" value="{{ post.source_url }}">
             <input type="hidden" name="page_id" value="">
+            <input type="hidden" name="source_url" value="{{ post.source_url }}">
 
-            <section class="card source-card">
-                <h2>Textquelle</h2>
-                <a href="{{ post.source_url }}" target="_blank" rel="noopener noreferrer">{{ post.source_url }}</a>
-                <div class="save-row">
-                    <button type="submit" class="button-secondary">Als Entwurf speichern</button>
-                </div>
-            </section>
+            <div class="save-row">
+                <button
+                    type="submit"
+                    class="button-secondary"
+                >
+                    Entwurf speichern
+                </button>
+            </div>
         </form>
-        {% endif %}
-    </div>
+    </section>
+{% endif %}
+</div>
 </main>
 
 </div>
@@ -489,18 +557,23 @@
     const manualWorkflow = document.getElementById('workflow-manual');
 
     function selectSource(source) {
-        sourceCards.forEach(card => {
+        sourceCards.forEach((card) => {
             card.classList.toggle(
                 'active',
                 card.dataset.source === source
             );
         });
 
-        facebookWorkflow.hidden = source !== 'facebook';
-        manualWorkflow.hidden = source !== 'manual';
+        if (facebookWorkflow) {
+            facebookWorkflow.hidden = source !== 'facebook';
+        }
+
+        if (manualWorkflow) {
+            manualWorkflow.hidden = source !== 'manual';
+        }
     }
 
-    sourceCards.forEach(card => {
+    sourceCards.forEach((card) => {
         card.addEventListener('click', () => {
             selectSource(card.dataset.source);
         });
@@ -516,7 +589,10 @@
     const sourceHint = document.getElementById('source-hint');
 
     function updateImportFields() {
-        const selected = document.querySelector('input[name="import_type"]:checked')?.value;
+        const selected = document.querySelector(
+            'input[name="import_type"]:checked'
+        )?.value;
+
         const isVideo = selected === 'video';
         const sourceLabel = document.getElementById('source-label');
         const sourceInput = document.getElementById('facebook_url');
@@ -524,9 +600,13 @@
         if (sourceHint) {
             sourceHint.hidden = !isVideo;
         }
+
         if (sourceLabel) {
-            sourceLabel.textContent = isVideo ? 'Reel-/Videolink' : 'Facebook-Link';
+            sourceLabel.textContent = isVideo
+                ? 'Reel-/Videolink'
+                : 'Facebook-Link';
         }
+
         if (sourceInput) {
             sourceInput.placeholder = isVideo
                 ? 'https://www.facebook.com/reel/...'
@@ -534,22 +614,34 @@
         }
     }
 
-    typeInputs.forEach(input => input.addEventListener('change', updateImportFields));
+    typeInputs.forEach((input) => {
+        input.addEventListener('change', updateImportFields);
+    });
+
     updateImportFields();
 
-    function initializeAiRewrite_import() {
+    function initializeAiRewrite() {
         const textarea = document.getElementById('post_text');
         const button = document.getElementById('ai-button-import');
         const instructions = document.getElementById('ai-instructions-import');
         const status = document.getElementById('ai-status-import');
         const results = document.getElementById('ai-results-import');
+        const variantsInput = document.getElementById('text_variants_json');
 
-        if (!textarea || !button || !instructions || !status || !results) {
+        if (
+            !textarea
+            || !button
+            || !instructions
+            || !status
+            || !results
+            || !variantsInput
+        ) {
             return;
         }
 
         button.addEventListener('click', async () => {
             const sourceText = textarea.value.trim();
+
             if (!sourceText) {
                 status.textContent = 'Bitte zuerst einen Beitragstext eingeben.';
                 status.classList.add('error-text');
@@ -557,9 +649,8 @@
             }
 
             button.disabled = true;
-            button.classList.add('loading');
             button.textContent = 'KI arbeitet …';
-            status.textContent = 'Sechs eigenständige Textvarianten werden erstellt.';
+            status.textContent = 'Sechs Facebook- und zwei Instagram-Texte werden erstellt.';
             status.classList.remove('error-text');
             results.hidden = true;
             results.replaceChildren();
@@ -567,72 +658,86 @@
             try {
                 const response = await fetch('/ai/rewrite', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
                         text: sourceText,
                         instructions: instructions.value.trim()
                     })
                 });
 
-                let payload;
-                try {
-                    payload = await response.json();
-                } catch (_error) {
-                    throw new Error('Der Server hat keine lesbare KI-Antwort geliefert.');
-                }
+                const payload = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(payload.error || 'Die KI-Anfrage ist fehlgeschlagen.');
+                    throw new Error(
+                        payload.error || 'Die KI-Anfrage ist fehlgeschlagen.'
+                    );
                 }
 
-                const variants = Array.isArray(payload.variants) ? payload.variants : [];
+                const variants = Array.isArray(payload.variants)
+                    ? payload.variants
+                    : [];
+
                 if (!variants.length) {
-                    throw new Error('Es wurden keine Textvarianten geliefert.');
+                    throw new Error(
+                        'Es wurden keine Textvarianten geliefert.'
+                    );
                 }
 
-                document.getElementById('text_variants_json').value =
-                    JSON.stringify(variants);
+                variantsInput.value = JSON.stringify(variants);
 
-                variants.forEach((variant) => {
+                variants.forEach((variant, index) => {
                     const card = document.createElement('article');
                     card.className = 'ai-result';
 
                     const title = document.createElement('h3');
-                    title.textContent = variant.title || 'Variante';
+                    title.textContent = variant.title || `Variante ${index + 1}`;
 
-                    const text = document.createElement('div');
-                    text.className = 'ai-result-text';
-                    text.textContent = variant.text || '';
+                    const editField = document.createElement('textarea');
+                    editField.className = 'ai-edit-field';
+                    editField.value = variant.text || '';
+                    editField.style.width = '100%';
+                    editField.style.minHeight = '180px';
+                    editField.style.marginTop = '10px';
+
+                    editField.addEventListener('input', () => {
+                        variants[index].text = editField.value;
+                        variantsInput.value = JSON.stringify(variants);
+                    });
 
                     const useButton = document.createElement('button');
                     useButton.type = 'button';
-                    useButton.textContent = 'Diese Variante übernehmen';
+                    useButton.textContent = 'Als Haupttext übernehmen';
                     useButton.addEventListener('click', () => {
-                        textarea.value = variant.text || '';
-                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        textarea.value = editField.value;
                         textarea.focus();
-                        status.textContent = 'Die Variante wurde in den Beitragstext übernommen.';
-                        status.classList.remove('error-text');
+                        status.textContent =
+                            'Diese Variante wurde als Haupttext übernommen.';
                     });
 
-                    card.append(title, text, useButton);
+                    card.append(title, editField, useButton);
                     results.appendChild(card);
                 });
 
                 results.hidden = false;
-                status.textContent = 'Die sechs Varianten werden mit dem Entwurf gespeichert. Du kannst zusätzlich eine davon als Haupttext übernehmen.';
+                status.textContent =
+                    'Die Varianten können jetzt direkt bearbeitet werden. '
+                    + 'Beim Speichern werden deine Änderungen übernommen.';
             } catch (error) {
-                status.textContent = error instanceof Error ? error.message : String(error);
+                status.textContent = error instanceof Error
+                    ? error.message
+                    : String(error);
+
                 status.classList.add('error-text');
             } finally {
                 button.disabled = false;
-                button.classList.remove('loading');
-                button.textContent = 'KI-Textvarianten erzeugen';
+                button.textContent = 'Acht KI-Textvarianten erzeugen';
             }
         });
     }
 
-    initializeAiRewrite_import();
+    initializeAiRewrite();
 </script>
 </body>
 </html>

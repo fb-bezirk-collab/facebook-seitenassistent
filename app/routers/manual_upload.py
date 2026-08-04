@@ -145,6 +145,8 @@ async def manueller_medienimport(
                 "video_url": "",
                 "import_type": "manual",
                 "source_mode": "manual",
+"manual_import": True,
+"text_variants_json": "[]",
             },
         )
 
@@ -160,6 +162,8 @@ async def manueller_medienimport(
                 "video_url": "",
                 "import_type": "manual",
                 "source_mode": "manual",
+"manual_import": True,
+"text_variants_json": "[]",
             },
             status_code=400,
         )
