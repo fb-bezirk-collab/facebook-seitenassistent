@@ -1,9 +1,10 @@
 from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
+import math
 
 import requests
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import UPLOADS_DIR
 from app.services.instagram_account_service import InstagramAccountService
@@ -16,6 +17,9 @@ class InstagramPublisher:
 
     api_version = "v23.0"
     graph_base_url = "https://graph.instagram.com"
+
+    MIN_RATIO = 4 / 5
+    MAX_RATIO = 1.91
 
     def __init__(self):
         self.accounts = InstagramAccountService()
@@ -157,8 +161,13 @@ class InstagramPublisher:
         )
 
         try:
-            with Image.open(source_path) as image:
-                image.load()
+            with Image.open(source_path) as source_image:
+                source_image.load()
+
+                # Berücksichtigt die in der Bilddatei gespeicherte Drehung.
+                image = ImageOps.exif_transpose(
+                    source_image
+                )
 
                 if image.mode in {"RGBA", "LA"}:
                     background = Image.new(
@@ -183,23 +192,28 @@ class InstagramPublisher:
                         "Mindestens 320 × 320 Pixel sind erforderlich."
                     )
 
-                ratio = width / height
-
-                # Instagram Feed: Seitenverhältnis 4:5 bis 1.91:1.
-                if ratio < 0.8 or ratio > 1.91:
-                    raise InstagramApiError(
-                        "Das Bildseitenverhältnis wird von Instagram "
-                        "nicht unterstützt. Zulässig sind 4:5 bis 1,91:1."
-                    )
+                image = self._fit_supported_ratio(
+                    image
+                )
 
                 image.save(
                     target_path,
                     format="JPEG",
-                    quality=92,
+                    quality=94,
                     optimize=False,
                     progressive=False,
                     subsampling=0,
                     dpi=(72, 72),
+                )
+
+                final_width, final_height = image.size
+
+                print(
+                    "INSTAGRAM_PUBLISH|IMAGE_DIMENSIONS|"
+                    f"original={width}x{height}|"
+                    f"prepared={final_width}x{final_height}|"
+                    f"ratio={final_width / final_height:.6f}",
+                    flush=True,
                 )
 
         except InstagramApiError:
@@ -216,6 +230,73 @@ class InstagramPublisher:
         return target_path.relative_to(
             UPLOADS_DIR.parent
         ).as_posix()
+
+    def _fit_supported_ratio(
+        self,
+        image: Image.Image,
+    ) -> Image.Image:
+        """Passt das Bild ohne Abschneiden an den erlaubten Bereich an."""
+
+        width, height = image.size
+        ratio = width / height
+
+        # Kleine Rundungsabweichungen tolerieren.
+        tolerance = 0.005
+
+        if (
+            self.MIN_RATIO - tolerance
+            <= ratio
+            <= self.MAX_RATIO + tolerance
+        ):
+            return image
+
+        if ratio < self.MIN_RATIO:
+            # Zu hoch: links und rechts minimal erweitern.
+            target_width = math.ceil(
+                height * self.MIN_RATIO
+            )
+            target_height = height
+        else:
+            # Zu breit: oben und unten minimal erweitern.
+            target_width = width
+            target_height = math.ceil(
+                width / self.MAX_RATIO
+            )
+
+        # Hintergrund aus den Bildecken ableiten, damit die Ergänzung
+        # möglichst unauffällig bleibt.
+        corner_pixels = [
+            image.getpixel((0, 0)),
+            image.getpixel((width - 1, 0)),
+            image.getpixel((0, height - 1)),
+            image.getpixel((width - 1, height - 1)),
+        ]
+
+        background_color = tuple(
+            sum(pixel[channel] for pixel in corner_pixels)
+            // len(corner_pixels)
+            for channel in range(3)
+        )
+
+        canvas = Image.new(
+            "RGB",
+            (target_width, target_height),
+            background_color,
+        )
+
+        left = (
+            target_width - width
+        ) // 2
+        top = (
+            target_height - height
+        ) // 2
+
+        canvas.paste(
+            image,
+            (left, top),
+        )
+
+        return canvas
 
     @staticmethod
     def _local_upload_path(
