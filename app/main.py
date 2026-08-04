@@ -58,10 +58,9 @@ async def require_login(request: Request, call_next):
     )
 
     if request.url.path.startswith("/uploads/"):
-        # Instagram ruft Bild-URLs teilweise mit If-None-Match oder
-        # If-Modified-Since ab. Starlette würde darauf mit 304 antworten.
-        # Für die Instagram Publishing API muss aber immer der vollständige
-        # Bildinhalt mit 200 OK ausgeliefert werden.
+        # Instagram kann Medien mit bedingten Cache-Headern abrufen.
+        # Diese Header werden entfernt, damit Starlette den vollständigen
+        # Dateiinhalt mit 200 OK ausliefert und nicht nur 304 zurückgibt.
         request.scope["headers"] = [
             (name, value)
             for name, value in request.scope.get("headers", [])
@@ -76,13 +75,19 @@ async def require_login(request: Request, call_next):
         ]
 
         response = await call_next(request)
+
         response.headers["Cache-Control"] = (
             "no-store, no-cache, must-revalidate, max-age=0"
         )
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        response.headers.pop("etag", None)
-        response.headers.pop("last-modified", None)
+
+        if "etag" in response.headers:
+            del response.headers["etag"]
+
+        if "last-modified" in response.headers:
+            del response.headers["last-modified"]
+
         return response
 
     if (
