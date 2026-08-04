@@ -1,8 +1,11 @@
 from pathlib import Path
-from urllib.parse import quote
 from uuid import uuid4
 import math
+import os
 
+import cloudinary
+import cloudinary.uploader
+from cloudinary.exceptions import Error as CloudinaryError
 import requests
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -24,6 +27,19 @@ class InstagramPublisher:
     def __init__(self):
         self.accounts = InstagramAccountService()
         self.config = load_instagram_config()
+
+        self.cloudinary_cloud_name = os.getenv(
+            "CLOUDINARY_CLOUD_NAME",
+            "",
+        ).strip()
+        self.cloudinary_api_key = os.getenv(
+            "CLOUDINARY_API_KEY",
+            "",
+        ).strip()
+        self.cloudinary_api_secret = os.getenv(
+            "CLOUDINARY_API_SECRET",
+            "",
+        ).strip()
 
     def publish(
         self,
@@ -51,16 +67,10 @@ class InstagramPublisher:
                 "Instagram benötigt mindestens ein Bild."
             )
 
-        if not self.config.public_base_url:
-            raise InstagramApiError(
-                "PUBLIC_BASE_URL beziehungsweise "
-                "INSTAGRAM_REDIRECT_URI fehlt."
-            )
-
         prepared_image = self._prepare_image(
             post.images[0]
         )
-        image_url = self._public_image_url(
+        image_url = self._upload_to_cloudinary(
             prepared_image
         )
 
@@ -70,7 +80,7 @@ class InstagramPublisher:
             flush=True,
         )
         print(
-            "INSTAGRAM_PUBLISH|IMAGE_URL|"
+            "INSTAGRAM_PUBLISH|CLOUDINARY_URL|"
             + image_url,
             flush=True,
         )
@@ -237,6 +247,98 @@ class InstagramPublisher:
             UPLOADS_DIR.parent
         ).as_posix()
 
+    def _upload_to_cloudinary(
+        self,
+        image_path: str,
+    ) -> str:
+        missing_variables = [
+            name
+            for name, value in (
+                (
+                    "CLOUDINARY_CLOUD_NAME",
+                    self.cloudinary_cloud_name,
+                ),
+                (
+                    "CLOUDINARY_API_KEY",
+                    self.cloudinary_api_key,
+                ),
+                (
+                    "CLOUDINARY_API_SECRET",
+                    self.cloudinary_api_secret,
+                ),
+            )
+            if not value
+        ]
+
+        if missing_variables:
+            raise InstagramApiError(
+                "Cloudinary ist nicht vollständig eingerichtet. "
+                "In Railway fehlen folgende Variablen: "
+                + ", ".join(missing_variables)
+            )
+
+        local_path = self._local_upload_path(
+            image_path
+        )
+
+        if not local_path.exists():
+            raise InstagramApiError(
+                "Das für Cloudinary vorbereitete Bild "
+                "wurde lokal nicht gefunden."
+            )
+
+        cloudinary.config(
+            cloud_name=self.cloudinary_cloud_name,
+            api_key=self.cloudinary_api_key,
+            api_secret=self.cloudinary_api_secret,
+            secure=True,
+        )
+
+        try:
+            upload_result = cloudinary.uploader.upload(
+                str(local_path),
+                folder="facebook-seitenassistent/instagram",
+                resource_type="image",
+                type="upload",
+                overwrite=False,
+                unique_filename=True,
+                use_filename=False,
+            )
+        except CloudinaryError as exc:
+            raise InstagramApiError(
+                "Das Bild konnte nicht zu Cloudinary "
+                f"hochgeladen werden: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise InstagramApiError(
+                "Beim Cloudinary-Upload ist ein "
+                f"unerwarteter Fehler aufgetreten: {exc}"
+            ) from exc
+
+        secure_url = str(
+            upload_result.get("secure_url", "")
+        ).strip()
+
+        if not secure_url:
+            raise InstagramApiError(
+                "Cloudinary hat keine öffentliche HTTPS-Bildadresse geliefert."
+            )
+
+        if not secure_url.startswith("https://"):
+            raise InstagramApiError(
+                "Cloudinary hat keine sichere HTTPS-Bildadresse geliefert."
+            )
+
+        print(
+            "INSTAGRAM_PUBLISH|CLOUDINARY_UPLOAD|"
+            f"public_id={upload_result.get('public_id', '')}|"
+            f"format={upload_result.get('format', '')}|"
+            f"bytes={upload_result.get('bytes', '')}",
+            flush=True,
+        )
+
+        return secure_url
+
     def _fit_supported_ratio(
         self,
         image: Image.Image,
@@ -326,37 +428,6 @@ class InstagramPublisher:
             UPLOADS_DIR
             / relative_inside_uploads
         ).resolve()
-
-    def _public_image_url(
-        self,
-        image_path: str,
-    ) -> str:
-        normalized = str(image_path).replace(
-            "\\",
-            "/",
-        )
-
-        marker = "uploads/"
-        position = normalized.find(marker)
-
-        if position < 0:
-            raise InstagramApiError(
-                "Das vorbereitete Bild liegt nicht im "
-                "öffentlichen Upload-Ordner."
-            )
-
-        relative_path = normalized[position:]
-
-        return (
-            self.config.public_base_url.rstrip("/")
-            + "/"
-            + quote(
-                relative_path,
-                safe="/",
-            )
-            + "?ig="
-            + uuid4().hex
-        )
 
     @staticmethod
     def _post(
