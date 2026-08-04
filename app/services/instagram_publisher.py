@@ -75,6 +75,11 @@ class InstagramPublisher:
             flush=True,
         )
 
+        print(
+            "INSTAGRAM_PUBLISH|MEDIA_TYPE|IMAGE",
+            flush=True,
+        )
+
         container = self._post(
             (
                 f"{self.graph_base_url}/"
@@ -82,6 +87,7 @@ class InstagramPublisher:
                 f"{instagram_id}/media"
             ),
             {
+                "media_type": "IMAGE",
                 "image_url": image_url,
                 "caption": caption.strip(),
                 "access_token": account.access_token,
