@@ -2,6 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 import math
 import os
+import time
 
 import cloudinary
 import cloudinary.uploader
@@ -119,6 +120,11 @@ class InstagramPublisher:
             flush=True,
         )
 
+        self._wait_for_container(
+            creation_id=creation_id,
+            access_token=account.access_token,
+        )
+
         published = self._post(
             (
                 f"{self.graph_base_url}/"
@@ -147,6 +153,80 @@ class InstagramPublisher:
         )
 
         return media_id
+
+    def _wait_for_container(
+        self,
+        *,
+        creation_id: str,
+        access_token: str,
+        timeout_seconds: int = 90,
+        interval_seconds: int = 2,
+    ) -> None:
+        """Wartet, bis Instagram den Mediencontainer fertig verarbeitet hat."""
+
+        deadline = time.monotonic() + timeout_seconds
+        last_status = ""
+
+        while time.monotonic() < deadline:
+            status_payload = self._get(
+                (
+                    f"{self.graph_base_url}/"
+                    f"{self.api_version}/"
+                    f"{creation_id}"
+                ),
+                {
+                    "fields": "status_code,status",
+                },
+                access_token,
+            )
+
+            status_code = str(
+                status_payload.get("status_code", "")
+            ).strip().upper()
+
+            status_text = str(
+                status_payload.get("status", "")
+            ).strip()
+
+            if status_code != last_status:
+                print(
+                    "INSTAGRAM_PUBLISH|CONTAINER_STATUS|"
+                    f"status_code={status_code or 'UNKNOWN'}|"
+                    f"status={status_text}",
+                    flush=True,
+                )
+                last_status = status_code
+
+            if status_code == "FINISHED":
+                return
+
+            if status_code in {
+                "ERROR",
+                "EXPIRED",
+            }:
+                details = status_text or status_code
+                raise InstagramApiError(
+                    "Instagram konnte den Mediencontainer "
+                    f"nicht fertig verarbeiten: {details}"
+                )
+
+            if status_code not in {
+                "",
+                "IN_PROGRESS",
+                "PUBLISHED",
+            }:
+                print(
+                    "INSTAGRAM_PUBLISH|CONTAINER_STATUS_UNKNOWN|"
+                    f"{status_code}|{status_text}",
+                    flush=True,
+                )
+
+            time.sleep(interval_seconds)
+
+        raise InstagramApiError(
+            "Instagram hat den Mediencontainer nicht rechtzeitig "
+            "fertig verarbeitet. Bitte den Beitrag erneut veröffentlichen."
+        )
 
     def _prepare_image(
         self,
@@ -428,6 +508,86 @@ class InstagramPublisher:
             UPLOADS_DIR
             / relative_inside_uploads
         ).resolve()
+
+    @staticmethod
+    def _get(
+        url: str,
+        params: dict,
+        access_token: str,
+    ) -> dict:
+        request_params = dict(params)
+        request_params["access_token"] = access_token
+
+        try:
+            response = requests.get(
+                url,
+                params=request_params,
+                timeout=90,
+            )
+        except requests.RequestException as exc:
+            raise InstagramApiError(
+                f"Instagram ist nicht erreichbar: {exc}"
+            ) from exc
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise InstagramApiError(
+                "Instagram hat keine gültige Antwort geliefert."
+            ) from exc
+
+        if response.status_code >= 400:
+            error = payload.get("error", {})
+
+            if isinstance(error, dict):
+                message = str(
+                    error.get("message", "")
+                ).strip()
+                error_type = str(
+                    error.get("type", "")
+                ).strip()
+                error_code = error.get("code")
+                error_subcode = error.get(
+                    "error_subcode"
+                )
+
+                details = [
+                    value
+                    for value in (
+                        message,
+                        (
+                            f"Typ: {error_type}"
+                            if error_type
+                            else ""
+                        ),
+                        (
+                            f"Code: {error_code}"
+                            if error_code is not None
+                            else ""
+                        ),
+                        (
+                            f"Subcode: {error_subcode}"
+                            if error_subcode is not None
+                            else ""
+                        ),
+                    )
+                    if value
+                ]
+
+                if details:
+                    raise InstagramApiError(
+                        " · ".join(details)
+                    )
+
+            raise InstagramApiError(
+                response.text.strip()
+                or (
+                    "Instagram-Fehler HTTP "
+                    f"{response.status_code}"
+                )
+            )
+
+        return payload
 
     @staticmethod
     def _post(
