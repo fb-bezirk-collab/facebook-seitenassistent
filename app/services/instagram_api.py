@@ -99,8 +99,8 @@ class InstagramApiService:
         )
 
         instagram_id = str(
-            data.get("user_id")
-            or data.get("id")
+            data.get("id")
+            or data.get("user_id")
             or ""
         ).strip()
         if not instagram_id:
