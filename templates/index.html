@@ -377,6 +377,17 @@
 
         <form method="post" action="/manual-upload" enctype="multipart/form-data">
             <div class="field">
+                <label for="manual_title">Interner Titel</label>
+                <input
+                    type="text"
+                    id="manual_title"
+                    name="title"
+                    maxlength="120"
+                    placeholder="z. B. Instagram-Beitrag zur Teuerung"
+                >
+            </div>
+
+            <div class="field">
                 <label for="media_files">Bilder oder Videos</label>
                 <input
                     type="file"
@@ -546,9 +557,6 @@
         </form>
     </section>
 {% endif %}
-</div>
-</main>
-
 </div>
 </main>
 <script>

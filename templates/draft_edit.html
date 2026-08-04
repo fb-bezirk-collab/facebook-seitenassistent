@@ -336,22 +336,30 @@
     function renderVariants(variants) {
         resultsBox.replaceChildren();
 
-        variants.forEach((variant) => {
+        variants.forEach((variant, index) => {
             const card = document.createElement('article');
             card.className = 'ai-result';
 
             const title = document.createElement('h3');
             title.textContent = variant.title || 'Variante';
 
-            const text = document.createElement('div');
-            text.className = 'ai-result-text';
-            text.textContent = variant.text || '';
+            const text = document.createElement('textarea');
+            text.className = 'ai-result-text ai-edit-field';
+            text.value = variant.text || '';
+            text.style.width = '100%';
+            text.style.minHeight = '190px';
+            text.style.marginTop = '10px';
+
+            text.addEventListener('input', () => {
+                variants[index].text = text.value;
+                variantsInput.value = JSON.stringify(variants);
+            });
 
             const useButton = document.createElement('button');
             useButton.type = 'button';
             useButton.textContent = 'Als Haupttext übernehmen';
             useButton.addEventListener('click', () => {
-                textarea.value = variant.text || '';
+                textarea.value = text.value;
                 textarea.focus();
                 statusBox.textContent = 'Diese Variante wurde als Haupttext übernommen.';
             });

@@ -1,15 +1,15 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
 
-from app.config import TEMPLATES_DIR, UPLOADS_DIR
-from app.models.facebook_post import FacebookPost
+from app.config import UPLOADS_DIR
+from app.services.post_service import PostService
 
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+post_service = PostService()
 
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg",
@@ -26,7 +26,10 @@ ALLOWED_VIDEO_TYPES = {
 MAX_FILE_SIZE = 150 * 1024 * 1024
 
 
-def _safe_suffix(filename: str, content_type: str) -> str:
+def _safe_suffix(
+    filename: str,
+    content_type: str,
+) -> str:
     suffix = Path(filename or "").suffix.lower()
 
     if suffix:
@@ -44,15 +47,19 @@ def _safe_suffix(filename: str, content_type: str) -> str:
     return mapping.get(content_type, "")
 
 
-async def _save_upload(upload: UploadFile) -> str:
-    content_type = (upload.content_type or "").lower().strip()
+async def _save_upload(
+    upload: UploadFile,
+) -> str:
+    content_type = (
+        upload.content_type or ""
+    ).lower().strip()
 
     if (
         content_type not in ALLOWED_IMAGE_TYPES
         and content_type not in ALLOWED_VIDEO_TYPES
     ):
         raise ValueError(
-            f"Nicht unterstütztes Dateiformat: "
+            "Nicht unterstütztes Dateiformat: "
             f"{upload.filename or 'unbekannte Datei'}"
         )
 
@@ -65,18 +72,26 @@ async def _save_upload(upload: UploadFile) -> str:
 
     if len(content) > MAX_FILE_SIZE:
         raise ValueError(
-            f"Die Datei {upload.filename or ''} ist größer als 150 MB."
+            f"Die Datei {upload.filename or ''} "
+            "ist größer als 150 MB."
         )
 
     target_directory = UPLOADS_DIR / "manual"
-    target_directory.mkdir(parents=True, exist_ok=True)
+    target_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     suffix = _safe_suffix(
         upload.filename or "",
         content_type,
     )
 
-    target_path = target_directory / f"{uuid4().hex}{suffix}"
+    target_path = (
+        target_directory
+        / f"{uuid4().hex}{suffix}"
+    )
+
     target_path.write_bytes(content)
 
     return target_path.relative_to(
@@ -87,6 +102,7 @@ async def _save_upload(upload: UploadFile) -> str:
 @router.post("/manual-upload")
 async def manueller_medienimport(
     request: Request,
+    title: str = Form(""),
     text: str = Form(""),
     source_url: str = Form(""),
     media_files: list[UploadFile] = File(default=[]),
@@ -104,66 +120,59 @@ async def manueller_medienimport(
 
         if not saved_files:
             raise ValueError(
-                "Bitte mindestens ein Bild oder Video auswählen."
+                "Bitte mindestens ein Bild "
+                "oder Video auswählen."
             )
 
         images = [
             path
             for path in saved_files
             if Path(path).suffix.lower()
-            in {".jpg", ".jpeg", ".png", ".webp"}
+            in {
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+            }
         ]
 
         videos = [
             path
             for path in saved_files
             if Path(path).suffix.lower()
-            in {".mp4", ".mov", ".webm"}
+            in {
+                ".mp4",
+                ".mov",
+                ".webm",
+            }
         ]
 
-        post = FacebookPost(
+        draft = post_service.create_draft(
+            title=title,
             text=text.strip(),
+            text_variants=[],
             images=images,
             videos=videos,
             video_url="",
+            page_id="",
             source_url=source_url.strip(),
         )
 
-        image_urls = [
-            "/" + image_path.replace("\\", "/")
-            for image_path in images
-        ]
-
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={
-                "post": post,
-                "image_urls": image_urls,
-                "error": None,
-                "facebook_url": "",
-                "video_url": "",
-                "import_type": "manual",
-                "source_mode": "manual",
-"manual_import": True,
-"text_variants_json": "[]",
-            },
+        return RedirectResponse(
+            url=(
+                str(
+                    request.url_for(
+                        "entwurf_bearbeiten",
+                        post_id=draft.id,
+                    )
+                )
+                + "?saved=1"
+            ),
+            status_code=303,
         )
 
-    except Exception as error:
-        return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={
-                "post": None,
-                "image_urls": [],
-                "error": str(error),
-                "facebook_url": "",
-                "video_url": "",
-                "import_type": "manual",
-                "source_mode": "manual",
-"manual_import": True,
-"text_variants_json": "[]",
-            },
+    except ValueError as error:
+        raise HTTPException(
             status_code=400,
-        )
+            detail=str(error),
+        ) from error
