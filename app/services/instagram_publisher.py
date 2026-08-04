@@ -1,7 +1,11 @@
+from pathlib import Path
 from urllib.parse import quote
+from uuid import uuid4
 
 import requests
+from PIL import Image, UnidentifiedImageError
 
+from app.config import UPLOADS_DIR
 from app.services.instagram_account_service import InstagramAccountService
 from app.services.instagram_config_service import load_instagram_config
 from app.services.instagram_api import InstagramApiError
@@ -49,17 +53,24 @@ class InstagramPublisher:
                 "INSTAGRAM_REDIRECT_URI fehlt."
             )
 
-        image_url = self._public_image_url(post.images[0])
+        prepared_image = self._prepare_image(
+            post.images[0]
+        )
+        image_url = self._public_image_url(
+            prepared_image
+        )
 
+        print(
+            "INSTAGRAM_PUBLISH|PREPARED_IMAGE|"
+            + prepared_image,
+            flush=True,
+        )
         print(
             "INSTAGRAM_PUBLISH|IMAGE_URL|"
             + image_url,
             flush=True,
         )
 
-        # Wichtig:
-        # Kein requests.get() oder requests.head() auf die eigene Railway-URL.
-        # Instagram lädt das Bild selbst über image_url.
         container = self._post(
             (
                 f"{self.graph_base_url}/"
@@ -117,6 +128,121 @@ class InstagramPublisher:
 
         return media_id
 
+    def _prepare_image(
+        self,
+        image_path: str,
+    ) -> str:
+        source_path = self._local_upload_path(
+            image_path
+        )
+
+        if not source_path.exists():
+            raise InstagramApiError(
+                "Die lokale Bilddatei wurde nicht gefunden."
+            )
+
+        target_directory = (
+            UPLOADS_DIR
+            / "instagram"
+            / "prepared"
+        )
+        target_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        target_path = (
+            target_directory
+            / f"{uuid4().hex}.jpg"
+        )
+
+        try:
+            with Image.open(source_path) as image:
+                image.load()
+
+                if image.mode in {"RGBA", "LA"}:
+                    background = Image.new(
+                        "RGB",
+                        image.size,
+                        "white",
+                    )
+                    alpha = image.getchannel("A")
+                    background.paste(
+                        image.convert("RGB"),
+                        mask=alpha,
+                    )
+                    image = background
+                elif image.mode != "RGB":
+                    image = image.convert("RGB")
+
+                width, height = image.size
+
+                if width < 320 or height < 320:
+                    raise InstagramApiError(
+                        "Das Bild ist für Instagram zu klein. "
+                        "Mindestens 320 × 320 Pixel sind erforderlich."
+                    )
+
+                ratio = width / height
+
+                # Instagram Feed: Seitenverhältnis 4:5 bis 1.91:1.
+                if ratio < 0.8 or ratio > 1.91:
+                    raise InstagramApiError(
+                        "Das Bildseitenverhältnis wird von Instagram "
+                        "nicht unterstützt. Zulässig sind 4:5 bis 1,91:1."
+                    )
+
+                image.save(
+                    target_path,
+                    format="JPEG",
+                    quality=92,
+                    optimize=False,
+                    progressive=False,
+                    subsampling=0,
+                    dpi=(72, 72),
+                )
+
+        except InstagramApiError:
+            raise
+        except (
+            OSError,
+            UnidentifiedImageError,
+        ) as exc:
+            raise InstagramApiError(
+                "Das Bild konnte nicht für Instagram "
+                f"aufbereitet werden: {exc}"
+            ) from exc
+
+        return target_path.relative_to(
+            UPLOADS_DIR.parent
+        ).as_posix()
+
+    @staticmethod
+    def _local_upload_path(
+        image_path: str,
+    ) -> Path:
+        normalized = str(image_path).replace(
+            "\\",
+            "/",
+        )
+
+        marker = "uploads/"
+        position = normalized.find(marker)
+
+        if position < 0:
+            raise InstagramApiError(
+                "Das Bild liegt nicht im öffentlichen Upload-Ordner."
+            )
+
+        relative_inside_uploads = normalized[
+            position + len(marker):
+        ]
+
+        return (
+            UPLOADS_DIR
+            / relative_inside_uploads
+        ).resolve()
+
     def _public_image_url(
         self,
         image_path: str,
@@ -131,7 +257,8 @@ class InstagramPublisher:
 
         if position < 0:
             raise InstagramApiError(
-                "Das Bild liegt nicht im öffentlichen Upload-Ordner."
+                "Das vorbereitete Bild liegt nicht im "
+                "öffentlichen Upload-Ordner."
             )
 
         relative_path = normalized[position:]
@@ -143,6 +270,8 @@ class InstagramPublisher:
                 relative_path,
                 safe="/",
             )
+            + "?ig="
+            + uuid4().hex
         )
 
     @staticmethod
@@ -213,7 +342,10 @@ class InstagramPublisher:
 
             raise InstagramApiError(
                 response.text.strip()
-                or f"Instagram-Fehler HTTP {response.status_code}"
+                or (
+                    "Instagram-Fehler HTTP "
+                    f"{response.status_code}"
+                )
             )
 
         return payload
