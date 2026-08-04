@@ -1,6 +1,7 @@
 from collections import defaultdict
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import random
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -58,6 +59,55 @@ def _parse_submitted_variants(
 
     return variants
 
+
+
+def _distributed_times(
+    *,
+    start_value: str,
+    end_value: str,
+    count: int,
+    mode: str,
+) -> list[str]:
+    """Verteilt Termine gleichmäßig oder zufällig innerhalb eines Zeitraums."""
+    if count <= 0:
+        return []
+
+    try:
+        start = datetime.fromisoformat(start_value)
+        end = datetime.fromisoformat(end_value)
+    except ValueError as exc:
+        raise ValueError(
+            "Beginn oder Ende des Zeitraums ist ungültig."
+        ) from exc
+
+    if end < start:
+        raise ValueError(
+            "Das Ende des Zeitraums muss nach dem Beginn liegen."
+        )
+
+    if count == 1 or start == end:
+        return [start.isoformat(timespec="minutes")] * count
+
+    total_seconds = (end - start).total_seconds()
+
+    if mode == "random":
+        offsets = sorted(
+            random.uniform(0, total_seconds)
+            for _ in range(count)
+        )
+    else:
+        step = total_seconds / (count - 1)
+        offsets = [
+            step * index
+            for index in range(count)
+        ]
+
+    return [
+        (start + timedelta(seconds=offset)).isoformat(
+            timespec="minutes"
+        )
+        for offset in offsets
+    ]
 
 def _available_texts(post) -> list[dict[str, str]]:
     values = [{
@@ -201,7 +251,46 @@ async def publication_create(
     if action == "publish_now":
         publish_at = datetime.now().isoformat(timespec="seconds")
     else:
-        publish_at = str(form.get("publish_at", "")).strip()
+        distribution_enabled = (
+            str(form.get("distribute_times", "")).strip() == "1"
+        )
+
+        if distribution_enabled:
+            start_value = str(
+                form.get("distribution_start", "")
+            ).strip()
+            end_value = str(
+                form.get("distribution_end", "")
+            ).strip()
+            distribution_mode = str(
+                form.get("distribution_mode", "even")
+            ).strip().lower()
+
+            if distribution_mode not in {"even", "random"}:
+                distribution_mode = "even"
+
+            try:
+                distributed_times = _distributed_times(
+                    start_value=start_value,
+                    end_value=end_value,
+                    count=len(assignments),
+                    mode=distribution_mode,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=str(exc),
+                ) from exc
+
+            for assignment, assigned_time in zip(
+                assignments,
+                distributed_times,
+            ):
+                assignment["publish_at"] = assigned_time
+
+            publish_at = start_value
+        else:
+            publish_at = str(form.get("publish_at", "")).strip()
 
     try:
         created = publication_service.create_many(

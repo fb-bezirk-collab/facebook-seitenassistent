@@ -56,7 +56,12 @@ class PublicationService:
 
         for assignment in assignments:
             account = assignment["account"]
-            key = (post_id, account.id, publish_at)
+            assignment_publish_at = str(
+                assignment.get("publish_at", publish_at)
+            ).strip()
+            self._validate_datetime(assignment_publish_at)
+
+            key = (post_id, account.id, assignment_publish_at)
 
             if key in existing:
                 continue
@@ -67,7 +72,7 @@ class PublicationService:
                 platform=account.platform,
                 account_id=account.id,
                 account_name=account.name,
-                publish_at=publish_at,
+                publish_at=assignment_publish_at,
                 text=str(assignment.get("text", "")).strip(),
                 variant_title=(
                     str(assignment.get("variant_title", "")).strip()

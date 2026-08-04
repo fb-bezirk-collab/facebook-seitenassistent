@@ -74,7 +74,8 @@
             .header-row, .footer-card { flex-direction: column; align-items: stretch; }
             .buttons { flex-direction: column; }
         }
-    </style>
+    .time-distribution-toggle{display:flex;align-items:center;gap:9px;margin:0 0 18px;padding:12px 14px;border:1px solid #d0d5dd;border-radius:10px;background:#f8fafc;font-weight:700;cursor:pointer}.time-distribution-toggle input,.radio-option input{margin:0}.distribution-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;padding:16px;border:1px solid #d0d5dd;border-radius:12px;background:#f8fafc}.distribution-fields .wide{grid-column:1/-1}.radio-option{display:flex;align-items:center;gap:8px;margin:8px 0;font-weight:400}@media(max-width:700px){.distribution-fields{grid-template-columns:1fr}.distribution-fields .wide{grid-column:auto}}
+</style>
 </head>
 <body>
 <header class="header">
@@ -220,9 +221,67 @@
             </div>
 
             <div>
-                <label for="publish_at">Datum und Uhrzeit</label>
-                <input type="datetime-local" id="publish_at" name="publish_at">
-                <p class="small">Ein Termin ist nur beim Planen erforderlich.</p>
+                <label>Planungszeit</label>
+
+                <label class="time-distribution-toggle">
+                    <input
+                        type="checkbox"
+                        id="distribute_times"
+                        name="distribute_times"
+                        value="1"
+                        onchange="toggleTimeDistribution()"
+                    >
+                    Ausgewählte Seiten innerhalb eines Zeitraums verteilen
+                </label>
+
+                <div id="single-time-fields">
+                    <label for="publish_at">Datum und Uhrzeit</label>
+                    <input type="datetime-local" id="publish_at" name="publish_at">
+                    <p class="small">Dieser Termin gilt für alle ausgewählten Seiten.</p>
+                </div>
+
+                <div id="distribution-fields" class="distribution-fields" hidden>
+                    <div>
+                        <label for="distribution_start">Beginn</label>
+                        <input
+                            type="datetime-local"
+                            id="distribution_start"
+                            name="distribution_start"
+                        >
+                    </div>
+                    <div>
+                        <label for="distribution_end">Ende</label>
+                        <input
+                            type="datetime-local"
+                            id="distribution_end"
+                            name="distribution_end"
+                        >
+                    </div>
+                    <div class="wide">
+                        <label>Verteilung</label>
+                        <label class="radio-option">
+                            <input
+                                type="radio"
+                                name="distribution_mode"
+                                value="even"
+                                checked
+                            >
+                            Gleichmäßig verteilen
+                        </label>
+                        <label class="radio-option">
+                            <input
+                                type="radio"
+                                name="distribution_mode"
+                                value="random"
+                            >
+                            Zufällig innerhalb des Zeitraums verteilen
+                        </label>
+                    </div>
+                    <p class="small wide">
+                        Die ausgewählten Seiten erhalten automatisch unterschiedliche Termine zwischen Beginn und Ende.
+                    </p>
+                </div>
+
                 <div class="buttons" style="margin-top:18px">
                     <button class="save" type="submit" name="action" value="plan">
                         Ausgewählte Seiten planen
@@ -527,6 +586,35 @@
         });
     }
 
+    function toggleTimeDistribution() {
+        const enabled = document.getElementById('distribute_times')?.checked;
+        const singleFields = document.getElementById('single-time-fields');
+        const distributionFields = document.getElementById('distribution-fields');
+        const publishAt = document.getElementById('publish_at');
+        const start = document.getElementById('distribution_start');
+        const end = document.getElementById('distribution_end');
+
+        if (singleFields) {
+            singleFields.hidden = Boolean(enabled);
+        }
+
+        if (distributionFields) {
+            distributionFields.hidden = !enabled;
+        }
+
+        if (publishAt) {
+            publishAt.required = !enabled;
+        }
+
+        if (start) {
+            start.required = Boolean(enabled);
+        }
+
+        if (end) {
+            end.required = Boolean(enabled);
+        }
+    }
+
     document.getElementById('multi-plan-form')?.addEventListener('submit', (event) => {
         if (!selectedAccountCheckboxes().length) {
             event.preventDefault();
@@ -535,15 +623,33 @@
         }
 
         const action = event.submitter?.value || 'plan';
+        const distributeTimes = document.getElementById('distribute_times')?.checked;
         const publishAt = document.getElementById('publish_at');
+        const distributionStart = document.getElementById('distribution_start');
+        const distributionEnd = document.getElementById('distribution_end');
 
-        if (action === 'plan' && !publishAt.value) {
+        if (action === 'plan' && distributeTimes) {
+            if (!distributionStart.value || !distributionEnd.value) {
+                event.preventDefault();
+                alert('Bitte Beginn und Ende des Zeitraums auswählen.');
+                (!distributionStart.value ? distributionStart : distributionEnd).focus();
+                return;
+            }
+
+            if (distributionEnd.value < distributionStart.value) {
+                event.preventDefault();
+                alert('Das Ende des Zeitraums muss nach dem Beginn liegen.');
+                distributionEnd.focus();
+                return;
+            }
+        } else if (action === 'plan' && !publishAt.value) {
             event.preventDefault();
             alert('Bitte für die Planung Datum und Uhrzeit auswählen.');
             publishAt.focus();
         }
     });
 
+    toggleTimeDistribution();
     updateSelectionCount();
 </script>
 </body>
