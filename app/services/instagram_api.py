@@ -88,7 +88,21 @@ class InstagramApiService:
             timeout=45,
         )
         data = self._json(response)
-        instagram_id = str(data.get("user_id") or data.get("id") or "").strip()
+
+        print(
+            "INSTAGRAM_PROFILE_RESPONSE|"
+            f"id={data.get('id')}|"
+            f"user_id={data.get('user_id')}|"
+            f"username={data.get('username')}|"
+            f"name={data.get('name')}",
+            flush=True,
+        )
+
+        instagram_id = str(
+            data.get("user_id")
+            or data.get("id")
+            or ""
+        ).strip()
         if not instagram_id:
             raise InstagramApiError("Instagram-Konto-ID konnte nicht gelesen werden.")
         return InstagramConnection(
