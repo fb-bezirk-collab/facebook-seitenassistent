@@ -1,4 +1,5 @@
 from collections import defaultdict
+import json
 from datetime import datetime
 from urllib.parse import quote
 
@@ -19,6 +20,43 @@ post_service = PostService()
 publication_service = PublicationService()
 account_service = SocialAccountService()
 publication_runner = PublicationRunner()
+
+
+def _parse_submitted_variants(
+    raw_value: str,
+) -> list[dict[str, str]]:
+    if not raw_value.strip():
+        return []
+
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(value, list):
+        return []
+
+    variants: list[dict[str, str]] = []
+
+    for index, item in enumerate(value[:8], start=1):
+        if not isinstance(item, dict):
+            continue
+
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+
+        title = (
+            str(item.get("title", "")).strip()
+            or f"Variante {index}"
+        )
+
+        variants.append({
+            "title": title,
+            "text": text,
+        })
+
+    return variants
 
 
 def _available_texts(post) -> list[dict[str, str]]:
@@ -87,6 +125,27 @@ async def publication_create(
         )
 
     form = await request.form()
+
+    submitted_variants = _parse_submitted_variants(
+        str(form.get("text_variants_json", ""))
+    )
+
+    if submitted_variants:
+        updated_post = post_service.update_draft(
+            post_id,
+            title=post.title,
+            text=post.text,
+            text_variants=submitted_variants,
+            images=post.images,
+            videos=post.videos,
+            video_url=post.video_url,
+            page_id=post.page_id,
+            source_url=post.source_url,
+        )
+
+        if updated_post:
+            post = updated_post
+
     action = str(form.get("action", "plan")).strip().lower()
     account_ids = [
         str(value)

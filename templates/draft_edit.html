@@ -173,6 +173,12 @@
 
         {% if social_accounts %}
         <form method="post" action="/drafts/{{ draft.id }}/publications" class="planning-grid" id="multi-plan-form">
+            <input
+                type="hidden"
+                id="planning_text_variants_json"
+                name="text_variants_json"
+                value="{{ draft.text_variants | tojson | forceescape }}"
+            >
             <div>
                 <label>Facebook-Seiten und Textvarianten</label>
                 <div class="bulk-actions">
@@ -194,7 +200,7 @@
                             <strong>{{ account.name }}</strong>
                             <span class="small">{{ account.platform|capitalize }}</span>
                         </span>
-                        <select class="variant-select" name="variant_choice__{{ account.id }}">
+                        <select class="variant-select" data-platform="{{ account.platform }}" name="variant_choice__{{ account.id }}">
                             <option value="0">Haupttext</option>
                             {% for variant in draft.text_variants %}
                                 {% if account.platform == 'instagram' %}
@@ -333,6 +339,59 @@
         }
     }
 
+    function syncPlanningVariants(variants) {
+        const planningInput = document.getElementById(
+            'planning_text_variants_json'
+        );
+
+        if (planningInput) {
+            planningInput.value = JSON.stringify(variants);
+        }
+
+        document.querySelectorAll('.variant-select').forEach((select) => {
+            const platform = select.dataset.platform || 'facebook';
+            const previousValue = select.value;
+
+            select.replaceChildren();
+
+            const mainOption = document.createElement('option');
+            mainOption.value = '0';
+            mainOption.textContent = 'Haupttext';
+            select.appendChild(mainOption);
+
+            variants.forEach((variant, index) => {
+                const title = String(
+                    variant.title || `Variante ${index + 1}`
+                );
+
+                const isInstagram = title
+                    .toLowerCase()
+                    .startsWith('instagram');
+
+                const shouldShow = platform === 'instagram'
+                    ? isInstagram
+                    : !isInstagram;
+
+                if (!shouldShow) {
+                    return;
+                }
+
+                const option = document.createElement('option');
+                option.value = String(index + 1);
+                option.textContent = title;
+                select.appendChild(option);
+            });
+
+            if (
+                Array.from(select.options).some(
+                    (option) => option.value === previousValue
+                )
+            ) {
+                select.value = previousValue;
+            }
+        });
+    }
+
     function renderVariants(variants) {
         resultsBox.replaceChildren();
 
@@ -353,6 +412,7 @@
             text.addEventListener('input', () => {
                 variants[index].text = text.value;
                 variantsInput.value = JSON.stringify(variants);
+                syncPlanningVariants(variants);
             });
 
             const useButton = document.createElement('button');
@@ -371,7 +431,9 @@
         resultsBox.hidden = variants.length === 0;
     }
 
-    renderVariants(storedVariants());
+    const initialVariants = storedVariants();
+    renderVariants(initialVariants);
+    syncPlanningVariants(initialVariants);
 
     aiButton.addEventListener('click', async () => {
         const sourceText = textarea.value.trim();
@@ -412,7 +474,8 @@
 
             variantsInput.value = JSON.stringify(variants);
             renderVariants(variants);
-            statusBox.textContent = 'Die acht Varianten wurden übernommen. Speichere jetzt den Entwurf.';
+            syncPlanningVariants(variants);
+            statusBox.textContent = 'Die Varianten wurden übernommen und stehen sofort in der Veröffentlichungsplanung zur Auswahl.';
         } catch (error) {
             statusBox.textContent = error instanceof Error ? error.message : String(error);
             statusBox.classList.add('error-text');
