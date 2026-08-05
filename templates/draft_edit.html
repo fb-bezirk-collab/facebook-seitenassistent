@@ -299,9 +299,12 @@
                     <button class="save" type="submit" name="action" value="plan">
                         Ausgewählte Seiten planen
                     </button>
-                    <button class="save publish-selected-now" type="submit"
-                            name="action" value="publish_now"
-                            onclick="return confirm('Den Beitrag jetzt sofort auf allen ausgewählten Seiten veröffentlichen?')">
+<button class="save publish-selected-now"
+        type="submit"
+        name="action"
+        value="publish_now"
+        formnovalidate
+        onclick="return confirm('Den Beitrag jetzt sofort auf allen ausgewählten Seiten veröffentlichen?')">
                         Auf ausgewählten Seiten sofort veröffentlichen
                     </button>
                 </div>
