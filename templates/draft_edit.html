@@ -38,6 +38,7 @@
         textarea { min-height: 220px; resize: vertical; font-family: Arial, Helvetica, sans-serif; line-height: 1.55; }
         #text { min-height: 390px; }
         .post-image { display: block; width: 100%; max-height: 520px; object-fit: contain; border-radius: 12px; background: #111827; margin-bottom: 15px; }
+        .post-video { display: block; width: 100%; max-height: 620px; border-radius: 12px; background: #111827; margin-bottom: 15px; }
         .video-card { padding: 22px; border-radius: 12px; background: #f0f5ff; border: 1px solid #c7d7fe; }
         .video-card a, .source { color: #1877f2; font-weight: 700; overflow-wrap: anywhere; }
         .no-image, .empty-plan { padding: 18px; border-radius: 10px; background: #f9fafb; color: #667085; }
@@ -135,15 +136,27 @@
                         <input type="hidden" name="images" value="{{ draft.images[loop.index0] }}">
                     {% endfor %}
                 {% endif %}
+                {% if draft.videos %}
+                    {% for video_path in draft.videos %}
+                        {% if video_path.startswith('http://') or video_path.startswith('https://') %}
+                            <video class="post-video" controls preload="metadata" src="{{ video_path }}"></video>
+                        {% elif video_path.startswith('/') %}
+                            <video class="post-video" controls preload="metadata" src="{{ video_path }}"></video>
+                        {% else %}
+                            <video class="post-video" controls preload="metadata" src="/{{ video_path }}"></video>
+                        {% endif %}
+                        <input type="hidden" name="videos" value="{{ video_path }}">
+                    {% endfor %}
+                {% endif %}
                 {% if draft.video_url %}
                     <div class="video-card">
                         <strong>🎥 Originalvideo</strong><br><br>
                         <a href="{{ draft.video_url }}" target="_blank" rel="noopener noreferrer">Video auf Facebook öffnen</a>
-                        <p>Das Video wird nicht lokal gespeichert.</p>
+                        <p>Dieser externe Videolink wird beim Veröffentlichen aufgelöst.</p>
                     </div>
                     <input type="hidden" name="video_url" value="{{ draft.video_url }}">
                 {% endif %}
-                {% if not image_urls and not draft.video_url %}
+                {% if not image_urls and not draft.videos and not draft.video_url %}
                     <div class="no-image">Dieser Entwurf enthält keine Bilder oder Videos.</div>
                 {% endif %}
             </section>

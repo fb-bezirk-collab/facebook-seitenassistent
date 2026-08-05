@@ -58,6 +58,15 @@
                     <article class="draft">
                         {% if draft.images %}
                             <img class="thumb" src="/{{ draft.images[0] }}" alt="Vorschaubild">
+                        {% elif draft.videos %}
+                            {% set first_video = draft.videos[0] %}
+                            {% if first_video.startswith('http://') or first_video.startswith('https://') %}
+                                <video class="thumb" src="{{ first_video }}" preload="metadata" muted></video>
+                            {% elif first_video.startswith('/') %}
+                                <video class="thumb" src="{{ first_video }}" preload="metadata" muted></video>
+                            {% else %}
+                                <video class="thumb" src="/{{ first_video }}" preload="metadata" muted></video>
+                            {% endif %}
                         {% elif draft.video_url %}
                             <a class="thumb placeholder" href="{{ draft.video_url }}" target="_blank" rel="noopener noreferrer">🎥 Video öffnen</a>
                         {% else %}
@@ -66,7 +75,7 @@
                         <div>
                             <h2>{{ draft.title }}</h2>
                             <p class="preview">{{ draft.text[:180] }}{% if draft.text|length > 180 %}…{% endif %}</p>
-                            <p class="meta">Zuletzt geändert: {{ draft.updated_at[:16].replace('T', ' ') }} Uhr · {{ draft.images|length }} Bild(er) · {% if draft.video_url %}Video-Link{% else %}kein Video{% endif %}</p>
+                            <p class="meta">Zuletzt geändert: {{ draft.updated_at[:16].replace('T', ' ') }} Uhr · {{ draft.images|length }} Bild(er) · {{ draft.videos|length }} lokale(s) Video(s) · {% if draft.video_url %}externer Video-Link{% else %}kein externer Video-Link{% endif %}</p>
                             <p class="meta">{{ publication_counts.get(draft.id, 0) }} Veröffentlichung(en) geplant</p>
                         </div>
                         <div class="actions">
