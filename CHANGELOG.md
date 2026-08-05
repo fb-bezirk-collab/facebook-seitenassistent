@@ -1,3 +1,11 @@
+# Version 2.0.6 – Instagram-Reels
+
+- Einzelne Videodateien werden über Cloudinary als Instagram-Reel veröffentlicht.
+- Facebook-Reel-Links werden mit dem bestehenden Video-Resolver in eine lokale Videodatei aufgelöst.
+- Cloudinary bereitet Videos als MP4/H.264/AAC vor.
+- Instagram-Containerstatus wird bei Videos bis `FINISHED` abgefragt.
+- Größere Videos werden stückweise zu Cloudinary hochgeladen.
+
 # Version 1.5.0 – Mehrfachveröffentlichung
 
 - Mehrere Facebook-Seiten gleichzeitig per Checkbox auswählen.
