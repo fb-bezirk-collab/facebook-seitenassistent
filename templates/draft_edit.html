@@ -580,26 +580,47 @@
 
     function distributeVariants() {
         const selected = selectedAccountCheckboxes();
-        const variantCount = storedVariants().length;
 
         if (!selected.length) {
-            alert('Bitte zuerst mindestens eine Facebook-Seite auswählen.');
+            alert('Bitte zuerst mindestens eine Seite auswählen.');
             return;
         }
 
-        if (!variantCount) {
-            alert('Für diesen Entwurf sind noch keine KI-Varianten gespeichert.');
-            return;
-        }
+        const platformCounters = new Map();
+        let assignedCount = 0;
 
-        selected.forEach((checkbox, index) => {
+        selected.forEach((checkbox) => {
             const select = document.querySelector(
                 `[name="variant_choice__${CSS.escape(checkbox.value)}"]`
             );
-            if (select) {
-                select.value = String((index % variantCount) + 1);
+
+            if (!select) {
+                return;
             }
+
+            const usableOptions = Array.from(select.options).filter(
+                (option) => option.value !== '0'
+            );
+
+            if (!usableOptions.length) {
+                select.value = '0';
+                return;
+            }
+
+            const platform = select.dataset.platform || 'facebook';
+            const platformIndex = platformCounters.get(platform) || 0;
+            const selectedOption = usableOptions[
+                platformIndex % usableOptions.length
+            ];
+
+            select.value = selectedOption.value;
+            platformCounters.set(platform, platformIndex + 1);
+            assignedCount += 1;
         });
+
+        if (!assignedCount) {
+            alert('Für die ausgewählten Seiten stehen keine passenden KI-Varianten zur Verfügung.');
+        }
     }
 
     function toggleTimeDistribution() {
