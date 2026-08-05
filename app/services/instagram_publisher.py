@@ -14,10 +14,12 @@ from app.config import UPLOADS_DIR
 from app.services.instagram_account_service import InstagramAccountService
 from app.services.instagram_config_service import load_instagram_config
 from app.services.instagram_api import InstagramApiError
+from app.services.facebook_downloader import FacebookDownloader
+from app.services.video_resolver import FacebookVideoResolver
 
 
 class InstagramPublisher:
-    """Veröffentlicht Bildbeiträge über die Instagram API mit Instagram Login."""
+    """Veröffentlicht Bildbeiträge und Reels über die Instagram API."""
 
     api_version = "v23.0"
     graph_base_url = "https://graph.instagram.com"
@@ -28,6 +30,10 @@ class InstagramPublisher:
     def __init__(self):
         self.accounts = InstagramAccountService()
         self.config = load_instagram_config()
+        self.video_downloader = FacebookDownloader()
+        self.video_resolver = FacebookVideoResolver(
+            downloader=self.video_downloader
+        )
 
         self.cloudinary_cloud_name = os.getenv(
             "CLOUDINARY_CLOUD_NAME",
@@ -57,21 +63,35 @@ class InstagramPublisher:
             )
 
         if post.video_url or post.videos:
-            raise InstagramApiError(
-                "Instagram-Videos sind in dieser Version noch nicht möglich. "
-                "Instagram benötigt eine öffentlich abrufbare Videodatei; "
-                "ein Facebook-Reel-Link reicht nicht."
+            return self._publish_reel(
+                post=post,
+                instagram_id=instagram_id,
+                caption=caption,
+                access_token=account.access_token,
             )
 
         if not post.images:
             raise InstagramApiError(
-                "Instagram benötigt mindestens ein Bild."
+                "Instagram benötigt mindestens ein Bild oder Video."
             )
 
-        prepared_image = self._prepare_image(
-            post.images[0]
+        return self._publish_image(
+            image_path=post.images[0],
+            instagram_id=instagram_id,
+            caption=caption,
+            access_token=account.access_token,
         )
-        image_url = self._upload_to_cloudinary(
+
+    def _publish_image(
+        self,
+        *,
+        image_path: str,
+        instagram_id: str,
+        caption: str,
+        access_token: str,
+    ) -> str:
+        prepared_image = self._prepare_image(image_path)
+        image_url = self._upload_image_to_cloudinary(
             prepared_image
         )
 
@@ -85,24 +105,101 @@ class InstagramPublisher:
             + image_url,
             flush=True,
         )
-
         print(
             "INSTAGRAM_PUBLISH|CONTAINER_REQUEST|"
             "single_image_form_token",
             flush=True,
         )
 
+        creation_id = self._create_container(
+            instagram_id=instagram_id,
+            payload={
+                "image_url": image_url,
+                "caption": caption.strip(),
+            },
+            access_token=access_token,
+        )
+
+        self._wait_for_container(
+            creation_id=creation_id,
+            access_token=access_token,
+            timeout_seconds=90,
+            interval_seconds=2,
+        )
+
+        return self._publish_container(
+            instagram_id=instagram_id,
+            creation_id=creation_id,
+            access_token=access_token,
+        )
+
+    def _publish_reel(
+        self,
+        *,
+        post,
+        instagram_id: str,
+        caption: str,
+        access_token: str,
+    ) -> str:
+        local_video = self._resolve_video_file(post)
+        video_url = self._upload_video_to_cloudinary(
+            local_video
+        )
+
+        print(
+            "INSTAGRAM_PUBLISH|LOCAL_VIDEO|"
+            + str(local_video),
+            flush=True,
+        )
+        print(
+            "INSTAGRAM_PUBLISH|CLOUDINARY_VIDEO_URL|"
+            + video_url,
+            flush=True,
+        )
+        print(
+            "INSTAGRAM_PUBLISH|CONTAINER_REQUEST|reels",
+            flush=True,
+        )
+
+        creation_id = self._create_container(
+            instagram_id=instagram_id,
+            payload={
+                "media_type": "REELS",
+                "video_url": video_url,
+                "caption": caption.strip(),
+                "share_to_feed": "true",
+            },
+            access_token=access_token,
+        )
+
+        self._wait_for_container(
+            creation_id=creation_id,
+            access_token=access_token,
+            timeout_seconds=600,
+            interval_seconds=5,
+        )
+
+        return self._publish_container(
+            instagram_id=instagram_id,
+            creation_id=creation_id,
+            access_token=access_token,
+        )
+
+    def _create_container(
+        self,
+        *,
+        instagram_id: str,
+        payload: dict,
+        access_token: str,
+    ) -> str:
         container = self._post(
             (
                 f"{self.graph_base_url}/"
                 f"{self.api_version}/"
                 f"{instagram_id}/media"
             ),
-            {
-                "image_url": image_url,
-                "caption": caption.strip(),
-            },
-            account.access_token,
+            payload,
+            access_token,
         )
 
         creation_id = str(
@@ -120,11 +217,15 @@ class InstagramPublisher:
             flush=True,
         )
 
-        self._wait_for_container(
-            creation_id=creation_id,
-            access_token=account.access_token,
-        )
+        return creation_id
 
+    def _publish_container(
+        self,
+        *,
+        instagram_id: str,
+        creation_id: str,
+        access_token: str,
+    ) -> str:
         published = self._post(
             (
                 f"{self.graph_base_url}/"
@@ -134,7 +235,7 @@ class InstagramPublisher:
             {
                 "creation_id": creation_id,
             },
-            account.access_token,
+            access_token,
         )
 
         media_id = str(
@@ -327,35 +428,11 @@ class InstagramPublisher:
             UPLOADS_DIR.parent
         ).as_posix()
 
-    def _upload_to_cloudinary(
+    def _upload_image_to_cloudinary(
         self,
         image_path: str,
     ) -> str:
-        missing_variables = [
-            name
-            for name, value in (
-                (
-                    "CLOUDINARY_CLOUD_NAME",
-                    self.cloudinary_cloud_name,
-                ),
-                (
-                    "CLOUDINARY_API_KEY",
-                    self.cloudinary_api_key,
-                ),
-                (
-                    "CLOUDINARY_API_SECRET",
-                    self.cloudinary_api_secret,
-                ),
-            )
-            if not value
-        ]
-
-        if missing_variables:
-            raise InstagramApiError(
-                "Cloudinary ist nicht vollständig eingerichtet. "
-                "In Railway fehlen folgende Variablen: "
-                + ", ".join(missing_variables)
-            )
+        self._configure_cloudinary()
 
         local_path = self._local_upload_path(
             image_path
@@ -366,13 +443,6 @@ class InstagramPublisher:
                 "Das für Cloudinary vorbereitete Bild "
                 "wurde lokal nicht gefunden."
             )
-
-        cloudinary.config(
-            cloud_name=self.cloudinary_cloud_name,
-            api_key=self.cloudinary_api_key,
-            api_secret=self.cloudinary_api_secret,
-            secure=True,
-        )
 
         try:
             upload_result = cloudinary.uploader.upload(
@@ -418,6 +488,167 @@ class InstagramPublisher:
         )
 
         return secure_url
+
+    def _resolve_video_file(self, post) -> Path:
+        if post.videos:
+            local_path = self._local_upload_path(
+                post.videos[0]
+            )
+
+            if not local_path.exists():
+                raise InstagramApiError(
+                    "Die lokale Videodatei wurde nicht gefunden."
+                )
+
+            return local_path
+
+        video_url = str(post.video_url or "").strip()
+
+        if not video_url:
+            raise InstagramApiError(
+                "Für das Instagram-Reel wurde kein Video gefunden."
+            )
+
+        try:
+            if self._looks_like_direct_video_url(video_url):
+                return self.video_downloader.download_video(
+                    video_url
+                )
+
+            return self.video_resolver.download_from_page(
+                video_url
+            )
+        except Exception as exc:
+            raise InstagramApiError(
+                "Die Videodatei konnte hinter dem gespeicherten "
+                f"Video-Link nicht ermittelt werden: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _looks_like_direct_video_url(url: str) -> bool:
+        clean_url = url.lower().split("?", 1)[0]
+        return clean_url.endswith(
+            (".mp4", ".mov", ".webm", ".m4v")
+        )
+
+    def _upload_video_to_cloudinary(
+        self,
+        local_path: Path,
+    ) -> str:
+        self._configure_cloudinary()
+
+        if not local_path.exists():
+            raise InstagramApiError(
+                "Das für Instagram vorgesehene Video "
+                "wurde lokal nicht gefunden."
+            )
+
+        upload_options = {
+            "folder": "facebook-seitenassistent/instagram-reels",
+            "resource_type": "video",
+            "type": "upload",
+            "overwrite": False,
+            "unique_filename": True,
+            "use_filename": False,
+            "eager": [
+                {
+                    "format": "mp4",
+                    "video_codec": "h264",
+                    "audio_codec": "aac",
+                }
+            ],
+            "eager_async": False,
+        }
+
+        try:
+            if local_path.stat().st_size > 95 * 1024 * 1024:
+                upload_result = cloudinary.uploader.upload_large(
+                    str(local_path),
+                    chunk_size=6 * 1024 * 1024,
+                    **upload_options,
+                )
+            else:
+                upload_result = cloudinary.uploader.upload(
+                    str(local_path),
+                    **upload_options,
+                )
+        except CloudinaryError as exc:
+            raise InstagramApiError(
+                "Das Video konnte nicht zu Cloudinary "
+                f"hochgeladen oder in MP4 umgewandelt werden: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise InstagramApiError(
+                "Beim Cloudinary-Video-Upload ist ein "
+                f"unerwarteter Fehler aufgetreten: {exc}"
+            ) from exc
+
+        eager_results = upload_result.get("eager", [])
+        video_url = ""
+
+        if isinstance(eager_results, list) and eager_results:
+            first_result = eager_results[0]
+            if isinstance(first_result, dict):
+                video_url = str(
+                    first_result.get("secure_url", "")
+                    or first_result.get("url", "")
+                ).strip()
+
+        if not video_url:
+            video_url = str(
+                upload_result.get("secure_url", "")
+            ).strip()
+
+        if not video_url.startswith("https://"):
+            raise InstagramApiError(
+                "Cloudinary hat keine öffentliche "
+                "HTTPS-Videoadresse geliefert."
+            )
+
+        print(
+            "INSTAGRAM_PUBLISH|CLOUDINARY_VIDEO_UPLOAD|"
+            f"public_id={upload_result.get('public_id', '')}|"
+            f"format={upload_result.get('format', '')}|"
+            f"bytes={upload_result.get('bytes', '')}|"
+            f"duration={upload_result.get('duration', '')}",
+            flush=True,
+        )
+
+        return video_url
+
+    def _configure_cloudinary(self) -> None:
+        missing_variables = [
+            name
+            for name, value in (
+                (
+                    "CLOUDINARY_CLOUD_NAME",
+                    self.cloudinary_cloud_name,
+                ),
+                (
+                    "CLOUDINARY_API_KEY",
+                    self.cloudinary_api_key,
+                ),
+                (
+                    "CLOUDINARY_API_SECRET",
+                    self.cloudinary_api_secret,
+                ),
+            )
+            if not value
+        ]
+
+        if missing_variables:
+            raise InstagramApiError(
+                "Cloudinary ist nicht vollständig eingerichtet. "
+                "In Railway fehlen folgende Variablen: "
+                + ", ".join(missing_variables)
+            )
+
+        cloudinary.config(
+            cloud_name=self.cloudinary_cloud_name,
+            api_key=self.cloudinary_api_key,
+            api_secret=self.cloudinary_api_secret,
+            secure=True,
+        )
 
     def _fit_supported_ratio(
         self,
