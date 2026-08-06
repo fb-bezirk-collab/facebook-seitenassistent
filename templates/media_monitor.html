@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>KI-Medienmonitor – Seitenassistent</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f3f5f8; color: #1f2937; }
+        .header { background: #fff; border-bottom: 1px solid #dfe3e8; padding: 20px 0; }
+        .container { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+        h1 { margin: 0 0 6px; }
+        .subtitle { margin: 0; color: #667085; }
+        .nav { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .nav a, .nav button { color: #344054; text-decoration: none; padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; font-weight: 700; cursor: pointer; }
+        .nav a.active { color: #fff; background: #1877f2; border-color: #1877f2; }
+        main { padding: 36px 0; }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+        .toolbar-copy h2 { margin: 0 0 6px; font-size: 28px; }
+        .toolbar-copy p { margin: 0; color: #667085; }
+        .fetch-button { min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #1877f2; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
+        .notice { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; border-radius: 10px; }
+        .filter-bar { display: grid; grid-template-columns: 1.2fr repeat(3, minmax(150px,.5fr)); gap: 12px; margin-bottom: 20px; }
+        input, select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; font-size: 15px; }
+        .table-card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.06); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px 16px; text-align: left; border-bottom: 1px solid #eaecf0; vertical-align: top; }
+        th { background: #f8fafc; color: #475467; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+        .empty { padding: 56px 24px; text-align: center; }
+        .empty-icon { font-size: 44px; margin-bottom: 12px; }
+        .empty h3 { margin: 0 0 8px; font-size: 22px; }
+        .empty p { max-width: 650px; margin: 0 auto; color: #667085; line-height: 1.55; }
+        .phase-note { margin-top: 18px; padding: 16px; border: 1px solid #d6e4ff; background: #f0f5ff; border-radius: 12px; color: #344054; line-height: 1.5; }
+        @media (max-width: 900px) {
+            .header-row, .toolbar { flex-direction: column; align-items: stretch; }
+            .filter-bar { grid-template-columns: 1fr; }
+            .table-card { overflow-x: auto; }
+            table { min-width: 900px; }
+        }
+    </style>
+</head>
+<body>
+<header class="header">
+    <div class="container header-row">
+        <div>
+            <h1>KI-Medienmonitor</h1>
+            <p class="subtitle">Politisch relevante Meldungen prüfen, bewerten und manuell freigeben</p>
+        </div>
+        <nav class="nav">
+            <a href="{{ url_for('startseite') }}">Neuer Beitrag</a>
+            <a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a>
+            <a href="{{ url_for('veroeffentlichungsplanung') }}">Planung</a>
+            <a class="active" href="{{ url_for('medienmonitor') }}">KI-Medienmonitor</a>
+            <a href="/settings">Einstellungen</a>
+            <form method="post" action="/logout" style="margin:0">
+                <button type="submit">Abmelden</button>
+            </form>
+        </nav>
+    </div>
+</header>
+
+<main>
+<div class="container">
+    {% if fetched %}
+        <div class="notice">
+            Der Testabruf wurde erfolgreich ausgelöst ({{ last_test_at }}). Der echte Abruf von Krone, Kurier, Heute und oe24 wird im nächsten Entwicklungsschritt angeschlossen.
+        </div>
+    {% endif %}
+
+    <section class="toolbar">
+        <div class="toolbar-copy">
+            <h2>Offene Meldungen</h2>
+            <p>In Phase 1 werden hier neue Meldungen ab einer Bewertung von 6,5 Punkten angezeigt.</p>
+        </div>
+        <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
+            <button class="fetch-button" type="submit">Medien jetzt abrufen</button>
+        </form>
+    </section>
+
+    <section class="filter-bar" aria-label="Filter">
+        <input type="search" placeholder="Meldungen durchsuchen" disabled>
+        <select disabled>
+            <option>Alle Quellen</option>
+            <option>Krone</option>
+            <option>Kurier</option>
+            <option>Heute</option>
+            <option>oe24</option>
+        </select>
+        <select disabled>
+            <option>Alle Themen</option>
+        </select>
+        <select disabled>
+            <option>Offen</option>
+            <option>Gemerkt</option>
+            <option>Freigegeben</option>
+            <option>Verworfen</option>
+        </select>
+    </section>
+
+    <section class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Quelle / Zeit</th>
+                    <th>Meldung</th>
+                    <th>Kategorie / Region</th>
+                    <th>KI-Bewertung</th>
+                    <th>Begründung</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if items %}
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.source }}</td>
+                            <td>{{ item.title }}</td>
+                            <td>{{ item.category }}</td>
+                            <td>{{ item.score_total }}</td>
+                            <td>{{ item.ai_reason }}</td>
+                            <td>–</td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty">
+                                <div class="empty-icon">📰</div>
+                                <h3>Noch keine Meldungen vorhanden</h3>
+                                <p>Die Oberfläche ist vorbereitet. Mit „Medien jetzt abrufen“ kannst du bereits den technischen Ablauf testen. Die erste echte Quelle wird als Nächstes angebunden.</p>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+
+    <div class="phase-note">
+        <strong>Phase 1:</strong> Die Seite zeigt später nur vorgefilterte Meldungen. Eine automatische Veröffentlichung sowie die Erzeugung von Grafiken und fertigen Beitragstexten sind hier bewusst noch nicht aktiv.
+    </div>
+</div>
+</main>
+</body>
+</html>
