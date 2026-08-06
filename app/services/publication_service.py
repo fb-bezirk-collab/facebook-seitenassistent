@@ -171,6 +171,20 @@ class PublicationService:
         self._save_all(remaining)
         return True
 
+    def delete_many(self, publication_ids: list[str]) -> int:
+        ids = {value for value in publication_ids if value}
+        if not ids:
+            return 0
+
+        items = self._load_all()
+        remaining = [item for item in items if item.id not in ids]
+        deleted_count = len(items) - len(remaining)
+
+        if deleted_count:
+            self._save_all(remaining)
+
+        return deleted_count
+
     def delete_for_post(self, post_id: str) -> None:
         self._save_all([
             item
