@@ -210,7 +210,7 @@ def _group_publications(publications: list) -> list[dict]:
                 "key": day_key,
                 "label": display_datetime.strftime("%d.%m.%Y"),
                 "count": 0,
-                "items": [],
+                "entries": [],
             },
         )
 
@@ -220,7 +220,7 @@ def _group_publications(publications: list) -> list[dict]:
             "display_datetime": display_datetime,
         }
 
-        day["items"].append(row)
+        day["entries"].append(row)
         day["count"] += 1
         month["count"] += 1
 
@@ -232,7 +232,7 @@ def _group_publications(publications: list) -> list[dict]:
 
         for day_key in sorted(month["days"], reverse=True):
             day = month["days"][day_key]
-            day["items"].sort(
+            day["entries"].sort(
                 key=lambda row: row["display_datetime"],
                 reverse=True,
             )
