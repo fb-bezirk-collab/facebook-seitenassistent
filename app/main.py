@@ -40,7 +40,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="2.0.6",
+    version="2.0.8",
     lifespan=lifespan,
 )
 
@@ -133,7 +133,7 @@ app.include_router(media_monitor.router)
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "2.0.6", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "2.0.8", "auth": auth_status()})
 
 
 @app.get("/robots.txt", include_in_schema=False)
