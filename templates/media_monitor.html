@@ -21,6 +21,14 @@
         .toolbar-copy p { margin: 0; color: #667085; }
         .fetch-button { min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #1877f2; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
         .notice { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; border-radius: 10px; }
+        .error-notice { border-color: #fecdca; background: #fef3f2; color: #b42318; }
+        .source-label { display: inline-block; margin-bottom: 6px; padding: 4px 8px; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: 12px; font-weight: 800; }
+        .title-link { color: #101828; text-decoration: none; font-size: 16px; font-weight: 800; line-height: 1.35; }
+        .title-link:hover { color: #1877f2; text-decoration: underline; }
+        .teaser { margin: 7px 0 0; color: #667085; line-height: 1.45; max-width: 520px; }
+        .time-note { color: #667085; font-size: 13px; line-height: 1.5; }
+        .pending-score { color: #667085; font-size: 13px; }
+        .open-link { display: inline-block; color: #1877f2; font-weight: 800; text-decoration: none; white-space: nowrap; }
         .filter-bar { display: grid; grid-template-columns: 1.2fr repeat(3, minmax(150px,.5fr)); gap: 12px; margin-bottom: 20px; }
         input, select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; font-size: 15px; }
         .table-card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.06); overflow: hidden; }
@@ -64,14 +72,20 @@
 <div class="container">
     {% if fetched %}
         <div class="notice">
-            Der Testabruf wurde erfolgreich ausgelöst ({{ last_test_at }}). Der echte Abruf von Krone, Kurier, Heute und oe24 wird im nächsten Entwicklungsschritt angeschlossen.
+            Krone wurde erfolgreich abgerufen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong> Meldung{% if new_count != 1 %}en{% endif %}.
+            Bereits bekannte Meldungen wurden nicht doppelt angelegt.
+        </div>
+    {% endif %}
+    {% if error %}
+        <div class="notice error-notice">
+            <strong>Der Krone-Abruf ist fehlgeschlagen:</strong> {{ error }}
         </div>
     {% endif %}
 
     <section class="toolbar">
         <div class="toolbar-copy">
             <h2>Offene Meldungen</h2>
-            <p>In Phase 1 werden hier neue Meldungen ab einer Bewertung von 6,5 Punkten angezeigt.</p>
+            <p>Aktuell werden echte Meldungen der Kronen Zeitung gesammelt. Die KI-Bewertung folgt im nächsten Schritt.</p>
         </div>
         <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
             <button class="fetch-button" type="submit">Medien jetzt abrufen</button>
@@ -114,12 +128,21 @@
                 {% if items %}
                     {% for item in items %}
                         <tr>
-                            <td>{{ item.source }}</td>
-                            <td>{{ item.title }}</td>
-                            <td>{{ item.category }}</td>
-                            <td>{{ item.score_total }}</td>
+                            <td>
+                                <span class="source-label">{{ item.source }}</span>
+                                <div class="time-note">Veröffentlicht:<br>{{ item.published_display }}</div>
+                            </td>
+                            <td>
+                                <a class="title-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
+                                {% if item.teaser %}<p class="teaser">{{ item.teaser }}</p>{% endif %}
+                            </td>
+                            <td>
+                                {{ item.source_category or item.category }}<br>
+                                <span class="time-note">Region: {{ item.region }}</span>
+                            </td>
+                            <td><span class="pending-score">Noch nicht bewertet</span></td>
                             <td>{{ item.ai_reason }}</td>
-                            <td>–</td>
+                            <td><a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a></td>
                         </tr>
                     {% endfor %}
                 {% else %}
@@ -128,7 +151,7 @@
                             <div class="empty">
                                 <div class="empty-icon">📰</div>
                                 <h3>Noch keine Meldungen vorhanden</h3>
-                                <p>Die Oberfläche ist vorbereitet. Mit „Medien jetzt abrufen“ kannst du bereits den technischen Ablauf testen. Die erste echte Quelle wird als Nächstes angebunden.</p>
+                                <p>Klicke auf „Medien jetzt abrufen“. Der Seitenassistent liest dann die aktuellen Krone-Meldungen ein und speichert neue Einträge dauerhaft.</p>
                             </div>
                         </td>
                     </tr>
@@ -138,7 +161,7 @@
     </section>
 
     <div class="phase-note">
-        <strong>Phase 1:</strong> Die Seite zeigt später nur vorgefilterte Meldungen. Eine automatische Veröffentlichung sowie die Erzeugung von Grafiken und fertigen Beitragstexten sind hier bewusst noch nicht aktiv.
+        <strong>Phase 1 – Krone-Abruf:</strong> Neue Meldungen werden gespeichert und beim nächsten Abruf automatisch als bereits bekannt erkannt. Kurier, Heute, oe24, KI-Bewertung und manuelle Statusaktionen folgen schrittweise. Eine automatische Veröffentlichung ist weiterhin ausgeschlossen.
     </div>
 </div>
 </main>
