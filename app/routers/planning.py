@@ -1,8 +1,9 @@
 from collections import defaultdict
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -21,6 +22,22 @@ post_service = PostService()
 publication_service = PublicationService()
 account_service = SocialAccountService()
 publication_runner = PublicationRunner()
+
+LOCAL_TIMEZONE = ZoneInfo("Europe/Vienna")
+MONTH_NAMES = {
+    1: "Jänner",
+    2: "Februar",
+    3: "März",
+    4: "April",
+    5: "Mai",
+    6: "Juni",
+    7: "Juli",
+    8: "August",
+    9: "September",
+    10: "Oktober",
+    11: "November",
+    12: "Dezember",
+}
 
 
 def _parse_submitted_variants(
@@ -58,7 +75,6 @@ def _parse_submitted_variants(
         })
 
     return variants
-
 
 
 def _distributed_times(
@@ -109,6 +125,7 @@ def _distributed_times(
         for offset in offsets
     ]
 
+
 def _available_texts(post) -> list[dict[str, str]]:
     values = [{
         "title": "Haupttext",
@@ -131,20 +148,114 @@ def _available_texts(post) -> list[dict[str, str]]:
     return values
 
 
+def _to_local_datetime(value: str, *, assume_utc: bool = False) -> datetime | None:
+    """Wandelt gespeicherte ISO-Zeitwerte zuverlässig in Wiener Zeit um."""
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=timezone.utc if assume_utc else LOCAL_TIMEZONE
+        )
+
+    return parsed.astimezone(LOCAL_TIMEZONE)
+
+
+def _publication_display_datetime(publication) -> datetime:
+    """Für veröffentlichte Beiträge gilt der tatsächliche Veröffentlichungszeitpunkt."""
+    if publication.status == "published" and publication.published_at:
+        published = _to_local_datetime(
+            publication.published_at,
+            assume_utc=True,
+        )
+        if published is not None:
+            return published
+
+    planned = _to_local_datetime(publication.publish_at)
+    if planned is not None:
+        return planned
+
+    return datetime.now(LOCAL_TIMEZONE)
+
+
+def _group_publications(publications: list) -> list[dict]:
+    months: dict[str, dict] = {}
+
+    for publication in publications:
+        display_datetime = _publication_display_datetime(publication)
+        month_key = display_datetime.strftime("%Y-%m")
+        day_key = display_datetime.strftime("%Y-%m-%d")
+
+        month = months.setdefault(
+            month_key,
+            {
+                "key": month_key,
+                "label": (
+                    f"{MONTH_NAMES[display_datetime.month]} "
+                    f"{display_datetime.year}"
+                ),
+                "count": 0,
+                "days": {},
+            },
+        )
+
+        day = month["days"].setdefault(
+            day_key,
+            {
+                "key": day_key,
+                "label": display_datetime.strftime("%d.%m.%Y"),
+                "count": 0,
+                "items": [],
+            },
+        )
+
+        row = {
+            "publication": publication,
+            "display_time": display_datetime.strftime("%H:%M"),
+            "display_datetime": display_datetime,
+        }
+
+        day["items"].append(row)
+        day["count"] += 1
+        month["count"] += 1
+
+    result: list[dict] = []
+
+    for month_key in sorted(months, reverse=True):
+        month = months[month_key]
+        days: list[dict] = []
+
+        for day_key in sorted(month["days"], reverse=True):
+            day = month["days"][day_key]
+            day["items"].sort(
+                key=lambda row: row["display_datetime"],
+                reverse=True,
+            )
+            days.append(day)
+
+        month["days"] = days
+        result.append(month)
+
+    return result
+
+
 @router.get("/planning", name="veroeffentlichungsplanung")
 def planning(
     request: Request,
     saved: int = 0,
     deleted: int = 0,
+    deleted_count: int = 0,
     published: int = 0,
     publish_error: str | None = None,
 ):
     publications = publication_service.list_publications()
     posts = {post.id: post for post in post_service.list_posts()}
-    grouped = defaultdict(list)
-
-    for publication in publications:
-        grouped[publication.publish_at[:10]].append(publication)
+    grouped_months = _group_publications(publications)
 
     return templates.TemplateResponse(
         request=request,
@@ -152,12 +263,13 @@ def planning(
         context={
             "publications": publications,
             "posts": posts,
-            "grouped": dict(grouped),
+            "grouped_months": grouped_months,
             "saved": bool(saved),
             "deleted": bool(deleted),
+            "deleted_count": deleted_count,
             "published": bool(published),
             "publish_error": publish_error,
-            "now": datetime.now().isoformat(timespec="minutes"),
+            "now": datetime.now(LOCAL_TIMEZONE).isoformat(timespec="minutes"),
         },
     )
 
@@ -249,7 +361,7 @@ async def publication_create(
         )
 
     if action == "publish_now":
-        publish_at = datetime.now().isoformat(timespec="seconds")
+        publish_at = datetime.now(LOCAL_TIMEZONE).isoformat(timespec="seconds")
     else:
         distribution_enabled = (
             str(form.get("distribute_times", "")).strip() == "1"
@@ -413,7 +525,7 @@ def publication_delete(
     if "/planning" in referer:
         url = (
             str(request.url_for("veroeffentlichungsplanung"))
-            + "?deleted=1"
+            + "?deleted=1&deleted_count=1"
         )
     else:
         url = (
@@ -427,3 +539,34 @@ def publication_delete(
         )
 
     return RedirectResponse(url=url, status_code=303)
+
+
+@router.post("/planning/day/{day_key}/delete")
+def publication_day_delete(
+    request: Request,
+    day_key: str,
+):
+    try:
+        datetime.strptime(day_key, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Ungültiges Datum.",
+        ) from exc
+
+    publication_ids = [
+        publication.id
+        for publication in publication_service.list_publications()
+        if _publication_display_datetime(publication).strftime("%Y-%m-%d")
+        == day_key
+    ]
+
+    deleted_count = publication_service.delete_many(publication_ids)
+
+    return RedirectResponse(
+        url=(
+            str(request.url_for("veroeffentlichungsplanung"))
+            + f"?deleted=1&deleted_count={deleted_count}"
+        ),
+        status_code=303,
+    )
