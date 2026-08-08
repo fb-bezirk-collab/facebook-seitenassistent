@@ -44,9 +44,20 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
     fetched_at = _now_iso()
     new_count = 0
 
+    by_fingerprint = {
+        item.get("fingerprint"): item
+        for item in existing
+        if isinstance(item, dict) and item.get("fingerprint")
+    }
+
     for raw_item in fetched_items:
         fingerprint = _fingerprint(str(raw_item.get("source", "")), str(raw_item.get("url", "")), str(raw_item.get("title", "")))
         if fingerprint in known:
+            # Bereits gespeicherte Artikel nachträglich mit einer inzwischen
+            # ermittelten Veröffentlichungszeit ergänzen.
+            existing_item = by_fingerprint.get(fingerprint)
+            if existing_item and not existing_item.get("published_at") and raw_item.get("published_at"):
+                existing_item["published_at"] = raw_item.get("published_at")
             continue
         item = {
             "id": fingerprint[:16], "fingerprint": fingerprint,
@@ -64,6 +75,7 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
         }
         existing.append(item)
         known.add(fingerprint)
+        by_fingerprint[fingerprint] = item
         new_count += 1
 
     existing.sort(key=lambda item: item.get("published_at") or item.get("fetched_at") or "", reverse=True)

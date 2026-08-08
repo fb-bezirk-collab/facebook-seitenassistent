@@ -8,6 +8,105 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any, Iterable
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
+
+
+LOCAL_TIMEZONE = ZoneInfo("Europe/Vienna")
+
+
+class _ArticleMetaParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.meta: dict[str, str] = {}
+        self.time_values: list[str] = []
+        self.jsonld_blocks: list[str] = []
+        self._in_jsonld = False
+        self._json_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {name.lower(): (value or "") for name, value in attrs}
+        tag = tag.lower()
+        if tag == "meta":
+            key = (attributes.get("property") or attributes.get("name") or attributes.get("itemprop") or "").strip().lower()
+            content = attributes.get("content", "").strip()
+            if key and content and key not in self.meta:
+                self.meta[key] = content
+        elif tag == "time":
+            value = attributes.get("datetime", "").strip()
+            if value:
+                self.time_values.append(value)
+        elif tag == "script" and "ld+json" in attributes.get("type", "").lower():
+            self._in_jsonld = True
+            self._json_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_jsonld:
+            self._json_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "script" and self._in_jsonld:
+            self.jsonld_blocks.append("".join(self._json_parts).strip())
+            self._in_jsonld = False
+            self._json_parts = []
+
+
+def _parse_local_visible_datetime(value: str | None) -> str | None:
+    text = clean_text(value)
+    if not text:
+        return None
+    # Österreichische Medien zeigen Datums-/Zeitangaben typischerweise in Europe/Vienna an.
+    match = re.search(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})\s*[,|–-]?\s*(\d{1,2}):(\d{2})(?!\d)", text)
+    if not match:
+        return None
+    day, month, year, hour, minute = map(int, match.groups())
+    try:
+        parsed = datetime(year, month, day, hour, minute, tzinfo=LOCAL_TIMEZONE)
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def extract_article_published_at(html_text: str) -> str | None:
+    """Extrahiert das Veröffentlichungsdatum robust aus einer Artikelseite.
+
+    Bevorzugt JSON-LD und standardisierte Meta-Tags. Als letzter Fallback
+    wird eine sichtbare österreichische Datums-/Zeitangabe ausgewertet.
+    """
+    parser = _ArticleMetaParser()
+    parser.feed(html_text or "")
+
+    # JSON-LD hat die höchste Priorität.
+    for block in parser.jsonld_blocks:
+        try:
+            parsed = json.loads(block)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for article in iter_jsonld_articles(parsed):
+            published = parse_published(str(article.get("datePublished") or ""))
+            if published:
+                return published
+
+    # Übliche OpenGraph-/Article-/Schema-Metadaten.
+    for key in (
+        "article:published_time",
+        "og:published_time",
+        "datepublished",
+        "date",
+        "publishdate",
+        "publication_date",
+        "parsely-pub-date",
+    ):
+        published = parse_published(parser.meta.get(key))
+        if published:
+            return published
+
+    for value in parser.time_values:
+        published = parse_published(value) or _parse_local_visible_datetime(value)
+        if published:
+            return published
+
+    # Letzter Fallback: sichtbare Angabe wie „08.08.2026, 07:11“.
+    return _parse_local_visible_datetime(html_text)
 
 
 ARTICLE_TYPES = {"article", "newsarticle", "reportagenewsarticle", "analysisnewsarticle", "blogposting"}
