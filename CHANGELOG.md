@@ -1,3 +1,9 @@
+## 2.1.0 – Multi-Source-Medienmonitor
+- Kurier, Heute und oe24 zusätzlich zu Krone eingebunden.
+- Quellen werden unabhängig voneinander abgerufen; ein Einzel-Fehler stoppt den Gesamtabruf nicht.
+- Quellenstatistik im Medienmonitor ergänzt.
+- Gemeinsamer HTML-/JSON-LD-Parser für Medien ohne geeigneten RSS-Feed ergänzt.
+
 # Version 2.0.6 – Instagram-Reels
 
 - Einzelne Videodateien werden über Cloudinary als Instagram-Reel veröffentlicht.
