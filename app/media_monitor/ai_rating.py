@@ -48,21 +48,88 @@ def _extract_output_text(data: dict[str, Any]) -> str:
     direct = data.get("output_text")
     if isinstance(direct, str) and direct.strip():
         return direct.strip()
+
     parts: list[str] = []
     for output in data.get("output", []):
         if not isinstance(output, dict):
             continue
         for content in output.get("content", []):
-            if isinstance(content, dict) and isinstance(content.get("text"), str):
-                parts.append(content["text"].strip())
+            if not isinstance(content, dict):
+                continue
+            # Responses API liefert Text typischerweise in content[].text.
+            text = content.get("text")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+            elif isinstance(text, dict):
+                value = text.get("value")
+                if isinstance(value, str) and value.strip():
+                    parts.append(value.strip())
     return "\n".join(part for part in parts if part).strip()
 
+
+def _response_refusal(data: dict[str, Any]) -> str:
+    for output in data.get("output", []):
+        if not isinstance(output, dict):
+            continue
+        for content in output.get("content", []):
+            if isinstance(content, dict) and content.get("type") == "refusal":
+                refusal = content.get("refusal")
+                if isinstance(refusal, str) and refusal.strip():
+                    return refusal.strip()
+    return ""
+
+
+def _response_incomplete_reason(data: dict[str, Any]) -> str:
+    details = data.get("incomplete_details")
+    if isinstance(details, dict):
+        reason = details.get("reason")
+        if isinstance(reason, str):
+            return reason.strip()
+    return ""
 
 def _clamp_score(value: Any) -> float:
     try:
         return max(0.0, min(10.0, float(value)))
     except (TypeError, ValueError):
         return 0.0
+
+
+RATING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ratings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "political": {"type": "number", "minimum": 0, "maximum": 10},
+                    "people": {"type": "number", "minimum": 0, "maximum": 10},
+                    "profile": {"type": "number", "minimum": 0, "maximum": 10},
+                    "social": {"type": "number", "minimum": 0, "maximum": 10},
+                    "interest": {"type": "number", "minimum": 0, "maximum": 10},
+                    "reliable": {"type": "number", "minimum": 0, "maximum": 10},
+                    "total": {"type": "number", "minimum": 0, "maximum": 10},
+                    "categories": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "region": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "show": {"type": "boolean"}
+                },
+                "required": [
+                    "id", "political", "people", "profile", "social", "interest",
+                    "reliable", "total", "categories", "region", "summary", "reason", "show"
+                ],
+                "additionalProperties": False
+            }
+        }
+    },
+    "required": ["ratings"],
+    "additionalProperties": False
+}
 
 
 def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -91,6 +158,14 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             {"role": "developer", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps({"items": compact_items}, ensure_ascii=False)},
         ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "media_monitor_ratings",
+                "strict": True,
+                "schema": RATING_SCHEMA,
+            }
+        },
         "max_output_tokens": max(1800, min(7000, len(items) * 360)),
     }
 
@@ -112,12 +187,31 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         raise MediaRatingError(f"OpenAI-Fehler: {message or response.text.strip() or response.status_code}")
 
     try:
-        raw = _extract_output_text(response.json()).strip()
-        if raw.startswith("```"):
-            raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = response.json()
+    except ValueError as exc:
+        raise MediaRatingError("OpenAI hat keine gültige JSON-Antwort geliefert.") from exc
+
+    refusal = _response_refusal(data)
+    if refusal:
+        raise MediaRatingError(f"OpenAI hat die Bewertung abgelehnt: {refusal}")
+
+    incomplete_reason = _response_incomplete_reason(data)
+    raw = _extract_output_text(data).strip()
+    if not raw:
+        if incomplete_reason:
+            raise MediaRatingError(f"Die KI-Antwort war unvollständig ({incomplete_reason}).")
+        raise MediaRatingError("Die KI-Antwort enthielt keinen auswertbaren Text.")
+
+    if raw.startswith("```"):
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+
+    try:
         parsed = json.loads(raw)
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise MediaRatingError("Die KI-Bewertung konnte nicht gelesen werden.") from exc
+    except json.JSONDecodeError as exc:
+        preview = raw[:180].replace("\n", " ")
+        raise MediaRatingError(
+            f"Die KI-Bewertung war kein gültiges JSON. Antwortbeginn: {preview}"
+        ) from exc
 
     ratings = parsed.get("ratings", []) if isinstance(parsed, dict) else []
     result: dict[str, dict[str, Any]] = {}
