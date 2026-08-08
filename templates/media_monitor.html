@@ -76,16 +76,25 @@
 <div class="container">
     {% if fetched %}
         <div class="notice">
-            Krone wurde erfolgreich abgerufen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong>.
+            Medienabruf abgeschlossen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong>.
             Regelbasiert ausgefiltert: <strong>{{ excluded_count }}</strong>. KI-bewertet: <strong>{{ rated_count }}</strong>.
             Davon ab 6,5 Punkten sichtbar: <strong>{{ visible_count }}</strong>.
+            {% if source_results %}
+                <div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap">
+                    {% for result in source_results %}
+                        <span><strong>{{ result.source }}:</strong>
+                            {% if result.error %}Fehler{% else %}{{ result.new_count }} neu ({{ result.fetched_count }} gelesen){% endif %}
+                        </span>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
     {% endif %}
     {% if warning %}
         <div class="notice warning-notice"><strong>Der Abruf war erfolgreich, aber die KI-Bewertung nicht vollständig:</strong> {{ warning }}</div>
     {% endif %}
     {% if error %}
-        <div class="notice error-notice"><strong>Der Krone-Abruf ist fehlgeschlagen:</strong> {{ error }}</div>
+        <div class="notice error-notice"><strong>Der Medienabruf ist fehlgeschlagen:</strong> {{ error }}</div>
     {% endif %}
 
     <section class="toolbar">
@@ -160,7 +169,7 @@
                             <div class="empty">
                                 <div class="empty-icon">📰</div>
                                 <h3>Noch keine Meldungen vorhanden</h3>
-                                <p>Klicke auf „Medien jetzt abrufen“. Der Seitenassistent liest dann die aktuellen Krone-Meldungen ein und speichert neue Einträge dauerhaft.</p>
+                                <p>Klicke auf „Medien jetzt abrufen“. Der Seitenassistent liest dann aktuelle Meldungen von Krone, Kurier, Heute und oe24 ein und speichert neue Einträge dauerhaft.</p>
                             </div>
                         </td>
                     </tr>
