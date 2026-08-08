@@ -6,7 +6,7 @@ from app.media_monitor.prefilter import classify_item
 from app.media_monitor.storage import merge_fetched_items, save_items
 
 
-AI_BATCH_SIZE = 20
+AI_BATCH_SIZE = 5
 
 
 def _apply_prefilter(items: list[dict]) -> tuple[int, list[dict]]:

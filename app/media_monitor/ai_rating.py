@@ -158,7 +158,9 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             {"role": "developer", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps({"items": compact_items}, ensure_ascii=False)},
         ],
+        "reasoning": {"effort": "minimal"},
         "text": {
+            "verbosity": "low",
             "format": {
                 "type": "json_schema",
                 "name": "media_monitor_ratings",
@@ -166,7 +168,9 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "schema": RATING_SCHEMA,
             }
         },
-        "max_output_tokens": max(1800, min(7000, len(items) * 360)),
+        # Kleinere Batches plus großzügiges Limit verhindern abgeschnittene JSON-Antworten.
+        # Bei GPT-5-Modellen zählt auch internes Reasoning in dieses Budget.
+        "max_output_tokens": max(4000, min(8000, len(items) * 1000)),
     }
 
     try:
@@ -197,9 +201,12 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
     incomplete_reason = _response_incomplete_reason(data)
     raw = _extract_output_text(data).strip()
+    if incomplete_reason:
+        preview = raw[:180].replace("\n", " ") if raw else "kein Ausgabetext"
+        raise MediaRatingError(
+            f"Die KI-Antwort war unvollständig ({incomplete_reason}). Antwortbeginn: {preview}"
+        )
     if not raw:
-        if incomplete_reason:
-            raise MediaRatingError(f"Die KI-Antwort war unvollständig ({incomplete_reason}).")
         raise MediaRatingError("Die KI-Antwort enthielt keinen auswertbaren Text.")
 
     if raw.startswith("```"):
