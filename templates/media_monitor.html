@@ -22,6 +22,10 @@
         .fetch-button { min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #1877f2; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
         .notice { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; border-radius: 10px; }
         .error-notice { border-color: #fecdca; background: #fef3f2; color: #b42318; }
+        .warning-notice { border-color: #fedf89; background: #fffaeb; color: #b54708; }
+        .score { display:inline-flex; align-items:center; justify-content:center; min-width:56px; padding:7px 10px; border-radius:999px; background:#ecfdf3; color:#067647; font-weight:900; }
+        .summary { margin:7px 0 0; color:#475467; line-height:1.45; }
+        .view-link { color:#1877f2; font-weight:800; text-decoration:none; }
         .source-label { display: inline-block; margin-bottom: 6px; padding: 4px 8px; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: 12px; font-weight: 800; }
         .title-link { color: #101828; text-decoration: none; font-size: 16px; font-weight: 800; line-height: 1.35; }
         .title-link:hover { color: #1877f2; text-decoration: underline; }
@@ -72,20 +76,23 @@
 <div class="container">
     {% if fetched %}
         <div class="notice">
-            Krone wurde erfolgreich abgerufen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong> Meldung{% if new_count != 1 %}en{% endif %}.
-            Bereits bekannte Meldungen wurden nicht doppelt angelegt.
+            Krone wurde erfolgreich abgerufen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong>.
+            Regelbasiert ausgefiltert: <strong>{{ excluded_count }}</strong>. KI-bewertet: <strong>{{ rated_count }}</strong>.
+            Davon ab 6,5 Punkten sichtbar: <strong>{{ visible_count }}</strong>.
         </div>
     {% endif %}
+    {% if warning %}
+        <div class="notice warning-notice"><strong>Der Abruf war erfolgreich, aber die KI-Bewertung nicht vollständig:</strong> {{ warning }}</div>
+    {% endif %}
     {% if error %}
-        <div class="notice error-notice">
-            <strong>Der Krone-Abruf ist fehlgeschlagen:</strong> {{ error }}
-        </div>
+        <div class="notice error-notice"><strong>Der Krone-Abruf ist fehlgeschlagen:</strong> {{ error }}</div>
     {% endif %}
 
     <section class="toolbar">
         <div class="toolbar-copy">
-            <h2>Offene Meldungen</h2>
-            <p>Aktuell werden echte Meldungen der Kronen Zeitung gesammelt. Die KI-Bewertung folgt im nächsten Schritt.</p>
+            <h2>Politisch brauchbare Meldungen</h2>
+            <p>Sport, Kultur, Lifestyle und ähnliche Ressorts werden zuerst regelbasiert entfernt. Danach zeigt die Standardansicht nur KI-Bewertungen ab 6,5 Punkten.</p>
+            <p style="margin-top:8px"><a class="view-link" href="/media-monitor{% if not show_all %}?show_all=1{% endif %}">{% if show_all %}Nur politisch brauchbare anzeigen{% else %}Alle gespeicherten Meldungen anzeigen ({{ all_count }}){% endif %}</a></p>
         </div>
         <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
             <button class="fetch-button" type="submit">Medien jetzt abrufen</button>
@@ -134,13 +141,15 @@
                             </td>
                             <td>
                                 <a class="title-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
-                                {% if item.teaser %}<p class="teaser">{{ item.teaser }}</p>{% endif %}
+                                {% if item.ai_summary %}<p class="summary"><strong>KI-Kurzfassung:</strong> {{ item.ai_summary }}</p>{% elif item.teaser %}<p class="teaser">{{ item.teaser }}</p>{% endif %}
                             </td>
                             <td>
                                 {{ item.source_category or item.category }}<br>
                                 <span class="time-note">Region: {{ item.region }}</span>
                             </td>
-                            <td><span class="pending-score">Noch nicht bewertet</span></td>
+                            <td>
+                                {% if item.score_total is not none %}<span class="score">{{ "%.1f"|format(item.score_total) }}</span>{% else %}<span class="pending-score">Nicht bewertet</span>{% endif %}
+                            </td>
                             <td>{{ item.ai_reason }}</td>
                             <td><a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a></td>
                         </tr>
@@ -161,7 +170,7 @@
     </section>
 
     <div class="phase-note">
-        <strong>Phase 1 – Krone-Abruf:</strong> Neue Meldungen werden gespeichert und beim nächsten Abruf automatisch als bereits bekannt erkannt. Kurier, Heute, oe24, KI-Bewertung und manuelle Statusaktionen folgen schrittweise. Eine automatische Veröffentlichung ist weiterhin ausgeschlossen.
+        <strong>Phase 1 – zweistufige Filterung:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Standardmäßig erscheinen nur Meldungen ab 6,5 Punkten. Eine automatische Veröffentlichung ist ausgeschlossen.
     </div>
 </div>
 </main>
