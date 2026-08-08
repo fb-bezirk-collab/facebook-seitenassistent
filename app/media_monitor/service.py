@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from app.media_monitor.ai_rating import MediaRatingError, rate_items
-from app.media_monitor.fetchers import fetch_heute, fetch_krone, fetch_kurier, fetch_oe24
+from app.media_monitor.fetchers import (
+    fetch_apa,
+    fetch_exxpress,
+    fetch_heute,
+    fetch_kleine,
+    fetch_krone,
+    fetch_kurier,
+    fetch_noen,
+    fetch_oe24,
+    fetch_orf,
+    fetch_presse,
+    fetch_sn,
+    fetch_standard,
+)
 from app.media_monitor.prefilter import classify_item
 from app.media_monitor.storage import load_items, merge_fetched_items, save_items
 
@@ -12,6 +25,14 @@ SOURCE_FETCHERS = (
     ("Kurier", fetch_kurier),
     ("Heute", fetch_heute),
     ("oe24", fetch_oe24),
+    ("ORF", fetch_orf),
+    ("Der Standard", fetch_standard),
+    ("Die Presse", fetch_presse),
+    ("exxpress", fetch_exxpress),
+    ("Salzburger Nachrichten", fetch_sn),
+    ("Kleine Zeitung", fetch_kleine),
+    ("NÖN", fetch_noen),
+    ("APA (öffentlich)", fetch_apa),
 )
 
 
