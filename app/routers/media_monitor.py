@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -28,8 +29,29 @@ def _format_datetime(value: str | None) -> str:
         return "Zeit nicht angegeben"
 
 
+def _decode_source_results(value: str) -> list[dict]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 @router.get("/media-monitor", name="medienmonitor")
-def medienmonitor(request: Request, fetched: int = 0, new: int = 0, excluded: int = 0, rated: int = 0, visible: int = 0, warning: str = "", error: str = "", show_all: int = 0):
+def medienmonitor(
+    request: Request,
+    fetched: int = 0,
+    new: int = 0,
+    excluded: int = 0,
+    rated: int = 0,
+    visible: int = 0,
+    warning: str = "",
+    error: str = "",
+    show_all: int = 0,
+    sources: str = "",
+):
     all_items = load_items()
     items = all_items if show_all else [item for item in all_items if item.get("visibility") == "visible"]
     for item in items:
@@ -39,10 +61,17 @@ def medienmonitor(request: Request, fetched: int = 0, new: int = 0, excluded: in
         request=request,
         name="media_monitor.html",
         context={
-            "items": items, "all_count": len(all_items), "show_all": bool(show_all),
-            "fetched": bool(fetched), "new_count": max(0, new), "excluded_count": max(0, excluded),
-            "rated_count": max(0, rated), "visible_count": max(0, visible),
-            "warning": warning, "error": error,
+            "items": items,
+            "all_count": len(all_items),
+            "show_all": bool(show_all),
+            "fetched": bool(fetched),
+            "new_count": max(0, new),
+            "excluded_count": max(0, excluded),
+            "rated_count": max(0, rated),
+            "visible_count": max(0, visible),
+            "warning": warning,
+            "error": error,
+            "source_results": _decode_source_results(sources),
             "last_fetch_at": datetime.now(LOCAL_TIMEZONE).strftime("%d.%m.%Y, %H:%M Uhr") if fetched or error else None,
         },
     )
@@ -53,13 +82,15 @@ def medienmonitor_abrufen():
     try:
         result = fetch_current_media()
     except Exception as exc:
-        message = str(exc).strip() or "Unbekannter Fehler beim Krone-Abruf."
+        message = str(exc).strip() or "Unbekannter Fehler beim Medienabruf."
         print(f"Fehler im KI-Medienmonitor: {exc}", flush=True)
         return RedirectResponse(url="/media-monitor?error=" + quote(message, safe=""), status_code=303)
 
+    sources_json = json.dumps(result.get("source_results", []), ensure_ascii=False, separators=(",", ":"))
     params = (
         f"fetched=1&new={result['new_count']}&excluded={result['excluded_count']}"
         f"&rated={result['rated_count']}&visible={result['visible_count']}"
+        f"&sources={quote(sources_json, safe='')}"
     )
     if result["rating_error"]:
         params += "&warning=" + quote(result["rating_error"], safe="")
