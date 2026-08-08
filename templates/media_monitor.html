@@ -74,9 +74,11 @@
 
 <main>
 <div class="container">
-    {% if fetched %}
+    {% if job_running %}
+        <div class="notice warning-notice"><strong>Medienabruf läuft.</strong> Die Quellen werden im Hintergrund eingelesen und anschließend von der KI bewertet. Diese Seite aktualisiert sich automatisch.</div>
+    {% elif job_success %}
         <div class="notice">
-            Medienabruf abgeschlossen ({{ last_fetch_at }}). Neu gespeichert: <strong>{{ new_count }}</strong>.
+            Medienabruf abgeschlossen{% if last_fetch_at %} ({{ last_fetch_at }}){% endif %}. Neu gespeichert: <strong>{{ new_count }}</strong>.
             Regelbasiert ausgefiltert: <strong>{{ excluded_count }}</strong>. KI-bewertet: <strong>{{ rated_count }}</strong>.
             Davon ab 6,5 Punkten sichtbar: <strong>{{ visible_count }}</strong>.
             {% if source_results %}
@@ -89,12 +91,14 @@
                 </div>
             {% endif %}
         </div>
+    {% elif job_error %}
+        <div class="notice error-notice"><strong>Der Medienabruf ist fehlgeschlagen:</strong> {{ error }}</div>
+    {% endif %}
+    {% if already_running %}
+        <div class="notice warning-notice">Ein Medienabruf läuft bereits. Bitte kurz warten.</div>
     {% endif %}
     {% if warning %}
         <div class="notice warning-notice"><strong>Der Abruf war erfolgreich, aber die KI-Bewertung nicht vollständig:</strong> {{ warning }}</div>
-    {% endif %}
-    {% if error %}
-        <div class="notice error-notice"><strong>Der Medienabruf ist fehlgeschlagen:</strong> {{ error }}</div>
     {% endif %}
 
     <section class="toolbar">
@@ -104,7 +108,7 @@
             <p style="margin-top:8px"><a class="view-link" href="/media-monitor{% if not show_all %}?show_all=1{% endif %}">{% if show_all %}Nur politisch brauchbare anzeigen{% else %}Alle gespeicherten Meldungen anzeigen ({{ all_count }}){% endif %}</a></p>
         </div>
         <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
-            <button class="fetch-button" type="submit">Medien jetzt abrufen</button>
+            <button class="fetch-button" type="submit" {% if job_running %}disabled style="opacity:.6;cursor:not-allowed"{% endif %}>{% if job_running %}Abruf läuft …{% else %}Medien jetzt abrufen{% endif %}</button>
         </form>
     </section>
 
@@ -191,5 +195,10 @@
     </div>
 </div>
 </main>
+{% if job_running %}
+<script>
+    window.setTimeout(function () { window.location.reload(); }, 5000);
+</script>
+{% endif %}
 </body>
 </html>
