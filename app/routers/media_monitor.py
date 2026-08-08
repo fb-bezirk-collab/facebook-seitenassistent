@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
-from app.media_monitor.service import fetch_current_media
+from app.media_monitor.job import load_status, mark_started, run_fetch_job
 from app.media_monitor.storage import load_items
 
 
@@ -29,34 +27,18 @@ def _format_datetime(value: str | None) -> str:
         return "Zeit nicht angegeben"
 
 
-def _decode_source_results(value: str) -> list[dict]:
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-    except (TypeError, json.JSONDecodeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
-
-
 @router.get("/media-monitor", name="medienmonitor")
-def medienmonitor(
-    request: Request,
-    fetched: int = 0,
-    new: int = 0,
-    excluded: int = 0,
-    rated: int = 0,
-    visible: int = 0,
-    warning: str = "",
-    error: str = "",
-    show_all: int = 0,
-    sources: str = "",
-):
+def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already_running: int = 0):
     all_items = load_items()
     items = all_items if show_all else [item for item in all_items if item.get("visibility") == "visible"]
     for item in items:
         item["published_display"] = _format_datetime(item.get("published_at"))
         item["fetched_display"] = _format_datetime(item.get("fetched_at"))
+
+    job = load_status()
+    state = str(job.get("state", "idle"))
+    finished_at = _format_datetime(job.get("finished_at")) if job.get("finished_at") else None
+
     return templates.TemplateResponse(
         request=request,
         name="media_monitor.html",
@@ -64,34 +46,26 @@ def medienmonitor(
             "items": items,
             "all_count": len(all_items),
             "show_all": bool(show_all),
-            "fetched": bool(fetched),
-            "new_count": max(0, new),
-            "excluded_count": max(0, excluded),
-            "rated_count": max(0, rated),
-            "visible_count": max(0, visible),
-            "warning": warning,
-            "error": error,
-            "source_results": _decode_source_results(sources),
-            "last_fetch_at": datetime.now(LOCAL_TIMEZONE).strftime("%d.%m.%Y, %H:%M Uhr") if fetched or error else None,
+            "job_running": state == "running",
+            "job_success": state == "success",
+            "job_error": state == "error",
+            "job_started": bool(started),
+            "already_running": bool(already_running),
+            "new_count": max(0, int(job.get("new_count", 0) or 0)),
+            "excluded_count": max(0, int(job.get("excluded_count", 0) or 0)),
+            "rated_count": max(0, int(job.get("rated_count", 0) or 0)),
+            "visible_count": max(0, int(job.get("visible_count", 0) or 0)),
+            "warning": str(job.get("warning", "") or ""),
+            "error": str(job.get("error", "") or ""),
+            "source_results": job.get("source_results", []) if isinstance(job.get("source_results"), list) else [],
+            "last_fetch_at": finished_at,
         },
     )
 
 
 @router.post("/media-monitor/fetch", name="medienmonitor_abrufen")
-def medienmonitor_abrufen():
-    try:
-        result = fetch_current_media()
-    except Exception as exc:
-        message = str(exc).strip() or "Unbekannter Fehler beim Medienabruf."
-        print(f"Fehler im KI-Medienmonitor: {exc}", flush=True)
-        return RedirectResponse(url="/media-monitor?error=" + quote(message, safe=""), status_code=303)
-
-    sources_json = json.dumps(result.get("source_results", []), ensure_ascii=False, separators=(",", ":"))
-    params = (
-        f"fetched=1&new={result['new_count']}&excluded={result['excluded_count']}"
-        f"&rated={result['rated_count']}&visible={result['visible_count']}"
-        f"&sources={quote(sources_json, safe='')}"
-    )
-    if result["rating_error"]:
-        params += "&warning=" + quote(result["rating_error"], safe="")
-    return RedirectResponse(url="/media-monitor?" + params, status_code=303)
+def medienmonitor_abrufen(background_tasks: BackgroundTasks):
+    if not mark_started():
+        return RedirectResponse(url="/media-monitor?already_running=1", status_code=303)
+    background_tasks.add_task(run_fetch_job)
+    return RedirectResponse(url="/media-monitor?started=1", status_code=303)
