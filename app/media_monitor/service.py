@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from app.media_monitor.ai_rating import MediaRatingError, rate_items
-from app.media_monitor.fetchers.krone import fetch_krone
+from app.media_monitor.fetchers import fetch_heute, fetch_krone, fetch_kurier, fetch_oe24
 from app.media_monitor.prefilter import classify_item
-from app.media_monitor.storage import merge_fetched_items, save_items
+from app.media_monitor.storage import load_items, merge_fetched_items, save_items
 
 
 AI_BATCH_SIZE = 5
+SOURCE_FETCHERS = (
+    ("Krone", fetch_krone),
+    ("Kurier", fetch_kurier),
+    ("Heute", fetch_heute),
+    ("oe24", fetch_oe24),
+)
 
 
 def _apply_prefilter(items: list[dict]) -> tuple[int, list[dict]]:
@@ -71,16 +77,54 @@ def _apply_ratings(items: list[dict], candidates: list[dict]) -> tuple[int, int,
 
 
 def fetch_current_media() -> dict:
-    fetched = fetch_krone()
-    items, new_count = merge_fetched_items(fetched)
+    source_results: list[dict] = []
+    total_new = 0
+    successful_sources = 0
+
+    # Jede Quelle läuft unabhängig. Ein Fehler bei einer Seite blockiert die anderen nicht.
+    for source_name, fetcher in SOURCE_FETCHERS:
+        try:
+            fetched = fetcher()
+            _, new_count = merge_fetched_items(fetched)
+            total_new += new_count
+            successful_sources += 1
+            source_results.append({
+                "source": source_name,
+                "fetched_count": len(fetched),
+                "new_count": new_count,
+                "error": "",
+            })
+        except Exception as exc:
+            message = str(exc).strip() or "Unbekannter Abruffehler."
+            print(f"Fehler beim Abruf von {source_name}: {exc}", flush=True)
+            source_results.append({
+                "source": source_name,
+                "fetched_count": 0,
+                "new_count": 0,
+                "error": message,
+            })
+
+    if successful_sources == 0:
+        details = "; ".join(f"{entry['source']}: {entry['error']}" for entry in source_results)
+        raise RuntimeError("Keine Medienquelle konnte abgerufen werden. " + details)
+
+    items = load_items()
     excluded_count, candidates = _apply_prefilter(items)
     rated_count, visible_count, rating_error = _apply_ratings(items, candidates)
     save_items(items)
+
+    source_errors = [entry for entry in source_results if entry["error"]]
+    source_warning = " | ".join(
+        f"{entry['source']}: {entry['error']}" for entry in source_errors
+    )
+    warnings = [message for message in (source_warning, rating_error) if message]
+
     return {
         "items": items,
-        "new_count": new_count,
+        "new_count": total_new,
         "excluded_count": excluded_count,
         "rated_count": rated_count,
         "visible_count": visible_count,
-        "rating_error": rating_error,
+        "rating_error": " | ".join(warnings),
+        "source_results": source_results,
     }
