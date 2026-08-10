@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 from playwright.sync_api import sync_playwright
 
@@ -71,6 +71,17 @@ class FacebookImporter:
 
                 text = self._extract_article_text(post)
                 cookies = self._cookies_as_dict(context)
+
+                # Bei Mehrbild-Beiträgen lädt Facebook auf der Permalink-Seite
+                # oft nur Vorschaubilder. Deshalb werden zusätzlich die Foto-Links
+                # des Hauptbeitrags geöffnet und dort die eigentlichen Bilder
+                # eingesammelt.
+                photo_page_images = self._collect_multi_photo_images(
+                    context,
+                    post,
+                    base_url=final_url,
+                )
+                image_urls.update(photo_page_images)
 
                 local_images = self._download_images(
                     self._filter_post_images(image_urls),
@@ -429,6 +440,99 @@ class FacebookImporter:
         normalized_fallback = self._normalize_external_url(fallback)
         return normalized_fallback
 
+
+    def _collect_multi_photo_images(self, context, post, *, base_url: str) -> set[str]:
+        """Sammelt Bilder aus Facebook-Mehrbildbeiträgen.
+
+        Facebook rendert bei Beiträgen mit mehreren Fotos nicht zwingend alle
+        Originalbilder direkt auf der Permalink-Seite. Im Hauptbeitrag enthaltene
+        Foto-Links werden deshalb einzeln in einem zusätzlichen Tab geöffnet. Dort
+        werden sowohl ``og:image`` als auch geladene fbcdn-Bildressourcen erfasst.
+        """
+        photo_links: list[str] = []
+        try:
+            hrefs = post.locator("a[href]").evaluate_all(
+                """links => links.map(link => link.href || link.getAttribute('href') || '')"""
+            )
+        except Exception:
+            hrefs = []
+
+        seen_links: set[str] = set()
+        for href in hrefs:
+            if not isinstance(href, str) or not href.strip():
+                continue
+            absolute = urljoin(base_url, href.strip())
+            lowered = absolute.lower()
+            if not (
+                "/photo/" in lowered
+                or "/photos/" in lowered
+                or "photo.php" in lowered
+                or "set=pcb." in lowered
+            ):
+                continue
+            # Facebook hängt teils denselben Foto-Link mehrfach in den Beitrag.
+            if absolute in seen_links:
+                continue
+            seen_links.add(absolute)
+            photo_links.append(absolute)
+            if len(photo_links) >= 12:
+                break
+
+        if len(photo_links) <= 1:
+            return set()
+
+        result: set[str] = set()
+        viewer = context.new_page()
+        try:
+            for photo_url in photo_links:
+                page_images: set[str] = set()
+
+                def collect_response(response) -> None:
+                    try:
+                        response_url = response.url
+                        if (
+                            response.request.resource_type == "image"
+                            and "fbcdn.net" in response_url
+                        ):
+                            page_images.add(response_url)
+                    except Exception:
+                        pass
+
+                viewer.on("response", collect_response)
+                try:
+                    viewer.goto(photo_url, wait_until="domcontentloaded", timeout=45_000)
+                    viewer.wait_for_timeout(1_500)
+
+                    for selector in (
+                        "meta[property='og:image']",
+                        "meta[name='twitter:image']",
+                    ):
+                        try:
+                            value = viewer.locator(selector).first.get_attribute("content")
+                            if value and "fbcdn.net" in value:
+                                page_images.add(value)
+                        except Exception:
+                            pass
+
+                    filtered = self._filter_post_images(page_images, allow_large_unknown=True)
+                    if filtered:
+                        # Pro Foto-Seite nur den ersten plausiblen Bildpfad übernehmen;
+                        # weitere Netzwerkbilder sind meist Avatare oder UI-Elemente.
+                        result.add(filtered[0])
+                except Exception as error:
+                    print("Mehrbild-Foto konnte nicht geöffnet werden:")
+                    print(photo_url)
+                    print(error)
+                finally:
+                    try:
+                        viewer.remove_listener("response", collect_response)
+                    except Exception:
+                        pass
+        finally:
+            viewer.close()
+
+        return result
+
     def _download_images(
         self,
         image_urls: list[str],
@@ -437,8 +541,16 @@ class FacebookImporter:
         referer: str,
     ) -> list[str]:
         local_images: list[str] = []
+        seen_paths: set[str] = set()
         for image_url in image_urls:
             try:
+                # Unterschiedliche Facebook-CDN-URLs können dasselbe Bild mit
+                # anderen Signaturparametern enthalten. Der Pfad ist dabei stabil.
+                image_key = urlparse(image_url).path
+                if image_key in seen_paths:
+                    continue
+                seen_paths.add(image_key)
+
                 image_path = self.downloader.download_image(
                     image_url,
                     cookies=cookies,
@@ -478,7 +590,11 @@ class FacebookImporter:
         return cleaned
 
     @staticmethod
-    def _filter_post_images(image_urls: set[str]) -> list[str]:
+    def _filter_post_images(
+        image_urls: set[str],
+        *,
+        allow_large_unknown: bool = False,
+    ) -> list[str]:
         possible_post_images: list[str] = []
         for image_url in image_urls:
             url_lower = image_url.lower()
@@ -510,6 +626,13 @@ class FacebookImporter:
                 "p1200x1200", "mx1200x1200", "mx2048x2048",
             )
             if any(marker in url_lower for marker in large_image_markers):
+                possible_post_images.append(image_url)
+                continue
+
+            if allow_large_unknown:
+                # Auf Foto-Einzelseiten enthält ``og:image`` häufig die volle
+                # CDN-Adresse ohne die sonst üblichen p720x720-/p1080x1080-Marker.
+                # Kleine Avatar-/Icon-Größen wurden oben bereits ausgeschlossen.
                 possible_post_images.append(image_url)
 
         return sorted(possible_post_images)
