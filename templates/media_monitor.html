@@ -38,8 +38,14 @@
         .time-note { color: #667085; font-size: 13px; line-height: 1.5; }
         .pending-score { color: #667085; font-size: 13px; }
         .open-link { display: inline-block; color: #1877f2; font-weight: 800; text-decoration: none; white-space: nowrap; }
-        .filter-bar { display: grid; grid-template-columns: 1.2fr repeat(3, minmax(150px,.5fr)); gap: 12px; margin-bottom: 20px; }
+        .filter-bar { display: grid; grid-template-columns: 1.2fr repeat(3, minmax(150px,.5fr)); gap: 12px; margin-bottom: 12px; }
         input, select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; font-size: 15px; }
+        input:focus, select:focus { outline: 2px solid #b2ccff; border-color: #84adff; }
+        .filter-summary { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:0 0 20px; color:#475467; font-size:13px; }
+        .filter-pill { display:inline-flex; align-items:center; gap:5px; padding:6px 9px; border-radius:999px; background:#fff; border:1px solid #eaecf0; }
+        .filter-pill strong { color:#101828; }
+        .no-results-row td { padding: 38px 20px; text-align:center; color:#667085; }
+        .reset-filter { border:0; background:transparent; color:#1877f2; font-weight:800; cursor:pointer; padding:4px 2px; }
         .table-card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.06); overflow: hidden; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 15px 16px; text-align: left; border-bottom: 1px solid #eaecf0; vertical-align: top; }
@@ -119,32 +125,30 @@
     </section>
 
     <section class="filter-bar" aria-label="Filter">
-        <input type="search" placeholder="Meldungen durchsuchen" disabled>
-        <select disabled>
-            <option>Alle Quellen</option>
-            <option>Krone</option>
-            <option>Kurier</option>
-            <option>Heute</option>
-            <option>oe24</option>
-            <option>ORF</option>
-            <option>Der Standard</option>
-            <option>Die Presse</option>
-            <option>exxpress</option>
-            <option>Salzburger Nachrichten</option>
-            <option>Kleine Zeitung</option>
-            <option>NÖN</option>
-            <option>APA (öffentlich)</option>
+        <input id="media-search" type="search" placeholder="Meldungen durchsuchen" autocomplete="off" aria-label="Meldungen durchsuchen">
+        <select id="source-filter" aria-label="Quelle filtern">
+            <option value="">Alle Quellen</option>
         </select>
-        <select disabled>
-            <option>Alle Themen</option>
+        <select id="topic-filter" aria-label="Thema filtern">
+            <option value="">Alle Themen</option>
         </select>
-        <select disabled>
-            <option>Offen</option>
-            <option>Gemerkt</option>
-            <option>Freigegeben</option>
-            <option>Verworfen</option>
+        <select id="status-filter" aria-label="Status filtern">
+            <option value="open">Offen</option>
+            <option value="saved">Gemerkt</option>
+            <option value="approved">Freigegeben</option>
+            <option value="rejected">Verworfen</option>
+            <option value="trend:trending">🔥 Trending</option>
+            <option value="trend:breaking">🚨 Breaking</option>
+            <option value="all">Alle Status</option>
         </select>
     </section>
+    <div class="filter-summary" aria-live="polite">
+        <span class="filter-pill"><strong id="result-count">{{ items|length }}</strong> Treffer</span>
+        <span class="filter-pill"><strong id="source-count">0</strong> Quellen</span>
+        <span class="filter-pill"><strong id="trending-count">0</strong> Trending</span>
+        <span class="filter-pill"><strong id="breaking-count">0</strong> Breaking</span>
+        <button id="reset-filters" class="reset-filter" type="button">Filter zurücksetzen</button>
+    </div>
 
     <section class="table-card">
         <table>
@@ -161,7 +165,12 @@
             <tbody>
                 {% if items %}
                     {% for item in items %}
-                        <tr>
+                        <tr class="media-row"
+                            data-source="{{ item.source|e }}"
+                            data-status="{{ item.status or 'new' }}"
+                            data-trend="{{ item.trend_level or '' }}"
+                            data-topics="{{ ((item.categories or []) + [item.category or '', item.source_category or ''])|join('||')|e }}"
+                            data-search="{{ (item.title ~ ' ' ~ (item.ai_summary or '') ~ ' ' ~ (item.teaser or '') ~ ' ' ~ (item.ai_reason or '') ~ ' ' ~ (item.region or '') ~ ' ' ~ (item.source or '') ~ ' ' ~ ((item.categories or [])|join(' ')) ~ ' ' ~ (item.category or '') ~ ' ' ~ (item.source_category or ''))|e }}">
                             <td>
                                 <span class="source-label">{{ item.source }}</span>
                                 <div class="time-note">Veröffentlicht:<br>{{ item.published_display }}</div>
@@ -203,6 +212,9 @@
                         </td>
                     </tr>
                 {% endif %}
+                <tr id="no-filter-results" class="no-results-row" hidden>
+                    <td colspan="6">Keine Meldung entspricht den gewählten Filtern.</td>
+                </tr>
             </tbody>
         </table>
     </section>
@@ -212,6 +224,103 @@
     </div>
 </div>
 </main>
+<script>
+(function () {
+    const rows = Array.from(document.querySelectorAll('.media-row'));
+    const search = document.getElementById('media-search');
+    const sourceFilter = document.getElementById('source-filter');
+    const topicFilter = document.getElementById('topic-filter');
+    const statusFilter = document.getElementById('status-filter');
+    const resetButton = document.getElementById('reset-filters');
+    const noResults = document.getElementById('no-filter-results');
+    const resultCount = document.getElementById('result-count');
+    const sourceCount = document.getElementById('source-count');
+    const trendingCount = document.getElementById('trending-count');
+    const breakingCount = document.getElementById('breaking-count');
+
+    const normalize = (value) => (value || '').toLocaleLowerCase('de-AT').trim();
+
+    const sources = new Map();
+    const topics = new Map();
+    rows.forEach((row) => {
+        const source = (row.dataset.source || '').trim();
+        if (source) sources.set(source, (sources.get(source) || 0) + 1);
+        (row.dataset.topics || '').split('||').map(v => v.trim()).filter(Boolean).forEach((topic) => {
+            if (topic === 'Noch nicht bewertet' || topic === '–') return;
+            topics.set(topic, (topics.get(topic) || 0) + 1);
+        });
+    });
+
+    Array.from(sources.entries()).sort((a, b) => a[0].localeCompare(b[0], 'de')).forEach(([name, count]) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} (${count})`;
+        sourceFilter.appendChild(option);
+    });
+    Array.from(topics.entries()).sort((a, b) => a[0].localeCompare(b[0], 'de')).forEach(([name, count]) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} (${count})`;
+        topicFilter.appendChild(option);
+    });
+
+    function matchesStatus(row, wanted) {
+        if (wanted === 'all') return true;
+        if (wanted.startsWith('trend:')) return row.dataset.trend === wanted.split(':')[1];
+        const status = (row.dataset.status || 'new').toLowerCase();
+        if (wanted === 'open') return status === 'new' || status === 'open' || status === 'pending';
+        return status === wanted;
+    }
+
+    function applyFilters() {
+        const query = normalize(search.value);
+        const source = sourceFilter.value;
+        const topic = topicFilter.value;
+        const status = statusFilter.value;
+        let visible = 0;
+        const visibleSources = new Set();
+        let visibleTrending = 0;
+        let visibleBreaking = 0;
+
+        rows.forEach((row) => {
+            const searchText = normalize(row.dataset.search);
+            const rowTopics = (row.dataset.topics || '').split('||');
+            const matches = (!query || searchText.includes(query))
+                && (!source || row.dataset.source === source)
+                && (!topic || rowTopics.includes(topic))
+                && matchesStatus(row, status);
+            row.hidden = !matches;
+            if (matches) {
+                visible += 1;
+                if (row.dataset.source) visibleSources.add(row.dataset.source);
+                if (row.dataset.trend === 'trending') visibleTrending += 1;
+                if (row.dataset.trend === 'breaking') visibleBreaking += 1;
+            }
+        });
+
+        resultCount.textContent = visible;
+        sourceCount.textContent = visibleSources.size;
+        trendingCount.textContent = visibleTrending;
+        breakingCount.textContent = visibleBreaking;
+        if (noResults) noResults.hidden = visible !== 0 || rows.length === 0;
+    }
+
+    search.addEventListener('input', applyFilters);
+    sourceFilter.addEventListener('change', applyFilters);
+    topicFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    resetButton.addEventListener('click', function () {
+        search.value = '';
+        sourceFilter.value = '';
+        topicFilter.value = '';
+        statusFilter.value = 'open';
+        applyFilters();
+        search.focus();
+    });
+
+    applyFilters();
+})();
+</script>
 {% if job_running %}
 <script>
     window.setTimeout(function () { window.location.reload(); }, 5000);
