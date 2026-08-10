@@ -580,6 +580,15 @@
         updateSelectionCount();
     }
 
+    function shuffleArray(values) {
+        const result = [...values];
+        for (let index = result.length - 1; index > 0; index -= 1) {
+            const randomIndex = Math.floor(Math.random() * (index + 1));
+            [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+        }
+        return result;
+    }
+
     function distributeVariants() {
         const selected = selectedAccountCheckboxes();
 
@@ -588,36 +597,48 @@
             return;
         }
 
-        const platformCounters = new Map();
-        let assignedCount = 0;
-
+        // Nach Plattform gruppieren, damit Facebook- und Instagram-Varianten
+        // weiterhin nur auf den jeweils passenden Konten landen.
+        const accountsByPlatform = new Map();
         selected.forEach((checkbox) => {
             const select = document.querySelector(
                 `[name="variant_choice__${CSS.escape(checkbox.value)}"]`
             );
-
-            if (!select) {
-                return;
-            }
-
-            const usableOptions = Array.from(select.options).filter(
-                (option) => option.value !== '0'
-            );
-
-            if (!usableOptions.length) {
-                select.value = '0';
-                return;
-            }
+            if (!select) return;
 
             const platform = select.dataset.platform || 'facebook';
-            const platformIndex = platformCounters.get(platform) || 0;
-            const selectedOption = usableOptions[
-                platformIndex % usableOptions.length
-            ];
+            if (!accountsByPlatform.has(platform)) {
+                accountsByPlatform.set(platform, []);
+            }
+            accountsByPlatform.get(platform).push({ checkbox, select });
+        });
 
-            select.value = selectedOption.value;
-            platformCounters.set(platform, platformIndex + 1);
-            assignedCount += 1;
+        let assignedCount = 0;
+
+        accountsByPlatform.forEach((accounts) => {
+            // Sowohl die Seiten als auch die Reihenfolge der Varianten werden bei
+            // jedem Klick neu gemischt. Die anschließende Rundverteilung sorgt
+            // trotzdem dafür, dass die Varianten möglichst gleichmäßig vorkommen.
+            const shuffledAccounts = shuffleArray(accounts);
+            const firstSelect = shuffledAccounts[0]?.select;
+            const usableOptions = firstSelect
+                ? Array.from(firstSelect.options).filter((option) => option.value !== '0')
+                : [];
+            const shuffledOptions = shuffleArray(usableOptions.map((option) => option.value));
+
+            if (!shuffledOptions.length) {
+                shuffledAccounts.forEach(({ select }) => { select.value = '0'; });
+                return;
+            }
+
+            shuffledAccounts.forEach(({ select }, index) => {
+                const optionValue = shuffledOptions[index % shuffledOptions.length];
+                const exists = Array.from(select.options).some(
+                    (option) => option.value === optionValue
+                );
+                select.value = exists ? optionValue : '0';
+                if (exists) assignedCount += 1;
+            });
         });
 
         if (!assignedCount) {
