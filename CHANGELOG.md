@@ -55,3 +55,30 @@
 - Facebook-Videobeiträge werden über den Page-Videos-Endpunkt veröffentlicht.
 - Direkte Videodatei-URLs werden per `file_url` übergeben.
 - Bei Facebook-/Reel-Seitenlinks wird die tatsächliche Videodatei ermittelt, lokal gespeichert und hochgeladen.
+
+## 2.1.1 – Veröffentlichungszeit Heute/oe24
+- Veröffentlichungszeit bei Heute und oe24 wird bei fehlenden Startseiten-Daten direkt aus der Artikelseite gelesen.
+- Unterstützt JSON-LD, article:published_time, weitere Meta-Tags, <time datetime> und sichtbare Datums-/Zeitangaben.
+- Bereits gespeicherte Heute-/oe24-Meldungen ohne Zeit werden beim erneuten Abruf nachträglich ergänzt, sofern sie noch im aktuellen Abruf enthalten sind.
+
+## 2.2.0 – Erweiterte Medienquellen
+- ORF ergänzt (öffentlicher RSS-Newsfeed).
+- Der Standard ergänzt (öffentlicher RSS-Newsroom-Feed).
+- Die Presse ergänzt.
+- exxpress ergänzt.
+- Salzburger Nachrichten ergänzt.
+- Kleine Zeitung ergänzt (Politik, Österreich und Wirtschaft per RSS).
+- NÖN ergänzt.
+- APA ergänzt, beschränkt auf öffentlich sichtbare Top-News auf apa.at.
+- Gemeinsamer RSS-Parser und gemeinsamer Homepage-/Metadaten-Fetcher ergänzt.
+- Unabhängige Fehlerbehandlung pro Quelle beibehalten.
+
+## 2.2.1
+- Medienabruf auf Hintergrundjob umgestellt, um Railway-Upstream-Timeouts bei vielen Quellen zu vermeiden.
+- Statusanzeige und automatisches Neuladen während eines laufenden Abrufs ergänzt.
+
+## 2.3.0
+- APA-Zeitstempel mit zweistelligem Jahr und Sekunden werden erkannt und bei bekannten Artikeln nachgetragen.
+- Medienübergreifende KI-Erkennung für identische konkrete Nachrichtenereignisse ergänzt.
+- Kennzeichnung: 2 Quellen = Mehrere Medien, 3+ binnen 12h = TRENDING, 4+ binnen 6h = BREAKING.
+- Trend-Quellen und kurze Themenbezeichnung werden direkt im Medienmonitor angezeigt.
