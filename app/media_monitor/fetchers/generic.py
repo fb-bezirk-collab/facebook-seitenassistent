@@ -6,7 +6,8 @@ import requests
 
 from app.media_monitor.fetchers.common import extract_article_published_at, parse_homepage_articles
 
-REQUEST_TIMEOUT_SECONDS = 25
+REQUEST_TIMEOUT_SECONDS = 30
+REQUEST_ATTEMPTS = 2
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Facebook-Seitenassistent/2.2'
 HEADERS = {
     'User-Agent': USER_AGENT,
@@ -14,12 +15,26 @@ HEADERS = {
 }
 
 
+def _get_with_retry(session: requests.Session, url: str) -> requests.Response:
+    last_error: requests.RequestException | None = None
+    for attempt in range(REQUEST_ATTEMPTS):
+        try:
+            return session.get(url, timeout=REQUEST_TIMEOUT_SECONDS, headers=HEADERS)
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            if attempt + 1 >= REQUEST_ATTEMPTS:
+                raise
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f'Abruf fehlgeschlagen: {url}')
+
+
 def enrich_published_dates(items: list[dict[str, Any]], session: requests.Session, source_name: str) -> None:
     for item in items:
         if item.get('published_at') or not item.get('url'):
             continue
         try:
-            response = session.get(str(item['url']), timeout=REQUEST_TIMEOUT_SECONDS, headers=HEADERS)
+            response = _get_with_retry(session, str(item['url']))
             response.raise_for_status()
             published_at = extract_article_published_at(response.text)
             if published_at:
@@ -38,7 +53,7 @@ def fetch_homepage_source(
     enrich_dates: bool = True,
 ) -> list[dict[str, Any]]:
     with requests.Session() as session:
-        response = session.get(source_url, timeout=REQUEST_TIMEOUT_SECONDS, headers=HEADERS)
+        response = _get_with_retry(session, source_url)
         response.raise_for_status()
         if not response.text.strip():
             raise RuntimeError(f'{source_name} hat keine Daten geliefert.')
