@@ -27,6 +27,11 @@
         .summary { margin:7px 0 0; color:#475467; line-height:1.45; }
         .view-link { color:#1877f2; font-weight:800; text-decoration:none; }
         .source-label { display: inline-block; margin-bottom: 6px; padding: 4px 8px; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: 12px; font-weight: 800; }
+        .trend-badge { display:inline-flex; align-items:center; gap:5px; margin:0 0 8px; padding:5px 9px; border-radius:999px; font-size:12px; font-weight:900; letter-spacing:.02em; }
+        .trend-multiple { background:#f2f4f7; color:#344054; }
+        .trend-trending { background:#fffaeb; color:#b54708; }
+        .trend-breaking { background:#fef3f2; color:#b42318; }
+        .trend-sources { margin:5px 0 0; color:#667085; font-size:12px; line-height:1.4; }
         .title-link { color: #101828; text-decoration: none; font-size: 16px; font-weight: 800; line-height: 1.35; }
         .title-link:hover { color: #1877f2; text-decoration: underline; }
         .teaser { margin: 7px 0 0; color: #667085; line-height: 1.45; max-width: 520px; }
@@ -81,6 +86,7 @@
             Medienabruf abgeschlossen{% if last_fetch_at %} ({{ last_fetch_at }}){% endif %}. Neu gespeichert: <strong>{{ new_count }}</strong>.
             Regelbasiert ausgefiltert: <strong>{{ excluded_count }}</strong>. KI-bewertet: <strong>{{ rated_count }}</strong>.
             Davon ab 6,5 Punkten sichtbar: <strong>{{ visible_count }}</strong>.
+            Medienübergreifende Themen erkannt: <strong>{{ trend_count }}</strong>.
             {% if source_results %}
                 <div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap">
                     {% for result in source_results %}
@@ -161,6 +167,17 @@
                                 <div class="time-note">Veröffentlicht:<br>{{ item.published_display }}</div>
                             </td>
                             <td>
+                                {% if item.trend_level %}
+                                    {% if item.trend_level == 'breaking' %}
+                                        <div class="trend-badge trend-breaking">🚨 BREAKING · {{ item.trend_source_count }} Quellen</div>
+                                    {% elif item.trend_level == 'trending' %}
+                                        <div class="trend-badge trend-trending">🔥 TRENDING · {{ item.trend_source_count }} Quellen</div>
+                                    {% else %}
+                                        <div class="trend-badge trend-multiple">📰 Mehrere Medien · {{ item.trend_source_count }} Quellen</div>
+                                    {% endif %}
+                                    {% if item.trend_label %}<div class="trend-sources"><strong>{{ item.trend_label }}</strong></div>{% endif %}
+                                    {% if item.trend_sources %}<div class="trend-sources">Auch bei: {{ item.trend_sources|join(', ') }}</div>{% endif %}
+                                {% endif %}
                                 <a class="title-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
                                 {% if item.ai_summary %}<p class="summary"><strong>KI-Kurzfassung:</strong> {{ item.ai_summary }}</p>{% elif item.teaser %}<p class="teaser">{{ item.teaser }}</p>{% endif %}
                             </td>
@@ -191,7 +208,7 @@
     </section>
 
     <div class="phase-note">
-        <strong>Phase 1 – zweistufige Filterung:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Standardmäßig erscheinen nur Meldungen ab 6,5 Punkten. Eine automatische Veröffentlichung ist ausgeschlossen.
+        <strong>Phase 1 – Filterung und Trends:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Zusätzlich erkennt der Monitor dasselbe konkrete Ereignis in mehreren Medien: 2 Quellen = „Mehrere Medien“, 3 Quellen innerhalb von 12 Stunden = „TRENDING“, ab 4 Quellen innerhalb von 6 Stunden = „BREAKING“. Eine automatische Veröffentlichung ist ausgeschlossen.
     </div>
 </div>
 </main>
