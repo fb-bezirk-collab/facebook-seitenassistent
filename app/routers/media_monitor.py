@@ -55,6 +55,7 @@ def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already
             "excluded_count": max(0, int(job.get("excluded_count", 0) or 0)),
             "rated_count": max(0, int(job.get("rated_count", 0) or 0)),
             "visible_count": max(0, int(job.get("visible_count", 0) or 0)),
+            "trend_count": max(0, int(job.get("trend_count", 0) or 0)),
             "warning": str(job.get("warning", "") or ""),
             "error": str(job.get("error", "") or ""),
             "source_results": job.get("source_results", []) if isinstance(job.get("source_results"), list) else [],
