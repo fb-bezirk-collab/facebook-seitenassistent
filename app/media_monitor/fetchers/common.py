@@ -55,12 +55,22 @@ def _parse_local_visible_datetime(value: str | None) -> str | None:
     if not text:
         return None
     # Österreichische Medien zeigen Datums-/Zeitangaben typischerweise in Europe/Vienna an.
-    match = re.search(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})\s*[,|–-]?\s*(\d{1,2}):(\d{2})(?!\d)", text)
+    # Unterstützt auch APA-Angaben wie „Freitag, 07.08.26, 14:31:53“.
+    match = re.search(
+        r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})\s*[,|–-]?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?!\d)",
+        text,
+    )
     if not match:
         return None
-    day, month, year, hour, minute = map(int, match.groups())
+    day, month, year, hour, minute, second = match.groups()
+    year_i = int(year)
+    if year_i < 100:
+        year_i += 2000
     try:
-        parsed = datetime(year, month, day, hour, minute, tzinfo=LOCAL_TIMEZONE)
+        parsed = datetime(
+            year_i, int(month), int(day), int(hour), int(minute), int(second or 0),
+            tzinfo=LOCAL_TIMEZONE,
+        )
     except ValueError:
         return None
     return parsed.astimezone(timezone.utc).isoformat()

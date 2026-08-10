@@ -62,6 +62,7 @@ def run_fetch_job() -> None:
             "excluded_count": int(result.get("excluded_count", 0)),
             "rated_count": int(result.get("rated_count", 0)),
             "visible_count": int(result.get("visible_count", 0)),
+            "trend_count": int(result.get("trend_count", 0)),
             "warning": str(result.get("rating_error", "") or ""),
             "source_results": result.get("source_results", []),
         })

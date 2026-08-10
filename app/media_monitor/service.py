@@ -17,6 +17,7 @@ from app.media_monitor.fetchers import (
 )
 from app.media_monitor.prefilter import classify_item
 from app.media_monitor.storage import load_items, merge_fetched_items, save_items
+from app.media_monitor.trending import apply_trending
 
 
 AI_BATCH_SIZE = 5
@@ -132,13 +133,14 @@ def fetch_current_media() -> dict:
     items = load_items()
     excluded_count, candidates = _apply_prefilter(items)
     rated_count, visible_count, rating_error = _apply_ratings(items, candidates)
+    trend_count, trend_error = apply_trending(items)
     save_items(items)
 
     source_errors = [entry for entry in source_results if entry["error"]]
     source_warning = " | ".join(
         f"{entry['source']}: {entry['error']}" for entry in source_errors
     )
-    warnings = [message for message in (source_warning, rating_error) if message]
+    warnings = [message for message in (source_warning, rating_error, trend_error) if message]
 
     return {
         "items": items,
@@ -146,6 +148,7 @@ def fetch_current_media() -> dict:
         "excluded_count": excluded_count,
         "rated_count": rated_count,
         "visible_count": visible_count,
+        "trend_count": trend_count,
         "rating_error": " | ".join(warnings),
         "source_results": source_results,
     }
