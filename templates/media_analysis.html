@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KI-Analyse – Medienmonitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+    <style>
+        body{background:#f3f6fb;color:#172033;margin:0;font-family:Arial,Helvetica,sans-serif}
+        .analysis-wrap{max-width:1180px;margin:0 auto;padding:26px 22px 60px}
+        .back-link{display:inline-block;margin-bottom:18px;color:#0866e8;text-decoration:none;font-weight:700}
+        .hero,.card{background:#fff;border:1px solid #dde4ee;border-radius:16px;box-shadow:0 7px 24px rgba(25,40,70,.05)}
+        .hero{padding:24px;margin-bottom:18px}
+        .source{display:inline-block;background:#eef3ff;color:#1648c8;border-radius:999px;padding:6px 10px;font-weight:800;font-size:13px}
+        .hero h1{font-size:28px;line-height:1.15;margin:13px 0 10px}
+        .meta{color:#5a6678;font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+        .meta a{color:#0866e8;font-weight:700;text-decoration:none}
+        .trend{margin-top:14px;font-weight:800}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+        .card{padding:20px}
+        .card.full{grid-column:1/-1}
+        .card h2{font-size:18px;margin:0 0 12px}
+        .card p{line-height:1.55;margin:0;color:#263247}
+        .card ul{padding-left:20px;margin:8px 0 0}
+        .card li{margin:7px 0;line-height:1.45}
+        .notice{padding:16px 18px;border-radius:12px;margin-bottom:18px;background:#edf5ff;border:1px solid #bfdbff}
+        .notice.error{background:#fff1f0;border-color:#ffc8c2}
+        .analyse-button{border:0;border-radius:12px;background:#1f78ee;color:white;font-weight:800;padding:12px 18px;cursor:pointer;font-size:15px}
+        .secondary{background:#eaf1fb;color:#184681}
+        .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+        .confidence{display:inline-block;border-radius:999px;background:#eef4ed;padding:4px 9px;font-weight:700}
+        .source-note{font-size:13px;color:#657186;margin-top:10px}
+        .related a{color:#0866e8;text-decoration:none;font-weight:700}
+        @media(max-width:800px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}.hero h1{font-size:23px}}
+    </style>
+</head>
+<body>
+<main class="analysis-wrap">
+    <a class="back-link" href="/media-monitor">← Zurück zum Medienmonitor</a>
+
+    <section class="hero">
+        <span class="source">{{ item.source }}</span>
+        <h1>{{ item.title }}</h1>
+        <div class="meta">
+            <span>Veröffentlicht: {{ item.published_display }}</span>
+            {% if item.score_total is not none %}<span>KI-Bewertung: <strong>{{ "%.1f"|format(item.score_total) }}</strong></span>{% endif %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+        </div>
+        {% if item.trend_level %}
+            <div class="trend">
+                {% if item.trend_level == 'breaking' %}🚨 BREAKING{% elif item.trend_level == 'trending' %}🔥 TRENDING{% else %}📰 Mehrere Medien{% endif %}
+                · {{ item.trend_source_count }} Quellen{% if item.trend_label %} · {{ item.trend_label }}{% endif %}
+            </div>
+        {% endif %}
+    </section>
+
+    {% if analysis_running %}
+        <div class="notice"><strong>KI-Analyse läuft.</strong> Der Artikel wird eingelesen und anschließend analysiert. Diese Seite aktualisiert sich automatisch.</div>
+    {% elif analysis_error %}
+        <div class="notice error"><strong>Die KI-Analyse konnte nicht abgeschlossen werden:</strong> {{ item.analysis_error }}</div>
+        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
+            <button class="analyse-button" type="submit">Analyse erneut starten</button>
+        </form>
+    {% elif not analysis_done %}
+        <div class="notice">Für diese Meldung wurde noch keine Detailanalyse erstellt.</div>
+        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
+            <button class="analyse-button" type="submit">KI-Analyse starten</button>
+        </form>
+    {% else %}
+        {% set a = item.analysis or {} %}
+        <div class="grid">
+            <section class="card full">
+                <h2>Kurzüberblick</h2>
+                <p>{{ a.summary }}</p>
+                <div class="source-note">Verlässlichkeit der Analyse: <span class="confidence">{{ a.confidence }}</span>. {% if item.analysis_content_mode == 'teaser' %}Der vollständige Artikeltext war technisch nicht lesbar; die Analyse basiert daher nur auf den verfügbaren Metadaten und dem Anreißer.{% else %}Öffentlich lesbarer Artikeltext wurde für die Analyse herangezogen.{% endif %}</div>
+            </section>
+
+            <section class="card">
+                <h2>Kernaussagen und Fakten</h2>
+                {% if a.key_facts %}<ul>{% for value in a.key_facts %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine belastbaren Einzelpunkte erkannt.</p>{% endif %}
+            </section>
+
+            <section class="card">
+                <h2>Politische Einordnung</h2>
+                <p>{{ a.political_context }}</p>
+            </section>
+
+            <section class="card">
+                <h2>Bedeutung für die Bevölkerung</h2>
+                <p>{{ a.public_impact }}</p>
+            </section>
+
+            <section class="card">
+                <h2>Social-Media-Potenzial</h2>
+                <p>{{ a.social_value }}</p>
+            </section>
+
+            <section class="card">
+                <h2>Offene Fragen / vor Veröffentlichung prüfen</h2>
+                {% if a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
+            </section>
+
+            <section class="card">
+                <h2>Gegenpositionen und Einwände</h2>
+                {% if a.counterpoints %}<ul>{% for value in a.counterpoints %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Aus dem vorliegenden Material ergeben sich keine konkreten Gegenpositionen.</p>{% endif %}
+            </section>
+
+            <section class="card">
+                <h2>Sachliche Aufhänger</h2>
+                {% if a.factual_hooks %}<ul>{% for value in a.factual_hooks %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine zusätzlichen Aufhänger erkannt.</p>{% endif %}
+            </section>
+
+            <section class="card">
+                <h2>Mögliche Arbeitsüberschriften</h2>
+                {% if a.headline_ideas %}<ul>{% for value in a.headline_ideas %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine Vorschläge vorhanden.</p>{% endif %}
+            </section>
+
+            {% if related_items %}
+            <section class="card full related">
+                <h2>Vergleich mit weiteren Medien</h2>
+                {% if a.source_comparison %}<p>{{ a.source_comparison }}</p>{% endif %}
+                <ul>
+                    {% for other in related_items %}
+                        <li><strong>{{ other.source }}:</strong> <a href="{{ other.url }}" target="_blank" rel="noopener noreferrer">{{ other.title }}</a></li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+        </div>
+        <div class="actions">
+            <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
+                <button class="analyse-button secondary" type="submit">Analyse aktualisieren</button>
+            </form>
+            <a class="analyse-button" style="text-decoration:none;display:inline-block" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+        </div>
+        {% if item.analysis_updated_display %}<div class="source-note">Analyse erstellt/aktualisiert: {{ item.analysis_updated_display }}</div>{% endif %}
+    {% endif %}
+</main>
+{% if analysis_running %}
+<script>window.setTimeout(function(){ window.location.reload(); }, 4000);</script>
+{% endif %}
+</body>
+</html>

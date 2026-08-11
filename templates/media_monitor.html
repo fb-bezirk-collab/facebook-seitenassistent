@@ -198,7 +198,20 @@
                                 {% if item.score_total is not none %}<span class="score">{{ "%.1f"|format(item.score_total) }}</span>{% else %}<span class="pending-score">Nicht bewertet</span>{% endif %}
                             </td>
                             <td>{{ item.ai_reason }}</td>
-                            <td><a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a></td>
+                            <td>
+                                <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+                                    <a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+                                    {% if item.analysis_status == 'done' %}
+                                        <a class="open-link" href="{{ url_for('medienmonitor_analyse', item_id=item.id) }}">KI-Analyse öffnen</a>
+                                    {% elif item.analysis_status == 'running' %}
+                                        <a class="open-link" href="{{ url_for('medienmonitor_analyse', item_id=item.id) }}">KI-Analyse läuft …</a>
+                                    {% else %}
+                                        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}" style="margin:0">
+                                            <button type="submit" class="open-link" style="border:0;background:transparent;padding:0;cursor:pointer;font:inherit">KI analysieren</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                     {% endfor %}
                 {% else %}
@@ -220,7 +233,7 @@
     </section>
 
     <div class="phase-note">
-        <strong>Phase 1 – Filterung und Trends:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Zusätzlich erkennt der Monitor dasselbe konkrete Ereignis in mehreren Medien: 2 Quellen = „Mehrere Medien“, 3 Quellen innerhalb von 12 Stunden = „TRENDING“, ab 4 Quellen innerhalb von 6 Stunden = „BREAKING“. Eine automatische Veröffentlichung ist ausgeschlossen.
+        <strong>Version 2.4 – Filterung, Trends und KI-Analyse:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Zusätzlich erkennt der Monitor dasselbe konkrete Ereignis in mehreren Medien: 2 Quellen = „Mehrere Medien“, 3 Quellen innerhalb von 12 Stunden = „TRENDING“, ab 4 Quellen innerhalb von 6 Stunden = „BREAKING“. Eine automatische Veröffentlichung ist ausgeschlossen.
     </div>
 </div>
 </main>
