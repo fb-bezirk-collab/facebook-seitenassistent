@@ -137,7 +137,7 @@
             "emotional": {
               "type": "string"
             },
-            "mobil": {
+            "kampagne": {
               "type": "string"
             }
           },
@@ -145,7 +145,7 @@
             "sachlich",
             "pointiert",
             "emotional",
-            "mobil"
+            "kampagne"
           ],
           "additionalProperties": false
         },
