@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "headline": {"type": "string"},
+    "facebook_text": {"type": "string"},
+    "short_text": {"type": "string"},
+    "hashtags": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
+    "graphic_idea": {"type": "string"},
+    "source_note": {"type": "string"}
+  },
+  "required": ["headline", "facebook_text", "short_text", "hashtags", "graphic_idea", "source_note"],
+  "additionalProperties": false
+}
