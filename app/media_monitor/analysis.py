@@ -300,6 +300,16 @@ def run_item_analysis(item_id: str) -> None:
         fresh_item["analysis_content_mode"] = content_mode
         fresh_item["analysis_article_chars"] = len(article_text)
         fresh_item["analysis"] = result
+        editorial = result.get("editorial")
+        if isinstance(editorial, dict):
+            # Die Redaktionsmaske erhält die strukturierte KI-Ausgabe separat.
+            # So bleiben bestehende/ältere Analysefelder kompatibel.
+            current_editorial = fresh_item.get("editorial")
+            if not isinstance(current_editorial, dict):
+                current_editorial = {}
+            merged_editorial = dict(current_editorial)
+            merged_editorial.update(editorial)
+            fresh_item["editorial"] = merged_editorial
         save_items(fresh_items)
     except Exception as exc:
         fresh_items = load_items()
