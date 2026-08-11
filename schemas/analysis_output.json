@@ -1,22 +1,227 @@
 {
   "type": "object",
   "properties": {
-    "summary": {"type": "string"},
-    "key_facts": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
-    "political_context": {"type": "string"},
-    "public_impact": {"type": "string"},
-    "social_value": {"type": "string"},
-    "open_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
-    "counterpoints": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
-    "factual_hooks": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
-    "headline_ideas": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
-    "source_comparison": {"type": "string"},
-    "confidence": {"type": "string", "enum": ["hoch", "mittel", "niedrig"]}
+    "summary": {
+      "type": "string"
+    },
+    "key_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8
+    },
+    "political_context": {
+      "type": "string"
+    },
+    "public_impact": {
+      "type": "string"
+    },
+    "social_value": {
+      "type": "string"
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "counterpoints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "factual_hooks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "headline_ideas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 4
+    },
+    "source_comparison": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "hoch",
+        "mittel",
+        "niedrig"
+      ]
+    },
+    "editorial": {
+      "type": "object",
+      "properties": {
+        "political_brisanz": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "communication_potential": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "Sofort",
+            "Heute",
+            "Beobachten",
+            "Nicht verwenden"
+          ]
+        },
+        "priority_reason": {
+          "type": "string"
+        },
+        "political_angle": {
+          "type": "string"
+        },
+        "communication_angles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 6
+        },
+        "affected_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8
+        },
+        "headlines": {
+          "type": "object",
+          "properties": {
+            "sachlich": {
+              "type": "string"
+            },
+            "pointiert": {
+              "type": "string"
+            },
+            "emotional": {
+              "type": "string"
+            },
+            "kurz": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sachlich",
+            "pointiert",
+            "emotional",
+            "kurz"
+          ],
+          "additionalProperties": false
+        },
+        "facebook_variants": {
+          "type": "object",
+          "properties": {
+            "sachlich": {
+              "type": "string"
+            },
+            "pointiert": {
+              "type": "string"
+            },
+            "emotional": {
+              "type": "string"
+            },
+            "mobil": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sachlich",
+            "pointiert",
+            "emotional",
+            "mobil"
+          ],
+          "additionalProperties": false
+        },
+        "graphic": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "idea": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "idea",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "facts_confirmed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10
+        },
+        "facts_check": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8
+        },
+        "hashtags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "political_brisanz",
+        "communication_potential",
+        "priority",
+        "priority_reason",
+        "political_angle",
+        "communication_angles",
+        "affected_groups",
+        "headlines",
+        "facebook_variants",
+        "graphic",
+        "facts_confirmed",
+        "facts_check",
+        "hashtags"
+      ],
+      "additionalProperties": false
+    }
   },
   "required": [
-    "summary", "key_facts", "political_context", "public_impact", "social_value",
-    "open_questions", "counterpoints", "factual_hooks", "headline_ideas",
-    "source_comparison", "confidence"
+    "summary",
+    "key_facts",
+    "political_context",
+    "public_impact",
+    "social_value",
+    "open_questions",
+    "counterpoints",
+    "factual_hooks",
+    "headline_ideas",
+    "source_comparison",
+    "confidence",
+    "editorial"
   ],
   "additionalProperties": false
 }
