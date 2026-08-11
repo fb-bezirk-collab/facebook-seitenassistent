@@ -72,6 +72,8 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             "score_social": None, "score_interest": None, "score_reliable": None,
             "score_total": None, "visibility": "pending", "status": "new",
             "notes": "", "created_post": False,
+            "analysis_status": "", "analysis_error": "", "analysis_updated_at": None,
+            "analysis_content_mode": "", "analysis_article_chars": 0, "analysis": {},
         }
         existing.append(item)
         known.add(fingerprint)
