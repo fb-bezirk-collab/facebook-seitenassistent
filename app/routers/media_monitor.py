@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
 from app.media_monitor.job import load_status, mark_started, run_fetch_job
+from app.media_monitor.analysis import run_item_analysis
 from app.media_monitor.storage import load_items
 
 
@@ -70,3 +71,52 @@ def medienmonitor_abrufen(background_tasks: BackgroundTasks):
         return RedirectResponse(url="/media-monitor?already_running=1", status_code=303)
     background_tasks.add_task(run_fetch_job)
     return RedirectResponse(url="/media-monitor?started=1", status_code=303)
+
+@router.get("/media-monitor/analysis/{item_id}", name="medienmonitor_analyse")
+def medienmonitor_analyse(request: Request, item_id: str, started: int = 0):
+    items = load_items()
+    item = next((entry for entry in items if str(entry.get("id")) == str(item_id)), None)
+    if item is None:
+        return RedirectResponse(url="/media-monitor", status_code=303)
+    item["published_display"] = _format_datetime(item.get("published_at"))
+    item["analysis_updated_display"] = _format_datetime(item.get("analysis_updated_at")) if item.get("analysis_updated_at") else None
+    cluster_id = str(item.get("trend_cluster_id") or "")
+    related_items = []
+    if cluster_id:
+        for other in items:
+            if str(other.get("id")) == str(item_id):
+                continue
+            if str(other.get("trend_cluster_id") or "") == cluster_id:
+                related_items.append({
+                    "source": other.get("source"),
+                    "title": other.get("title"),
+                    "url": other.get("url"),
+                })
+    return templates.TemplateResponse(
+        request=request,
+        name="media_analysis.html",
+        context={
+            "item": item,
+            "related_items": related_items,
+            "analysis_running": item.get("analysis_status") == "running",
+            "analysis_done": item.get("analysis_status") == "done",
+            "analysis_error": item.get("analysis_status") == "error",
+            "started": bool(started),
+        },
+    )
+
+
+@router.post("/media-monitor/analysis/{item_id}", name="medienmonitor_analyse_starten")
+def medienmonitor_analyse_starten(item_id: str, background_tasks: BackgroundTasks):
+    items = load_items()
+    item = next((entry for entry in items if str(entry.get("id")) == str(item_id)), None)
+    if item is None:
+        return RedirectResponse(url="/media-monitor", status_code=303)
+    if item.get("analysis_status") != "running":
+        item["analysis_status"] = "running"
+        item["analysis_error"] = ""
+        from app.media_monitor.storage import save_items
+        save_items(items)
+        background_tasks.add_task(run_item_analysis, item_id)
+    return RedirectResponse(url=f"/media-monitor/analysis/{item_id}?started=1", status_code=303)
+
