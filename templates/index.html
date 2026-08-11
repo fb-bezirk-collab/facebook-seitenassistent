@@ -179,6 +179,69 @@
             font-size: 14px;
             line-height: 1.45;
         }
+        .media-picker-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .media-add-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 0 16px;
+            border: 1px solid #98a2b3;
+            border-radius: 9px;
+            background: #fff;
+            color: #344054;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .media-count {
+            color: #667085;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .media-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .media-preview-item {
+            position: relative;
+            min-height: 120px;
+            overflow: hidden;
+            border: 1px solid #d0d5dd;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+        .media-preview-item img {
+            display: block;
+            width: 100%;
+            height: 145px;
+            object-fit: cover;
+        }
+        .media-preview-file {
+            padding: 18px 12px 42px;
+            overflow-wrap: anywhere;
+            color: #344054;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .media-remove {
+            position: absolute;
+            right: 7px;
+            bottom: 7px;
+            min-height: 34px;
+            padding: 0 10px;
+            border-radius: 8px;
+            background: rgba(17,24,39,.88);
+            color: #fff;
+            font-size: 13px;
+        }
         .error {
             margin-bottom: 24px;
             padding: 15px 18px;
@@ -398,7 +461,17 @@
                     multiple
                     required
                 >
-                <p class="hint">Mehrere Bilder sind möglich. Pro Datei maximal 150 MB.</p>
+                <div class="media-picker-actions">
+                    <button type="button" class="media-add-button" id="media-add-more">
+                        + Weitere Bilder/Medien hinzufügen
+                    </button>
+                    <span class="media-count" id="media-count">Noch keine Datei ausgewählt</span>
+                </div>
+                <div class="media-preview-grid" id="media-preview-grid" hidden></div>
+                <p class="hint">
+                    Du kannst mehrere Bilder gleichzeitig auswählen oder sie nacheinander hinzufügen.
+                    Vor dem Speichern kannst du einzelne Dateien wieder entfernen. Pro Datei maximal 150 MB.
+                </p>
             </div>
 
             <div class="field">
@@ -561,6 +634,85 @@
 </div>
 </main>
 <script>
+    const mediaInput = document.getElementById('media_files');
+    const mediaAddMore = document.getElementById('media-add-more');
+    const mediaCount = document.getElementById('media-count');
+    const mediaPreviewGrid = document.getElementById('media-preview-grid');
+    let selectedManualFiles = [];
+
+    function manualFileKey(file) {
+        return [file.name, file.size, file.lastModified, file.type].join('::');
+    }
+
+    function syncManualMediaInput() {
+        if (!mediaInput) return;
+        const transfer = new DataTransfer();
+        selectedManualFiles.forEach((file) => transfer.items.add(file));
+        mediaInput.files = transfer.files;
+
+        if (mediaCount) {
+            mediaCount.textContent = selectedManualFiles.length
+                ? `${selectedManualFiles.length} Datei${selectedManualFiles.length === 1 ? '' : 'en'} ausgewählt`
+                : 'Noch keine Datei ausgewählt';
+        }
+
+        renderManualMediaPreview();
+    }
+
+    function renderManualMediaPreview() {
+        if (!mediaPreviewGrid) return;
+        mediaPreviewGrid.innerHTML = '';
+        mediaPreviewGrid.hidden = selectedManualFiles.length === 0;
+
+        selectedManualFiles.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'media-preview-item';
+
+            if (file.type.startsWith('image/')) {
+                const image = document.createElement('img');
+                image.alt = file.name;
+                const objectUrl = URL.createObjectURL(file);
+                image.src = objectUrl;
+                image.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+                item.appendChild(image);
+            } else {
+                const info = document.createElement('div');
+                info.className = 'media-preview-file';
+                info.textContent = `🎥 ${file.name}`;
+                item.appendChild(info);
+            }
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'media-remove';
+            remove.textContent = 'Entfernen';
+            remove.addEventListener('click', () => {
+                selectedManualFiles.splice(index, 1);
+                syncManualMediaInput();
+            });
+            item.appendChild(remove);
+            mediaPreviewGrid.appendChild(item);
+        });
+    }
+
+    if (mediaInput) {
+        mediaInput.addEventListener('change', () => {
+            const known = new Set(selectedManualFiles.map(manualFileKey));
+            Array.from(mediaInput.files || []).forEach((file) => {
+                const key = manualFileKey(file);
+                if (!known.has(key)) {
+                    selectedManualFiles.push(file);
+                    known.add(key);
+                }
+            });
+            syncManualMediaInput();
+        });
+    }
+
+    if (mediaAddMore && mediaInput) {
+        mediaAddMore.addEventListener('click', () => mediaInput.click());
+    }
+
     const sourceCards = document.querySelectorAll('[data-source]');
     const facebookWorkflow = document.getElementById('workflow-facebook');
     const manualWorkflow = document.getElementById('workflow-manual');
