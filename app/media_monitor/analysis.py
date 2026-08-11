@@ -23,49 +23,10 @@ class MediaAnalysisError(RuntimeError):
     pass
 
 
-ANALYSIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "summary": {"type": "string"},
-        "key_facts": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
-        "political_context": {"type": "string"},
-        "public_impact": {"type": "string"},
-        "social_value": {"type": "string"},
-        "open_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
-        "counterpoints": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
-        "factual_hooks": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
-        "headline_ideas": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
-        "source_comparison": {"type": "string"},
-        "confidence": {"type": "string", "enum": ["hoch", "mittel", "niedrig"]},
-    },
-    "required": [
-        "summary", "key_facts", "political_context", "public_impact", "social_value",
-        "open_questions", "counterpoints", "factual_hooks", "headline_ideas",
-        "source_comparison", "confidence",
-    ],
-    "additionalProperties": False,
-}
+from app.media_monitor.prompt_loader import build_analysis_system_prompt, load_analysis_schema
 
-SYSTEM_PROMPT = """
-Du erstellst eine sachliche Detailanalyse einer aktuellen Meldung für einen österreichischen politischen Medienmonitor.
-Arbeite ausschließlich mit dem bereitgestellten Artikeltext, den Metadaten und den Informationen der bereits als dasselbe Ereignis erkannten weiteren Medienquellen. Erfinde nichts. Trenne klar zwischen belegten Tatsachen, Einordnung und offenen Fragen.
-
-Ziel der Analyse ist, dass ein Redakteur rasch versteht:
-- Was ist tatsächlich passiert?
-- Welche konkreten Zahlen, Aussagen, Beschlüsse, Personen oder Fristen sind relevant?
-- Welche politische Bedeutung und welche unmittelbare Auswirkung auf die Bevölkerung hat die Meldung?
-- Welche Punkte sind noch unklar oder müssten vor einer Veröffentlichung überprüft werden?
-- Welche naheliegenden Gegenpositionen oder Einwände gehören zu einer ausgewogenen Einordnung?
-- Welche sachlichen Aufhänger eignen sich für eine spätere Social-Media-Aufbereitung?
-
-Regeln:
-- Keine erfundenen Tatsachen, Zitate, Zahlen oder Motive.
-- Keine parteipolitische Zustimmung oder Ablehnung formulieren.
-- Keine Behauptung als Tatsache darstellen, wenn sie nur von einer Person behauptet wird.
-- Wenn der Artikeltext wegen Paywall oder technischer Einschränkung nur teilweise vorliegt, muss sich die Analyse entsprechend vorsichtig ausdrücken und confidence herabsetzen.
-- headline_ideas sollen kurze, sachliche Arbeitsüberschriften sein, keine fertigen Kampagnenslogans.
-- source_comparison nur dann inhaltlich füllen, wenn tatsächlich mehrere Quellen desselben konkreten Ereignisses mitgeliefert wurden; sonst leer lassen.
-""".strip()
+ANALYSIS_SCHEMA = load_analysis_schema()
+SYSTEM_PROMPT = build_analysis_system_prompt()
 
 
 class _ArticleTextParser(HTMLParser):
