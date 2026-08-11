@@ -160,9 +160,9 @@
             <summary>Facebook-Varianten</summary>
             <div class="inside">
                                 <div class="cards4">
-                    {% set flabels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('mobil','Mobilfreundlich')] %}
+                    {% set flabels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kampagne','Kampagnenstil')] %}
                     {% for key,label in flabels %}
-                    <div class="variant"><div class="variant-label">{{ label }}</div>{% if e.facebook_variants and e.facebook_variants[key] %}<p>{{ e.facebook_variants[key] }}</p>{% else %}<p class="placeholder">Noch kein Social-Media-Entwurf vorhanden.</p>{% endif %}</div>
+                    <div class="variant"><div class="variant-label">{{ label }}</div>{% if e.facebook_variants and e.facebook_variants.get(key) %}<p>{{ e.facebook_variants.get(key) }}</p>{% elif key == 'kampagne' and e.facebook_variants and e.facebook_variants.get('mobil') %}<p>{{ e.facebook_variants.get('mobil') }}</p>{% else %}<p class="placeholder">Noch kein Social-Media-Entwurf vorhanden.</p>{% endif %}</div>
                     {% endfor %}
                 </div>
             </div>
