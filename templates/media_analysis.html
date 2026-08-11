@@ -79,13 +79,13 @@
         <div class="metric">
             <div class="metric-label">Politische Brisanz</div>
             <div class="metric-value">{% if brisanz is not none %}{{ "%.1f"|format(brisanz) }}/10{% else %}–{% endif %}</div>
-            <div class="metric-sub">Redaktionelle Detailbewertung folgt in Schritt 2.</div>
+            <div class="metric-sub">Bewertung der politischen Brisanz dieser Meldung.</div>
         </div>
         <div class="metric">
             <div class="metric-label">Priorität</div>
             {% set priority = e.priority or '' %}
             <div class="metric-value"><span class="priority {% if priority == 'Sofort' %}sofort{% elif priority == 'Heute' %}heute{% elif priority == 'Beobachten' %}beobachten{% endif %}">{{ priority or 'Noch offen' }}</span></div>
-            <div class="metric-sub">Wird mit der erweiterten KI-Ausgabe befüllt.</div>
+            <div class="metric-sub">{{ e.priority_reason or 'Redaktionelle Priorisierung der Meldung.' }}</div>
         </div>
         <div class="metric">
             <div class="metric-label">Reichweite Thema</div>
@@ -116,7 +116,7 @@
             </div>
             <div class="panel">
                 <h2>Politische Brisanz</h2>
-                <p>{{ e.political_angle or a.political_context or 'Die gezielte redaktionelle Einordnung wird im nächsten Schritt erweitert.' }}</p>
+                <p>{{ e.political_angle or a.political_context or 'Keine politische Einordnung vorhanden.' }}</p>
                 <h3>Kommunikative Ansatzpunkte</h3>
                 {% if e.communication_angles %}<div class="angles">{% for value in e.communication_angles %}<span class="chip">{{ value }}</span>{% endfor %}</div>
                 {% elif a.factual_hooks %}<div class="angles">{% for value in a.factual_hooks %}<span class="chip">{{ value }}</span>{% endfor %}</div>
@@ -134,7 +134,7 @@
                     </div>
                     <div>
                         <h3>Betroffene Zielgruppen</h3>
-                        {% if e.affected_groups %}<div class="angles">{% for value in e.affected_groups %}<span class="chip">{{ value }}</span>{% endfor %}</div>{% else %}<p class="placeholder">Wird in Schritt 2 strukturiert ausgegeben.</p>{% endif %}
+                        {% if e.affected_groups %}<div class="angles">{% for value in e.affected_groups %}<span class="chip">{{ value }}</span>{% endfor %}</div>{% else %}<p class="placeholder">Keine Zielgruppe erkannt.</p>{% endif %}
                         <h3>Offene Fragen</h3>{% if a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
                     </div>
                 </div>
@@ -144,8 +144,7 @@
         <details class="panel" open>
             <summary>Headline-Vorschläge</summary>
             <div class="inside">
-                <div class="future-note">Die neue Datenstruktur ist bereits vorbereitet. Bis Schritt 2 zeigt die Maske vorhandene Arbeitsüberschriften aus der bisherigen Analyse.</div>
-                <div class="cards4">
+                                <div class="cards4">
                     {% set labels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kurz','Kurz')] %}
                     {% for key,label in labels %}
                         <div class="variant"><div class="variant-label">{{ label }}</div>
@@ -160,8 +159,7 @@
         <details class="panel">
             <summary>Facebook-Varianten</summary>
             <div class="inside">
-                <div class="future-note">Die Felder sind vorbereitet; die KI befüllt sie ab Schritt 2.</div>
-                <div class="cards4">
+                                <div class="cards4">
                     {% set flabels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('mobil','Mobilfreundlich')] %}
                     {% for key,label in flabels %}
                     <div class="variant"><div class="variant-label">{{ label }}</div>{% if e.facebook_variants and e.facebook_variants[key] %}<p>{{ e.facebook_variants[key] }}</p>{% else %}<p class="placeholder">Noch kein Social-Media-Entwurf vorhanden.</p>{% endif %}</div>
@@ -174,7 +172,7 @@
             <summary>Grafikidee</summary>
             <div class="inside">
                 {% if e.graphic and (e.graphic.type or e.graphic.idea) %}<p><strong>{{ e.graphic.type }}</strong>{% if e.graphic.idea %}: {{ e.graphic.idea }}{% endif %}</p>{% if e.graphic.reason %}<p style="margin-top:8px">{{ e.graphic.reason }}</p>{% endif %}
-                {% else %}<p class="placeholder">Die strukturierte Grafikempfehlung wird in Schritt 2 von der KI erzeugt.</p>{% endif %}
+                {% else %}<p class="placeholder">Keine konkrete Grafikempfehlung vorhanden.</p>{% endif %}
             </div>
         </details>
 
@@ -189,6 +187,14 @@
                     {% if e.facts_check %}<ul>{% for value in e.facts_check %}<li>{{ value }}</li>{% endfor %}</ul>
                     {% elif a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
                 </div>
+            </div>
+        </details>
+
+        <details class="panel">
+            <summary>Hashtags</summary>
+            <div class="inside">
+                {% if e.hashtags %}<div class="angles">{% for value in e.hashtags %}<span class="chip">{{ value }}</span>{% endfor %}</div>
+                {% else %}<p class="placeholder">Keine Hashtags vorgeschlagen.</p>{% endif %}
             </div>
         </details>
 
