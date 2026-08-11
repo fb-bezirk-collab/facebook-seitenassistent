@@ -3,47 +3,63 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KI-Analyse – Medienmonitor</title>
+    <title>Redaktionsanalyse – Medienmonitor</title>
     <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
     <style>
+        *{box-sizing:border-box}
         body{background:#f3f6fb;color:#172033;margin:0;font-family:Arial,Helvetica,sans-serif}
-        .analysis-wrap{max-width:1180px;margin:0 auto;padding:26px 22px 60px}
-        .back-link{display:inline-block;margin-bottom:18px;color:#0866e8;text-decoration:none;font-weight:700}
-        .hero,.card{background:#fff;border:1px solid #dde4ee;border-radius:16px;box-shadow:0 7px 24px rgba(25,40,70,.05)}
-        .hero{padding:24px;margin-bottom:18px}
-        .source{display:inline-block;background:#eef3ff;color:#1648c8;border-radius:999px;padding:6px 10px;font-weight:800;font-size:13px}
-        .hero h1{font-size:28px;line-height:1.15;margin:13px 0 10px}
-        .meta{color:#5a6678;font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
-        .meta a{color:#0866e8;font-weight:700;text-decoration:none}
-        .trend{margin-top:14px;font-weight:800}
-        .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-        .card{padding:20px}
-        .card.full{grid-column:1/-1}
-        .card h2{font-size:18px;margin:0 0 12px}
-        .card p{line-height:1.55;margin:0;color:#263247}
-        .card ul{padding-left:20px;margin:8px 0 0}
-        .card li{margin:7px 0;line-height:1.45}
-        .notice{padding:16px 18px;border-radius:12px;margin-bottom:18px;background:#edf5ff;border:1px solid #bfdbff}
+        .wrap{max-width:1220px;margin:0 auto;padding:24px 22px 64px}
+        .back{display:inline-block;margin-bottom:17px;color:#0866e8;text-decoration:none;font-weight:800}
+        .hero,.panel,.metric{background:#fff;border:1px solid #dde4ee;border-radius:16px;box-shadow:0 7px 24px rgba(25,40,70,.05)}
+        .hero{padding:24px;margin-bottom:17px}
+        .source{display:inline-flex;align-items:center;background:#eef3ff;color:#1648c8;border-radius:999px;padding:6px 10px;font-weight:800;font-size:13px}
+        h1{font-size:28px;line-height:1.16;margin:13px 0 10px}
+        .meta{display:flex;gap:15px;flex-wrap:wrap;color:#5a6678;font-size:14px;align-items:center}
+        .meta a{color:#0866e8;font-weight:800;text-decoration:none}
+        .trend{margin-top:14px;font-weight:900}
+        .metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:17px 0}
+        .metric{padding:16px;min-height:104px}
+        .metric-label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#69768a;font-weight:800;margin-bottom:8px}
+        .metric-value{font-size:22px;font-weight:900;line-height:1.2}
+        .metric-sub{font-size:12px;color:#748095;margin-top:7px}
+        .stars{letter-spacing:1px;color:#d99000;font-size:19px}
+        .priority{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2f7;font-size:14px}
+        .priority.sofort{background:#fee4e2;color:#b42318}.priority.heute{background:#fff3d6;color:#9a6500}.priority.beobachten{background:#edf5ff;color:#175cd3}
+        .notice{padding:16px 18px;border-radius:12px;margin-bottom:18px;background:#edf5ff;border:1px solid #bfdbff;line-height:1.45}
         .notice.error{background:#fff1f0;border-color:#ffc8c2}
-        .analyse-button{border:0;border-radius:12px;background:#1f78ee;color:white;font-weight:800;padding:12px 18px;cursor:pointer;font-size:15px}
-        .secondary{background:#eaf1fb;color:#184681}
-        .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-        .confidence{display:inline-block;border-radius:999px;background:#eef4ed;padding:4px 9px;font-weight:700}
-        .source-note{font-size:13px;color:#657186;margin-top:10px}
-        .related a{color:#0866e8;text-decoration:none;font-weight:700}
-        @media(max-width:800px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}.hero h1{font-size:23px}}
+        .analyse-button{border:0;border-radius:11px;background:#1f78ee;color:#fff;font-weight:800;padding:12px 17px;cursor:pointer;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+        .analyse-button.secondary{background:#eaf1fb;color:#184681}
+        .overview{display:grid;grid-template-columns:1.18fr .82fr;gap:17px;margin-bottom:17px}
+        .panel{padding:20px}
+        .panel h2{font-size:18px;margin:0 0 12px}.panel h3{font-size:15px;margin:17px 0 8px}
+        .panel p{line-height:1.58;margin:0;color:#263247}.panel ul{padding-left:20px;margin:7px 0 0}.panel li{margin:7px 0;line-height:1.45}
+        .angles{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.chip{border-radius:999px;background:#eff3f8;padding:6px 10px;font-weight:700;font-size:13px}
+        details.panel{padding:0;overflow:hidden;margin-bottom:13px}details.panel summary{cursor:pointer;list-style:none;padding:18px 20px;font-weight:900;font-size:18px;display:flex;justify-content:space-between;gap:10px}details.panel summary::-webkit-details-marker{display:none}details.panel summary:after{content:'＋';color:#5e6c80}details[open].panel summary:after{content:'−'}details .inside{border-top:1px solid #e6ebf2;padding:18px 20px 20px}
+        .cards4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.variant{border:1px solid #dfe5ed;border-radius:12px;padding:15px;background:#fbfcfe}.variant-label{font-size:12px;text-transform:uppercase;font-weight:900;color:#667085;margin-bottom:8px}.variant p{white-space:pre-wrap}.placeholder{color:#8792a4;font-style:italic}
+        .facts{display:grid;grid-template-columns:1fr 1fr;gap:14px}.facts .good{border-left:4px solid #12b76a}.facts .check{border-left:4px solid #f79009}
+        .source-note{font-size:13px;color:#657186;margin-top:10px}.confidence{display:inline-block;border-radius:999px;background:#eef4ed;padding:4px 9px;font-weight:700}
+        .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.related a{color:#0866e8;text-decoration:none;font-weight:700}
+        .future-note{background:#fff8e7;border:1px solid #f7d982;border-radius:10px;padding:11px 13px;color:#765500;font-size:13px;margin-bottom:12px}
+        @media(max-width:980px){.metrics{grid-template-columns:repeat(2,1fr)}.overview{grid-template-columns:1fr}}
+        @media(max-width:680px){.wrap{padding:18px 14px 45px}h1{font-size:22px}.metrics,.cards4,.facts{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
-<main class="analysis-wrap">
-    <a class="back-link" href="/media-monitor">← Zurück zum Medienmonitor</a>
+<main class="wrap">
+    <a class="back" href="/media-monitor">← Zurück zum Medienmonitor</a>
+
+    {% set a = item.analysis or {} %}
+    {% set e = item.editorial or {} %}
+    {% set comm_score = e.communication_potential if e.communication_potential is not none else item.score_social %}
+    {% set brisanz = e.political_brisanz if e.political_brisanz is not none else item.score_political %}
+    {% set stars = ((comm_score or 0) / 2)|round(0, 'common')|int %}
 
     <section class="hero">
         <span class="source">{{ item.source }}</span>
         <h1>{{ item.title }}</h1>
         <div class="meta">
             <span>Veröffentlicht: {{ item.published_display }}</span>
-            {% if item.score_total is not none %}<span>KI-Bewertung: <strong>{{ "%.1f"|format(item.score_total) }}</strong></span>{% endif %}
+            {% if item.score_total is not none %}<span>Medienmonitor: <strong>{{ "%.1f"|format(item.score_total) }}/10</strong></span>{% endif %}
             <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
         </div>
         {% if item.trend_level %}
@@ -54,90 +70,145 @@
         {% endif %}
     </section>
 
+    <section class="metrics">
+        <div class="metric">
+            <div class="metric-label">Kommunikationspotenzial</div>
+            <div class="metric-value stars">{% for n in range(1,6) %}{% if n <= stars %}★{% else %}☆{% endif %}{% endfor %}</div>
+            <div class="metric-sub">{% if comm_score is not none %}{{ "%.1f"|format(comm_score) }}/10{% else %}Noch nicht bewertet{% endif %}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Politische Brisanz</div>
+            <div class="metric-value">{% if brisanz is not none %}{{ "%.1f"|format(brisanz) }}/10{% else %}–{% endif %}</div>
+            <div class="metric-sub">Redaktionelle Detailbewertung folgt in Schritt 2.</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Priorität</div>
+            {% set priority = e.priority or '' %}
+            <div class="metric-value"><span class="priority {% if priority == 'Sofort' %}sofort{% elif priority == 'Heute' %}heute{% elif priority == 'Beobachten' %}beobachten{% endif %}">{{ priority or 'Noch offen' }}</span></div>
+            <div class="metric-sub">Wird mit der erweiterten KI-Ausgabe befüllt.</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Reichweite Thema</div>
+            <div class="metric-value">{% if item.trend_source_count %}{{ item.trend_source_count }} Quellen{% else %}1 Quelle{% endif %}</div>
+            <div class="metric-sub">{% if item.trend_level == 'breaking' %}Breaking{% elif item.trend_level == 'trending' %}Trending{% elif item.trend_level %}Mehrere Medien{% else %}Einzelmeldung{% endif %}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Region</div>
+            <div class="metric-value" style="font-size:17px">{{ item.region or '–' }}</div>
+            <div class="metric-sub">{% if item.categories %}{{ item.categories|join(' · ') }}{% else %}Noch keine Kategorie{% endif %}</div>
+        </div>
+    </section>
+
     {% if analysis_running %}
-        <div class="notice"><strong>KI-Analyse läuft.</strong> Der Artikel wird eingelesen und anschließend analysiert. Diese Seite aktualisiert sich automatisch.</div>
+        <div class="notice"><strong>KI-Analyse läuft.</strong> Der Artikel wird eingelesen und analysiert. Diese Seite aktualisiert sich automatisch.</div>
     {% elif analysis_error %}
         <div class="notice error"><strong>Die KI-Analyse konnte nicht abgeschlossen werden:</strong> {{ item.analysis_error }}</div>
-        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
-            <button class="analyse-button" type="submit">Analyse erneut starten</button>
-        </form>
+        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}"><button class="analyse-button" type="submit">Analyse erneut starten</button></form>
     {% elif not analysis_done %}
         <div class="notice">Für diese Meldung wurde noch keine Detailanalyse erstellt.</div>
-        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
-            <button class="analyse-button" type="submit">KI-Analyse starten</button>
-        </form>
+        <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}"><button class="analyse-button" type="submit">KI-Analyse starten</button></form>
     {% else %}
-        {% set a = item.analysis or {} %}
-        <div class="grid">
-            <section class="card full">
-                <h2>Kurzüberblick</h2>
-                <p>{{ a.summary }}</p>
-                <div class="source-note">Verlässlichkeit der Analyse: <span class="confidence">{{ a.confidence }}</span>. {% if item.analysis_content_mode == 'teaser' %}Der vollständige Artikeltext war technisch nicht lesbar; die Analyse basiert daher nur auf den verfügbaren Metadaten und dem Anreißer.{% else %}Öffentlich lesbarer Artikeltext wurde für die Analyse herangezogen.{% endif %}</div>
-            </section>
+        <section class="overview">
+            <div class="panel">
+                <h2>Kurzfassung</h2>
+                <p>{{ a.summary or 'Keine Kurzfassung vorhanden.' }}</p>
+                <div class="source-note">Verlässlichkeit: <span class="confidence">{{ a.confidence or '–' }}</span>. {% if item.analysis_content_mode == 'teaser' %}Der vollständige Artikeltext war technisch nicht lesbar; die Analyse basiert auf Anreißer und Metadaten.{% else %}Öffentlich lesbarer Artikeltext wurde herangezogen.{% endif %}</div>
+            </div>
+            <div class="panel">
+                <h2>Politische Brisanz</h2>
+                <p>{{ e.political_angle or a.political_context or 'Die gezielte redaktionelle Einordnung wird im nächsten Schritt erweitert.' }}</p>
+                <h3>Kommunikative Ansatzpunkte</h3>
+                {% if e.communication_angles %}<div class="angles">{% for value in e.communication_angles %}<span class="chip">{{ value }}</span>{% endfor %}</div>
+                {% elif a.factual_hooks %}<div class="angles">{% for value in a.factual_hooks %}<span class="chip">{{ value }}</span>{% endfor %}</div>
+                {% else %}<p class="placeholder">Noch keine strukturierten Ansatzpunkte vorhanden.</p>{% endif %}
+            </div>
+        </section>
 
-            <section class="card">
-                <h2>Kernaussagen und Fakten</h2>
-                {% if a.key_facts %}<ul>{% for value in a.key_facts %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine belastbaren Einzelpunkte erkannt.</p>{% endif %}
-            </section>
+        <details class="panel" open>
+            <summary>Analyse</summary>
+            <div class="inside">
+                <div class="facts">
+                    <div>
+                        <h3>Bedeutung für die Bevölkerung</h3><p>{{ a.public_impact or '–' }}</p>
+                        <h3>Social-Media-Potenzial</h3><p>{{ a.social_value or '–' }}</p>
+                    </div>
+                    <div>
+                        <h3>Betroffene Zielgruppen</h3>
+                        {% if e.affected_groups %}<div class="angles">{% for value in e.affected_groups %}<span class="chip">{{ value }}</span>{% endfor %}</div>{% else %}<p class="placeholder">Wird in Schritt 2 strukturiert ausgegeben.</p>{% endif %}
+                        <h3>Offene Fragen</h3>{% if a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </details>
 
-            <section class="card">
-                <h2>Politische Einordnung</h2>
-                <p>{{ a.political_context }}</p>
-            </section>
-
-            <section class="card">
-                <h2>Bedeutung für die Bevölkerung</h2>
-                <p>{{ a.public_impact }}</p>
-            </section>
-
-            <section class="card">
-                <h2>Social-Media-Potenzial</h2>
-                <p>{{ a.social_value }}</p>
-            </section>
-
-            <section class="card">
-                <h2>Offene Fragen / vor Veröffentlichung prüfen</h2>
-                {% if a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
-            </section>
-
-            <section class="card">
-                <h2>Gegenpositionen und Einwände</h2>
-                {% if a.counterpoints %}<ul>{% for value in a.counterpoints %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Aus dem vorliegenden Material ergeben sich keine konkreten Gegenpositionen.</p>{% endif %}
-            </section>
-
-            <section class="card">
-                <h2>Sachliche Aufhänger</h2>
-                {% if a.factual_hooks %}<ul>{% for value in a.factual_hooks %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine zusätzlichen Aufhänger erkannt.</p>{% endif %}
-            </section>
-
-            <section class="card">
-                <h2>Mögliche Arbeitsüberschriften</h2>
-                {% if a.headline_ideas %}<ul>{% for value in a.headline_ideas %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine Vorschläge vorhanden.</p>{% endif %}
-            </section>
-
-            {% if related_items %}
-            <section class="card full related">
-                <h2>Vergleich mit weiteren Medien</h2>
-                {% if a.source_comparison %}<p>{{ a.source_comparison }}</p>{% endif %}
-                <ul>
-                    {% for other in related_items %}
-                        <li><strong>{{ other.source }}:</strong> <a href="{{ other.url }}" target="_blank" rel="noopener noreferrer">{{ other.title }}</a></li>
+        <details class="panel" open>
+            <summary>Headline-Vorschläge</summary>
+            <div class="inside">
+                <div class="future-note">Die neue Datenstruktur ist bereits vorbereitet. Bis Schritt 2 zeigt die Maske vorhandene Arbeitsüberschriften aus der bisherigen Analyse.</div>
+                <div class="cards4">
+                    {% set labels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kurz','Kurz')] %}
+                    {% for key,label in labels %}
+                        <div class="variant"><div class="variant-label">{{ label }}</div>
+                            {% set v = e.headlines[key] if e.headlines else '' %}
+                            {% if v %}<p>{{ v }}</p>{% elif a.headline_ideas and loop.index0 < a.headline_ideas|length %}<p>{{ a.headline_ideas[loop.index0] }}</p>{% else %}<p class="placeholder">Noch kein Vorschlag</p>{% endif %}
+                        </div>
                     {% endfor %}
-                </ul>
-            </section>
-            {% endif %}
-        </div>
+                </div>
+            </div>
+        </details>
+
+        <details class="panel">
+            <summary>Facebook-Varianten</summary>
+            <div class="inside">
+                <div class="future-note">Die Felder sind vorbereitet; die KI befüllt sie ab Schritt 2.</div>
+                <div class="cards4">
+                    {% set flabels = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('mobil','Mobilfreundlich')] %}
+                    {% for key,label in flabels %}
+                    <div class="variant"><div class="variant-label">{{ label }}</div>{% if e.facebook_variants and e.facebook_variants[key] %}<p>{{ e.facebook_variants[key] }}</p>{% else %}<p class="placeholder">Noch kein Social-Media-Entwurf vorhanden.</p>{% endif %}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </details>
+
+        <details class="panel">
+            <summary>Grafikidee</summary>
+            <div class="inside">
+                {% if e.graphic and (e.graphic.type or e.graphic.idea) %}<p><strong>{{ e.graphic.type }}</strong>{% if e.graphic.idea %}: {{ e.graphic.idea }}{% endif %}</p>{% if e.graphic.reason %}<p style="margin-top:8px">{{ e.graphic.reason }}</p>{% endif %}
+                {% else %}<p class="placeholder">Die strukturierte Grafikempfehlung wird in Schritt 2 von der KI erzeugt.</p>{% endif %}
+            </div>
+        </details>
+
+        <details class="panel" open>
+            <summary>Faktencheck</summary>
+            <div class="inside facts">
+                <div class="variant good"><div class="variant-label">Gesichert</div>
+                    {% if e.facts_confirmed %}<ul>{% for value in e.facts_confirmed %}<li>{{ value }}</li>{% endfor %}</ul>
+                    {% elif a.key_facts %}<ul>{% for value in a.key_facts %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p class="placeholder">Keine belastbaren Einzelpunkte erkannt.</p>{% endif %}
+                </div>
+                <div class="variant check"><div class="variant-label">Noch prüfen</div>
+                    {% if e.facts_check %}<ul>{% for value in e.facts_check %}<li>{{ value }}</li>{% endfor %}</ul>
+                    {% elif a.open_questions %}<ul>{% for value in a.open_questions %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p>Keine besonderen offenen Punkte erkannt.</p>{% endif %}
+                </div>
+            </div>
+        </details>
+
+        {% if related_items %}
+        <details class="panel">
+            <summary>Weitere Medien zum selben Thema</summary>
+            <div class="inside related">
+                {% if a.source_comparison %}<p>{{ a.source_comparison }}</p>{% endif %}
+                <ul>{% for other in related_items %}<li><strong>{{ other.source }}:</strong> <a href="{{ other.url }}" target="_blank" rel="noopener noreferrer">{{ other.title }}</a></li>{% endfor %}</ul>
+            </div>
+        </details>
+        {% endif %}
+
         <div class="actions">
-            <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}">
-                <button class="analyse-button secondary" type="submit">Analyse aktualisieren</button>
-            </form>
-            <a class="analyse-button" style="text-decoration:none;display:inline-block" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+            <form method="post" action="{{ url_for('medienmonitor_analyse_starten', item_id=item.id) }}"><button class="analyse-button secondary" type="submit">Analyse aktualisieren</button></form>
+            <a class="analyse-button" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
         </div>
         {% if item.analysis_updated_display %}<div class="source-note">Analyse erstellt/aktualisiert: {{ item.analysis_updated_display }}</div>{% endif %}
     {% endif %}
 </main>
-{% if analysis_running %}
-<script>window.setTimeout(function(){ window.location.reload(); }, 4000);</script>
-{% endif %}
+{% if analysis_running %}<script>window.setTimeout(function(){window.location.reload();},4000);</script>{% endif %}
 </body>
 </html>
