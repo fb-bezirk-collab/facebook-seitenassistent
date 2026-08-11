@@ -82,3 +82,26 @@
 - Medienübergreifende KI-Erkennung für identische konkrete Nachrichtenereignisse ergänzt.
 - Kennzeichnung: 2 Quellen = Mehrere Medien, 3+ binnen 12h = TRENDING, 4+ binnen 6h = BREAKING.
 - Trend-Quellen und kurze Themenbezeichnung werden direkt im Medienmonitor angezeigt.
+
+## 2.3.1 – Aktive Medienmonitor-Filter
+- Live-Volltextsuche für Titel, KI-Kurzfassung, Begründung, Kategorie, Region und Quelle aktiviert.
+- Quellenfilter dynamisch aus den angezeigten Meldungen erzeugt, inklusive Trefferzahlen.
+- Themenfilter dynamisch aus den vorhandenen KI-Kategorien erzeugt, inklusive Trefferzahlen.
+- Statusfilter aktiviert: Offen, Gemerkt, Freigegeben, Verworfen, Trending, Breaking und Alle.
+- Filter sind miteinander kombinierbar und arbeiten vollständig im Browser ohne neuen Server-/KI-Aufruf.
+- Live-Zähler für Treffer, Quellen, Trending und Breaking ergänzt.
+
+## 2.3.2 – Mehrbild-Import, Zufallsverteilung, Quellen-Retry
+- Facebook-Mehrbildbeiträge: zusätzliche Foto-Unterseiten werden eingelesen.
+- Doppelte CDN-Varianten desselben Bildes werden vermieden.
+- "Varianten automatisch verteilen" mischt Seiten und Varianten bei jedem Klick zufällig, bei weiterhin möglichst ausgewogener Verteilung.
+- Generische Medienquellen wiederholen Timeout-/Verbindungsfehler einmal automatisch; Timeout auf 30 Sekunden erhöht.
+
+## 2.4.0 – KI-Detailanalyse im Medienmonitor
+
+- Neue Detailanalyse pro Medienmeldung über den Button „KI analysieren“.
+- Der öffentlich lesbare Artikeltext wird nach Möglichkeit direkt von der Originalseite eingelesen; bei Paywall oder technischer Sperre wird auf Anreißer/Metadaten zurückgefallen.
+- Die Analyse läuft im Hintergrund, damit lange Artikel- oder OpenAI-Antwortzeiten keinen Railway-Upstream-Timeout auslösen.
+- Neue Analysebereiche: Kurzüberblick, Kernaussagen/Fakten, politische Einordnung, Bedeutung für die Bevölkerung, Social-Media-Potenzial, offene Prüfpunkte, Gegenpositionen/Einwände, sachliche Aufhänger und Arbeitsüberschriften.
+- Bei bereits erkannten Trending-/Breaking-Clustern werden die weiteren Medien desselben konkreten Ereignisses in die Analyse einbezogen und auf der Detailseite verlinkt.
+- Analyse kann jederzeit aktualisiert werden; der vorherige Medienabruf und die Filterlogik bleiben unverändert.
