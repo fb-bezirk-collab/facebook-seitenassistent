@@ -12,6 +12,69 @@ from app.config import DATA_DIR
 MEDIA_MONITOR_FILE = DATA_DIR / "media_monitor.json"
 
 
+def _editorial_defaults() -> dict[str, Any]:
+    """Struktur für den Redaktionsassistenten ab Version 2.5.1.
+
+    Die Felder werden bereits angelegt, obwohl die KI sie erst im nächsten
+    Entwicklungsschritt befüllt. Dadurch bleiben bestehende Meldungen und
+    künftige Analysen kompatibel.
+    """
+    return {
+        "political_brisanz": None,
+        "communication_potential": None,
+        "priority": "",
+        "priority_reason": "",
+        "political_angle": "",
+        "communication_angles": [],
+        "affected_groups": [],
+        "headlines": {
+            "sachlich": "",
+            "pointiert": "",
+            "emotional": "",
+            "kurz": "",
+        },
+        "facebook_variants": {
+            "sachlich": "",
+            "pointiert": "",
+            "emotional": "",
+            "mobil": "",
+        },
+        "graphic": {
+            "type": "",
+            "idea": "",
+            "reason": "",
+        },
+        "facts_confirmed": [],
+        "facts_check": [],
+        "hashtags": [],
+    }
+
+
+def _ensure_editorial_structure(item: dict[str, Any]) -> dict[str, Any]:
+    defaults = _editorial_defaults()
+    current = item.get("editorial")
+    if not isinstance(current, dict):
+        current = {}
+
+    merged = defaults.copy()
+    merged.update(current)
+
+    for key in ("headlines", "facebook_variants", "graphic"):
+        nested_default = defaults[key]
+        nested_current = current.get(key)
+        nested = nested_default.copy()
+        if isinstance(nested_current, dict):
+            nested.update(nested_current)
+        merged[key] = nested
+
+    for key in ("communication_angles", "affected_groups", "facts_confirmed", "facts_check", "hashtags"):
+        if not isinstance(merged.get(key), list):
+            merged[key] = []
+
+    item["editorial"] = merged
+    return item
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -28,7 +91,9 @@ def load_items() -> list[dict[str, Any]]:
         content = json.loads(MEDIA_MONITOR_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
-    return content if isinstance(content, list) else []
+    if not isinstance(content, list):
+        return []
+    return [_ensure_editorial_structure(item) for item in content if isinstance(item, dict)]
 
 
 def save_items(items: list[dict[str, Any]]) -> None:
@@ -74,6 +139,7 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             "notes": "", "created_post": False,
             "analysis_status": "", "analysis_error": "", "analysis_updated_at": None,
             "analysis_content_mode": "", "analysis_article_chars": 0, "analysis": {},
+            "editorial": _editorial_defaults(),
         }
         existing.append(item)
         known.add(fingerprint)
