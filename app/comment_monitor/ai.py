@@ -17,47 +17,59 @@ class CommentAiError(RuntimeError):
 CATEGORIES = (
     "Zustimmung",
     "Frage",
-    "Sachliche Kritik",
-    "Politische Kritik",
+    "Meinung/Kritik",
     "Provokation",
     "Beleidigung",
+    "Drohung/Gewalt",
     "Spam",
     "Neutral",
 )
 
 RECOMMENDATIONS = (
+    "Keine Aktion",
     "Antworten",
+    "Antwort optional",
     "Ignorieren",
     "Ausblenden prüfen",
     "Löschen prüfen",
 )
 
-CLASSIFICATION_PROMPT = """
+AI_CLASSIFICATION_VERSION = "2.7.4"
+
+CLASSIFICATION_PROMPT = r"""
 Du bist Moderationsassistent für Facebook-Seiten einer politischen Organisation in Österreich.
-Ordne Kommentare nüchtern ein. Die Einordnung ist eine Arbeitshilfe und keine automatische Moderationsentscheidung.
+Deine Aufgabe ist NICHT, negative oder scharfe politische Meinungen zu sanktionieren. Du sollst nur echten Moderationsbedarf herausfiltern.
+Im Zweifel gilt: stehen lassen. Politische Meinungsfreiheit und robuste Debatte sind der Normalfall.
 
 Wähle genau eine Kategorie:
-- Zustimmung: überwiegend zustimmend/unterstützend.
+- Zustimmung: überwiegend zustimmend oder unterstützend.
 - Frage: echte Frage oder Informationswunsch.
-- Sachliche Kritik: inhaltliche Kritik ohne primär parteipolitischen Angriff.
-- Politische Kritik: politische Gegenposition oder Kritik an Partei/Funktionären/Beitrag.
-- Provokation: erkennbar auf Reizung, Spott oder Eskalation angelegt, ohne primär sachliche Auseinandersetzung.
-- Beleidigung: persönliche Herabsetzung, Beschimpfung oder grob abwertende Ansprache.
-- Spam: Werbung, Scam, massenhaft irrelevanter Inhalt oder offensichtlich themenfremd.
-- Neutral: passt in keine der anderen Kategorien.
+- Meinung/Kritik: normale politische Meinung, Forderung, Ablehnung oder Kritik – auch scharf formuliert – solange keine echte Beschimpfung, Drohung oder reine Troll-Provokation vorliegt. Beispiele: „Rücktritt für alle fünf“, „Diese Regierung ist unfähig“, „Das gehört geändert“, „Die Partei gehört abgewählt“.
+- Provokation: erkennbares Trollen, Spott oder Reizen ohne sachlichen Kern; noch keine klare Beschimpfung.
+- Beleidigung: eindeutige persönliche Beschimpfung oder grob herabsetzende Bezeichnung. Beispiele sind direkte Schimpfwörter oder Beschimpfungen wie „Arschloch“, „Hurensohn“, „Volltrottel“, „Idioten“, „Gsindl“, „Dreckspack“, „Nazis“, „Faschisten“, „Volksverräter“. Begriffe wie „rechtsextrem“ nur dann hier einordnen, wenn sie erkennbar als pauschale persönliche Beschimpfung oder Herabsetzung verwendet werden; in einer sachlichen politischen Aussage bleibt es Meinung/Kritik.
+- Drohung/Gewalt: konkrete oder sinngemäße Gewaltandrohung, Aufruf zu Gewalt, Todesdrohung oder vergleichbarer akuter Gefahreninhalt. Keine strafrechtliche Diagnose abgeben; nur den Moderationsbedarf markieren.
+- Spam: Werbung, Scam, massenhaft irrelevanter Inhalt oder offensichtlich themenfremde Wiederholungen.
+- Neutral: weder Zustimmung noch Frage noch erkennbare Kritik/Provokation/Moderationsbedarf.
 
-Priorität:
-- hoch: akuter Moderationsbedarf, Drohung, starke Beleidigung, Spam/Scam, eskalierende Provokation oder wichtige direkte Frage.
-- mittel: normale Frage, sachliche/politische Kritik oder moderater Konflikt.
-- niedrig: Zustimmung, neutrale Bemerkung oder ohne Handlungsbedarf.
+PRIORITÄT – sehr zurückhaltend vergeben:
+- hoch: NUR bei eindeutiger starker Beschimpfung, grob herabsetzenden Schimpfwörtern oder Etikettierungen, Drohung/Gewalt oder eindeutig gefährlichem Scam. Normale politische Kritik ist NIEMALS hoch.
+- mittel: echte Frage mit Antwortbedarf, Provokation/Trolling oder gewöhnlicher Spam ohne akute Gefahr.
+- niedrig: Zustimmung, Meinung/Kritik, neutrale Bemerkung oder sonst kein unmittelbarer Moderationsbedarf.
 
-Empfehlung:
-- Antworten: wenn eine sinnvolle Reaktion voraussichtlich nützt.
-- Ignorieren: wenn keine Reaktion nötig ist.
-- Ausblenden prüfen: bei Provokation/Beleidigung, wenn Ausblenden erwogen werden sollte.
-- Löschen prüfen: nur bei klar schwerwiegendem Inhalt wie Spam/Scam, Drohung oder gravierender Beleidigung. Nie automatisch löschen.
+EMPFEHLUNG:
+- Keine Aktion: Zustimmung oder neutrale Inhalte ohne Handlungsbedarf.
+- Antworten: echte Frage, wenn eine Antwort sinnvoll ist.
+- Antwort optional: sachliche/politische Kritik, wenn eine Reaktion kommunikativ nützen könnte.
+- Ignorieren: normale Kritik/Forderung oder Provokation, bei der eine Reaktion keinen Nutzen bringt.
+- Ausblenden prüfen: NUR bei klarer Beleidigung oder hartnäckiger Provokation.
+- Löschen prüfen: NUR bei Drohung/Gewalt, schwerer Beschimpfung, Scam/Spam oder ähnlich eindeutig problematischem Inhalt. Nie automatisch löschen.
 
-Erfinde keine Absichten oder Tatsachen. Berücksichtige Kommentar und zugehörigen Beitrag. Begründe die Einstufung in einem kurzen Satz.
+WICHTIGE REGELN:
+1. Kritik an Parteien, Politikern, Regierungen oder politischen Entscheidungen ist grundsätzlich zulässig und darf nicht allein deshalb als Beleidigung oder hoher Moderationsbedarf gelten.
+2. Forderungen wie „Rücktritt“, „abgewählt gehören“ oder „in der Regierung nicht brauchen“ sind Meinung/Kritik, nicht Beleidigung.
+3. Negative Stimmung, mehrere Daumen-runter-Emojis, Sarkasmus oder Ärger reichen NICHT für Priorität hoch.
+4. Eine rechtliche oder strafrechtliche Bewertung ist nicht deine Aufgabe. Verwende niemals Aussagen wie „strafbar“, „illegal“ oder „Anzeige erstatten“, außer dies wird ausdrücklich im Kommentar selbst thematisiert.
+5. Erfinde keine Absichten oder Tatsachen. Berücksichtige Kommentar und zugehörigen Beitrag. Begründe die Einstufung in einem kurzen Satz.
 """.strip()
 
 CLASSIFICATION_SCHEMA = {
@@ -93,9 +105,9 @@ Regeln:
 - Klar, verständlich und möglichst kurz (meist 1 bis 4 Sätze).
 - Bei Zustimmung: freundlich und knapp bedanken, wenn eine Antwort sinnvoll ist.
 - Bei Fragen: konkret antworten, aber keine Fakten erfinden. Wenn die nötige Information fehlt, offen sagen, dass sie aus dem vorliegenden Beitrag nicht hervorgeht.
-- Bei Kritik: sachlich, selbstbewusst, nicht defensiv.
+- Bei Meinung/Kritik: sachlich, selbstbewusst, nicht defensiv; eine Antwort ist oft nicht nötig.
 - Bei Provokation: nicht eskalieren und nicht persönlich werden.
-- Bei Beleidigung/Spam: keinen aggressiven Gegenschlag formulieren; wenn eine Antwort unklug wäre, gib trotzdem einen neutralen sehr kurzen Vorschlag oder weise darauf hin, dass keine Antwort empfohlen wird.
+- Bei Beleidigung, Drohung/Gewalt oder Spam: keinen aggressiven Gegenschlag formulieren; wenn eine Antwort unklug wäre, weise knapp darauf hin, dass keine Antwort empfohlen wird.
 - Keine erfundenen Zahlen, Namen, Zitate, Beschlüsse oder Rechtsbehauptungen.
 - Keine Behauptung über Motive oder persönliche Eigenschaften des Kommentierenden.
 
@@ -210,6 +222,7 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
         CLASSIFICATION_SCHEMA,
         max(3000, min(7000, len(compact) * 500)),
     )
+    comment_text_by_id = {str(item.get("id", "")): str(item.get("comment", "")).lower() for item in compact}
     result: dict[str, dict[str, str]] = {}
     for row in parsed.get("items", []):
         if not isinstance(row, dict):
@@ -217,10 +230,55 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
         comment_id = str(row.get("id", "")).strip()
         if not comment_id:
             continue
+        category = str(row.get("category", "Neutral"))
+        priority = str(row.get("priority", "niedrig"))
+        recommendation = str(row.get("recommendation", "Ignorieren"))
+        comment_text = comment_text_by_id.get(comment_id, "")
+
+        # Häufige politische Forderungen wie "Rücktritt" sind ausdrücklich keine
+        # Beleidigung, solange keine echte Beschimpfung oder Drohung dazukommt.
+        political_demand_markers = (
+            "rücktritt", "zurücktreten", "abgewählt", "abwahl",
+            "in der regierung nicht brauchen", "gehört abgewählt",
+        )
+        strong_abuse_markers = (
+            "arschloch", "hurensohn", "volltrottel", "trottel", "idiot", "idioten",
+            "gsindl", "dreckspack", "nazi", "nazis", "faschist", "faschisten",
+            "volksverräter", "rechtsextrem",
+        )
+        threat_markers = (
+            "umbringen", "töten", "erschießen", "erschiessen", "abstechen",
+            "aufhängen", "aufhaengen", "anzünden", "anzuenden", "totmachen",
+        )
+        has_political_demand = any(marker in comment_text for marker in political_demand_markers)
+        has_strong_abuse = any(marker in comment_text for marker in strong_abuse_markers)
+        has_threat = any(marker in comment_text for marker in threat_markers)
+        if has_political_demand and not has_strong_abuse and not has_threat and category in {"Beleidigung", "Provokation"}:
+            category = "Meinung/Kritik"
+            priority = "niedrig"
+            recommendation = "Ignorieren"
+
+        # Harte Sicherheitsregel gegen Übermoderation: Nur eindeutige Problemkategorien
+        # dürfen Priorität "hoch" erhalten. Normale politische Kritik bleibt niedrig.
+        if category not in {"Beleidigung", "Drohung/Gewalt", "Spam"} and priority == "hoch":
+            priority = "mittel" if category in {"Frage", "Provokation"} else "niedrig"
+        if category == "Meinung/Kritik":
+            priority = "niedrig"
+            if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
+                recommendation = "Ignorieren"
+        elif category == "Zustimmung" or category == "Neutral":
+            priority = "niedrig"
+            if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
+                recommendation = "Keine Aktion"
+        elif category == "Frage" and priority == "hoch":
+            priority = "mittel"
+        elif category == "Provokation" and priority == "hoch":
+            priority = "mittel"
+
         result[comment_id] = {
-            "category": str(row.get("category", "Neutral")),
-            "priority": str(row.get("priority", "niedrig")),
-            "recommendation": str(row.get("recommendation", "Ignorieren")),
+            "category": category,
+            "priority": priority,
+            "recommendation": recommendation,
             "reason": str(row.get("reason", "")).strip(),
         }
     return result

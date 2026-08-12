@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.comment_monitor.ai import CommentAiError, classify_comments
+from app.comment_monitor.ai import AI_CLASSIFICATION_VERSION, CommentAiError, classify_comments
 from app.comment_monitor.storage import CommentStorage
 
 
@@ -30,7 +30,7 @@ def run_ai_job() -> None:
         comments = storage.load()
         pending = [
             c for c in comments
-            if c.status != "deleted" and not c.ai_category and (c.message or "").strip()
+            if c.status != "deleted" and c.ai_version != AI_CLASSIFICATION_VERSION and (c.message or "").strip()
         ]
         # Sicherheitsgrenze für einen einzelnen Hintergrundlauf. Weitere unbewertete
         # Kommentare können mit einem weiteren Klick verarbeitet werden.
@@ -58,13 +58,14 @@ def run_ai_job() -> None:
                 comment.ai_recommendation = rating.get("recommendation", "Ignorieren")
                 comment.ai_reason = rating.get("reason", "")
                 comment.ai_analyzed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                comment.ai_version = AI_CLASSIFICATION_VERSION
                 processed += 1
             storage.save(list(by_id.values()))
 
         all_comments = storage.load()
         remaining = sum(
             1 for c in all_comments
-            if c.status != "deleted" and not c.ai_category and (c.message or "").strip()
+            if c.status != "deleted" and c.ai_version != AI_CLASSIFICATION_VERSION and (c.message or "").strip()
         )
         storage.save_ai_job({
             "state": "success",
