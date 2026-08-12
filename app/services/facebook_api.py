@@ -373,6 +373,30 @@ class FacebookApiService:
         if data is False or (isinstance(data, dict) and data.get("success") is False):
             raise FacebookApiError("Facebook konnte den Kommentarstatus nicht ändern.")
 
+    def set_page_user_blocked(
+        self,
+        page_id: str,
+        page_access_token: str,
+        user_id: str,
+        blocked: bool = True,
+    ) -> None:
+        """Blockiert/entsperrt eine Page-Scoped User-ID auf einer Facebook-Seite."""
+        if not user_id:
+            raise FacebookApiError("Für diesen Benutzer ist keine Facebook-ID verfügbar.")
+        url = GRAPH_API_BASE_URL + f"/{page_id}/blocked"
+        method = "POST" if blocked else "DELETE"
+        data = self._request_json(
+            method=method,
+            url=url,
+            params={
+                "access_token": page_access_token,
+                "user": user_id,
+            },
+        )
+        if data is False or (isinstance(data, dict) and data.get("success") is False):
+            action = "sperren" if blocked else "entsperren"
+            raise FacebookApiError(f"Facebook konnte den Benutzer nicht {action}.")
+
     def delete_comment(
         self,
         comment_id: str,
