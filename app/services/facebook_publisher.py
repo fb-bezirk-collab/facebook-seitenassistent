@@ -39,6 +39,16 @@ class FacebookPublisher:
             return self._publish_single_photo(post, page, image_paths[0])
         if len(image_paths) > 1:
             return self._publish_multiple_photos(post, page, image_paths)
+
+        # Medienmonitor-Linkbeitrag: eigener Begleittext + Originalartikel.
+        # Eigene Bilder haben bewusst Vorrang; sobald ein Bild hinzugefügt wird,
+        # wird daraus ein normaler Bildbeitrag statt eines Link-Shares.
+        if (
+            post.source_type == "media_monitor_share"
+            and post.source_url.strip().startswith(("http://", "https://"))
+        ):
+            return self._publish_link(post, page, post.source_url.strip())
+
         return self._publish_text(post, page)
 
     @staticmethod
