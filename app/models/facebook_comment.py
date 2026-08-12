@@ -22,6 +22,10 @@ class FacebookComment:
     created_time: str = ""
     permalink_url: str = ""
     parent_id: str = ""
+    attachment_type: str = ""
+    attachment_url: str = ""
+    attachment_image_url: str = ""
+    attachment_title: str = ""
     is_hidden: bool = False
     can_hide: bool = False
     can_remove: bool = False
@@ -32,6 +36,9 @@ class FacebookComment:
     ai_reason: str = ""
     ai_analyzed_at: str = ""
     ai_version: str = ""
+    ai_error: str = ""
+    ai_error_at: str = ""
+    ai_attempts: int = 0
     reply_suggestion: str = ""
     reply_style: str = ""
     reply_status: str = ""
@@ -59,6 +66,10 @@ class FacebookComment:
             created_time=str(data.get("created_time", "") or ""),
             permalink_url=str(data.get("permalink_url", "") or ""),
             parent_id=str(data.get("parent_id", "") or ""),
+            attachment_type=str(data.get("attachment_type", "") or ""),
+            attachment_url=str(data.get("attachment_url", "") or ""),
+            attachment_image_url=str(data.get("attachment_image_url", "") or ""),
+            attachment_title=str(data.get("attachment_title", "") or ""),
             is_hidden=bool(data.get("is_hidden", False)),
             can_hide=bool(data.get("can_hide", False)),
             can_remove=bool(data.get("can_remove", False)),
@@ -69,6 +80,9 @@ class FacebookComment:
             ai_reason=str(data.get("ai_reason", "") or ""),
             ai_analyzed_at=str(data.get("ai_analyzed_at", "") or ""),
             ai_version=str(data.get("ai_version", "") or ""),
+            ai_error=str(data.get("ai_error", "") or ""),
+            ai_error_at=str(data.get("ai_error_at", "") or ""),
+            ai_attempts=int(data.get("ai_attempts", 0) or 0),
             reply_suggestion=str(data.get("reply_suggestion", "") or ""),
             reply_style=str(data.get("reply_style", "") or ""),
             reply_status=str(data.get("reply_status", "") or ""),
