@@ -39,9 +39,9 @@
         .facts{display:grid;grid-template-columns:1fr 1fr;gap:14px}.facts .good{border-left:4px solid #12b76a}.facts .check{border-left:4px solid #f79009}
         .source-note{font-size:13px;color:#657186;margin-top:10px}.confidence{display:inline-block;border-radius:999px;background:#eef4ed;padding:4px 9px;font-weight:700}
         .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.related a{color:#0866e8;text-decoration:none;font-weight:700}
-        .future-note{background:#fff8e7;border:1px solid #f7d982;border-radius:10px;padding:11px 13px;color:#765500;font-size:13px;margin-bottom:12px}
+        .future-note{background:#fff8e7;border:1px solid #f7d982;border-radius:10px;padding:11px 13px;color:#765500;font-size:13px;margin-bottom:12px}.draft-box{margin-top:18px;background:#fff;border:2px solid #d8e6fb;border-radius:16px;padding:20px}.draft-box h2{margin:0 0 8px}.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 18px}.choice{display:block;border:1px solid #dfe5ed;border-radius:12px;padding:12px;background:#fbfcfe;cursor:pointer}.choice:has(input:checked){border-color:#1f78ee;background:#eef5ff;box-shadow:0 0 0 2px rgba(31,120,238,.12)}.choice input{margin-right:8px}.choice strong{display:block;margin-bottom:5px}.choice span{font-size:13px;color:#5d6878;display:block;line-height:1.35;margin-top:4px}.draft-created{padding:12px 14px;border-radius:10px;background:#ecfdf3;border:1px solid #a6f4c5;color:#067647;margin-bottom:14px}.draft-error{padding:12px 14px;border-radius:10px;background:#fff1f0;border:1px solid #ffc8c2;color:#b42318;margin-bottom:14px}
         @media(max-width:980px){.metrics{grid-template-columns:repeat(2,1fr)}.overview{grid-template-columns:1fr}}
-        @media(max-width:680px){.wrap{padding:18px 14px 45px}h1{font-size:22px}.metrics,.cards4,.facts{grid-template-columns:1fr}}
+        @media(max-width:680px){.wrap{padding:18px 14px 45px}h1{font-size:22px}.metrics,.cards4,.facts,.choice-grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
@@ -197,6 +197,45 @@
                 {% else %}<p class="placeholder">Keine Hashtags vorgeschlagen.</p>{% endif %}
             </div>
         </details>
+
+
+        <section class="draft-box">
+            <h2>📄 In Entwürfe übernehmen</h2>
+            <p>Wähle eine Headline und den gewünschten Facebook-Text. Die übrigen KI-Facebookvarianten bleiben im Entwurf erhalten und können später weiterverwendet oder automatisch auf Seiten verteilt werden.</p>
+            {% if draft_error %}<div class="draft-error">Es konnte kein Entwurf erzeugt werden, weil noch kein verwendbarer Facebook-Text vorhanden ist. Bitte die Analyse aktualisieren.</div>{% endif %}
+            {% if item.draft_id %}
+                <div class="draft-created">📝 Für diese Meldung wurde bereits ein Entwurf erstellt. <a href="{{ url_for('entwurf_bearbeiten', post_id=item.draft_id) }}"><strong>Entwurf öffnen</strong></a></div>
+            {% endif %}
+            <form method="post" action="{{ url_for('medienmonitor_entwurf_erstellen', item_id=item.id) }}">
+                <h3>Headline auswählen</h3>
+                <div class="choice-grid">
+                    {% set hchoices = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kurz','Kurz')] %}
+                    {% for key,label in hchoices %}
+                        {% set hv = e.headlines.get(key) if e.headlines else '' %}
+                        <label class="choice">
+                            <strong><input type="radio" name="headline_choice" value="{{ key }}" {% if key == 'pointiert' %}checked{% endif %}>{{ label }}</strong>
+                            <span>{{ hv or 'Kein Vorschlag vorhanden' }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                <h3>Facebook-Variante auswählen</h3>
+                <div class="choice-grid">
+                    {% set fchoices = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kampagne','Kampagnenstil')] %}
+                    {% for key,label in fchoices %}
+                        {% set fv = e.facebook_variants.get(key) if e.facebook_variants else '' %}
+                        {% if key == 'kampagne' and not fv and e.facebook_variants %}{% set fv = e.facebook_variants.get('mobil') %}{% endif %}
+                        <label class="choice">
+                            <strong><input type="radio" name="facebook_choice" value="{{ key }}" {% if key == 'pointiert' %}checked{% endif %}>{{ label }}</strong>
+                            <span>{{ (fv or 'Kein Vorschlag vorhanden')|truncate(220, True, '…') }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                {% if item.draft_id %}
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><input type="checkbox" name="force_new" value="1"> Trotzdem einen weiteren Entwurf erzeugen</label>
+                {% endif %}
+                <button class="analyse-button" type="submit">📄 In Entwürfe übernehmen</button>
+            </form>
+        </section>
 
         {% if related_items %}
         <details class="panel">

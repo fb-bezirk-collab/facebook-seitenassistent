@@ -26,7 +26,7 @@
         main { padding: 40px 0; }
         .notice, .error-notice { margin-bottom: 20px; padding: 14px 16px; border-radius: 10px; }
         .notice { border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; }
-        .error-notice { border: 1px solid #fda29b; background: #fef3f2; color: #b42318; }
+        .error-notice { border: 1px solid #fda29b; background: #fef3f2; color: #b42318; }.media-origin{margin-bottom:20px;padding:16px 18px;border-radius:12px;background:#eef5ff;border:1px solid #bfd7ff;color:#24415f}.media-origin strong{color:#153e75}.media-origin a{color:#1877f2;font-weight:700}.media-origin .meta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;font-size:13px}.media-origin details{margin-top:10px}.media-origin summary{cursor:pointer;font-weight:700}
         .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 28px; }
         .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.08); padding: 28px; margin-bottom: 28px; }
         label { display: block; margin-bottom: 8px; font-weight: 700; }
@@ -104,6 +104,28 @@
     {% if planned %}<div class="notice">{% if planned_count %}{{ planned_count }} Veröffentlichungen wurden geplant.{% else %}Die Veröffentlichungsplanung wurde aktualisiert.{% endif %}</div>{% endif %}
     {% if published %}<div class="notice">{{ published_count or 1 }} Veröffentlichung{% if (published_count or 1) != 1 %}en{% endif %} erfolgreich abgeschlossen.{% if failed_count %} {{ failed_count }} fehlgeschlagen.{% endif %}</div>{% endif %}
     {% if publish_error %}<div class="error-notice"><strong>Veröffentlichung fehlgeschlagen:</strong> {{ publish_error }}</div>{% endif %}
+    {% if media_created %}<div class="notice">Der KI-Vorschlag wurde als Entwurf übernommen. Du kannst Text, Medien, Varianten und Planung jetzt wie gewohnt bearbeiten.</div>{% endif %}
+    {% if media_existing %}<div class="notice">Für diese Medienmeldung war bereits ein Entwurf vorhanden. Dieser Entwurf wurde geöffnet.</div>{% endif %}
+
+    {% if draft.source_type == 'media_monitor' %}
+    <div class="media-origin">
+        <strong>📰 Erstellt aus dem KI-Medienmonitor</strong>
+        <div class="meta-row">
+            {% if draft.source_name %}<span>Quelle: <strong>{{ draft.source_name }}</strong></span>{% endif %}
+            {% if draft.source_meta.priority %}<span>KI-Priorität: <strong>{{ draft.source_meta.priority }}</strong></span>{% endif %}
+            {% if draft.source_meta.trend_level %}<span>{% if draft.source_meta.trend_level == 'breaking' %}🚨 BREAKING{% elif draft.source_meta.trend_level == 'trending' %}🔥 TRENDING{% else %}Mehrere Medien{% endif %}{% if draft.source_meta.trend_source_count %} · {{ draft.source_meta.trend_source_count }} Quellen{% endif %}</span>{% endif %}
+        </div>
+        {% if draft.source_url %}<div style="margin-top:8px"><a href="{{ draft.source_url }}" target="_blank" rel="noopener noreferrer">Originalartikel öffnen</a></div>{% endif %}
+        <details>
+            <summary>KI-Daten anzeigen</summary>
+            {% if draft.source_meta.original_title %}<p><strong>Originaltitel:</strong> {{ draft.source_meta.original_title }}</p>{% endif %}
+            {% if draft.source_meta.categories %}<p><strong>Kategorien:</strong> {{ draft.source_meta.categories|join(', ') }}</p>{% endif %}
+            {% if draft.source_meta.region %}<p><strong>Region:</strong> {{ draft.source_meta.region }}</p>{% endif %}
+            {% if draft.source_meta.graphic and (draft.source_meta.graphic.idea or draft.source_meta.graphic.type) %}<p><strong>Grafikidee:</strong> {% if draft.source_meta.graphic.type %}{{ draft.source_meta.graphic.type }}{% endif %}{% if draft.source_meta.graphic.idea %} – {{ draft.source_meta.graphic.idea }}{% endif %}</p>{% endif %}
+            {% if draft.source_meta.priority_reason %}<p><strong>Prioritätsbegründung:</strong> {{ draft.source_meta.priority_reason }}</p>{% endif %}
+        </details>
+    </div>
+    {% endif %}
 
     <form method="post" action="/drafts/{{ draft.id }}">
         <div class="grid">

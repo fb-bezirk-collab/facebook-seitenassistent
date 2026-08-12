@@ -201,6 +201,9 @@
                             <td>
                                 <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
                                     <a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+                                    {% if item.draft_id %}
+                                        <a class="open-link" href="{{ url_for('entwurf_bearbeiten', post_id=item.draft_id) }}">📝 Entwurf öffnen</a>
+                                    {% endif %}
                                     {% if item.analysis_status == 'done' %}
                                         <a class="open-link" href="{{ url_for('medienmonitor_analyse', item_id=item.id) }}">KI-Analyse öffnen</a>
                                     {% elif item.analysis_status == 'running' %}
