@@ -15,6 +15,75 @@ class CommentMonitorService:
         self.meta_config_service = MetaConfigService()
         self.storage = CommentStorage()
 
+    @staticmethod
+    def _field_list(raw: dict) -> str:
+        if not isinstance(raw, dict):
+            return "keine"
+        fields = sorted(str(key) for key in raw.keys())
+        return ", ".join(fields) if fields else "keine"
+
+    def _resolve_author_for_new_comment(
+        self,
+        *,
+        api: FacebookApiService,
+        raw: dict,
+        comment_id: str,
+        page_access_token: str,
+    ) -> tuple[dict, str, str]:
+        """Ermittelt den Autor eines neu gefundenen Kommentars.
+
+        Zuerst wird ``from`` aus der Comments-Edge verwendet. Fehlt es, folgt
+        genau eine direkte Abfrage des einzelnen Kommentarobjekts. So können
+        wir unterscheiden, ob unser Parser den Autor verliert oder Meta ihn
+        tatsächlich nicht ausliefert.
+        """
+        edge_author = raw.get("from") if isinstance(raw.get("from"), dict) else {}
+        if edge_author.get("id") or edge_author.get("name"):
+            return (
+                edge_author,
+                "comments_edge",
+                "Comments-Edge lieferte from{id,name}. "
+                f"Felder: {self._field_list(raw)}",
+            )
+
+        edge_fields = self._field_list(raw)
+        try:
+            direct = api.get_comment_details(
+                comment_id=comment_id,
+                page_access_token=page_access_token,
+            )
+        except FacebookApiError as error:
+            return (
+                {},
+                "not_available",
+                "Comments-Edge ohne from. "
+                f"Edge-Felder: {edge_fields}. "
+                f"Direktabfrage fehlgeschlagen: {error}",
+            )
+
+        direct_author = (
+            direct.get("from")
+            if isinstance(direct.get("from"), dict)
+            else {}
+        )
+        direct_fields = self._field_list(direct)
+        if direct_author.get("id") or direct_author.get("name"):
+            return (
+                direct_author,
+                "direct_comment",
+                "Comments-Edge ohne from; direkte Kommentarabfrage lieferte "
+                "from{id,name}. "
+                f"Edge-Felder: {edge_fields}. Direkt-Felder: {direct_fields}",
+            )
+
+        return (
+            {},
+            "not_available",
+            "Meta hat den Autor weder über die Comments-Edge noch über die "
+            "direkte Kommentarabfrage geliefert. "
+            f"Edge-Felder: {edge_fields}. Direkt-Felder: {direct_fields}",
+        )
+
     def fetch_all(self, post_limit: int = 25, comment_limit: int = 100) -> dict:
         pages = [page for page in self.settings_service.load_pages() if page.is_active]
         existing = {comment.comment_id: comment for comment in self.storage.load()}
@@ -73,12 +142,22 @@ class CommentMonitorService:
                         if not comment_id:
                             continue
 
-                        author = raw.get("from") if isinstance(raw.get("from"), dict) else {}
+                        edge_author = raw.get("from") if isinstance(raw.get("from"), dict) else {}
                         parent = raw.get("parent") if isinstance(raw.get("parent"), dict) else {}
                         is_hidden = bool(raw.get("is_hidden", False))
 
                         current = existing.get(comment_id)
+                        author = edge_author
+                        author_source = ""
+                        author_diagnostic = ""
+
                         if current is None:
+                            author, author_source, author_diagnostic = self._resolve_author_for_new_comment(
+                                api=api,
+                                raw=raw,
+                                comment_id=comment_id,
+                                page_access_token=page.access_token,
+                            )
                             current = FacebookComment(
                                 comment_id=comment_id,
                                 page_id=page.page_id,
@@ -88,6 +167,8 @@ class CommentMonitorService:
                                 post_permalink=str(post.get("permalink_url", "") or ""),
                                 author_id=str(author.get("id", "") or ""),
                                 author_name=str(author.get("name", "") or raw.get("username", "") or ""),
+                                author_lookup_source=author_source,
+                                author_diagnostic=author_diagnostic,
                                 message=str(raw.get("message", "") or ""),
                                 created_time=str(raw.get("created_time", "") or ""),
                                 permalink_url=str(raw.get("permalink_url", "") or ""),
@@ -108,8 +189,14 @@ class CommentMonitorService:
                             current.post_id = post_id
                             current.post_message = str(post.get("message", "") or current.post_message)
                             current.post_permalink = str(post.get("permalink_url", "") or current.post_permalink)
-                            current.author_id = str(author.get("id", "") or current.author_id)
-                            current.author_name = str(author.get("name", "") or raw.get("username", "") or current.author_name or "")
+                            current.author_id = str(edge_author.get("id", "") or current.author_id)
+                            current.author_name = str(edge_author.get("name", "") or raw.get("username", "") or current.author_name or "")
+                            if edge_author.get("id") or edge_author.get("name"):
+                                current.author_lookup_source = "comments_edge"
+                                current.author_diagnostic = (
+                                    "Comments-Edge lieferte from{id,name}. "
+                                    f"Felder: {self._field_list(raw)}"
+                                )
                             current.message = str(raw.get("message", "") or current.message)
                             current.created_time = str(raw.get("created_time", "") or current.created_time)
                             current.permalink_url = str(raw.get("permalink_url", "") or current.permalink_url)
