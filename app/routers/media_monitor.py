@@ -154,6 +154,48 @@ def _draft_variants(editorial: dict) -> list[dict[str, str]]:
     return result
 
 
+def _media_source_meta(item: dict, editorial: dict, *, headline_choice: str = "", facebook_choice: str = "", publication_mode: str = "own_post") -> dict:
+    graphic = editorial.get("graphic") if isinstance(editorial.get("graphic"), dict) else {}
+    return {
+        "origin": "media_monitor",
+        "publication_mode": publication_mode,
+        "media_item_id": str(item.get("id") or ""),
+        "source": str(item.get("source") or ""),
+        "original_title": str(item.get("title") or ""),
+        "published_at": item.get("published_at"),
+        "categories": item.get("categories") if isinstance(item.get("categories"), list) else [],
+        "region": str(item.get("region") or ""),
+        "priority": str(editorial.get("priority") or ""),
+        "priority_reason": str(editorial.get("priority_reason") or ""),
+        "graphic": graphic,
+        "trend_level": str(item.get("trend_level") or ""),
+        "trend_source_count": int(item.get("trend_source_count") or 0),
+        "headline_choice": headline_choice,
+        "facebook_choice": facebook_choice,
+    }
+
+
+def _selected_facebook_text(editorial: dict, facebook_choice: str) -> str:
+    facebook = editorial.get("facebook_variants") if isinstance(editorial.get("facebook_variants"), dict) else {}
+    valid = {"sachlich", "pointiert", "emotional", "kampagne"}
+    if facebook_choice not in valid:
+        facebook_choice = "pointiert"
+    return str(
+        facebook.get(facebook_choice)
+        or (facebook.get("mobil") if facebook_choice == "kampagne" else "")
+        or editorial.get("political_angle")
+        or ""
+    ).strip()
+
+
+def _selected_headline(item: dict, editorial: dict, headline_choice: str) -> str:
+    headlines = editorial.get("headlines") if isinstance(editorial.get("headlines"), dict) else {}
+    valid = {"sachlich", "pointiert", "emotional", "kurz"}
+    if headline_choice not in valid:
+        headline_choice = "pointiert"
+    return str(headlines.get(headline_choice) or item.get("title") or "Medienmonitor-Entwurf").strip()
+
+
 @router.post("/media-monitor/analysis/{item_id}/draft", name="medienmonitor_entwurf_erstellen")
 def medienmonitor_entwurf_erstellen(
     request: Request,
@@ -202,23 +244,13 @@ def medienmonitor_entwurf_erstellen(
             "text": _append_hashtags(variant["text"], hashtags),
         })
 
-    graphic = editorial.get("graphic") if isinstance(editorial.get("graphic"), dict) else {}
-    meta = {
-        "origin": "media_monitor",
-        "media_item_id": str(item.get("id") or ""),
-        "source": str(item.get("source") or ""),
-        "original_title": str(item.get("title") or ""),
-        "published_at": item.get("published_at"),
-        "categories": item.get("categories") if isinstance(item.get("categories"), list) else [],
-        "region": str(item.get("region") or ""),
-        "priority": str(editorial.get("priority") or ""),
-        "priority_reason": str(editorial.get("priority_reason") or ""),
-        "graphic": graphic,
-        "trend_level": str(item.get("trend_level") or ""),
-        "trend_source_count": int(item.get("trend_source_count") or 0),
-        "headline_choice": headline_choice,
-        "facebook_choice": facebook_choice,
-    }
+    meta = _media_source_meta(
+        item,
+        editorial,
+        headline_choice=headline_choice,
+        facebook_choice=facebook_choice,
+        publication_mode="own_post",
+    )
 
     draft = post_service.create_draft(
         title=title,
@@ -243,3 +275,131 @@ def medienmonitor_entwurf_erstellen(
         url=str(request.url_for("entwurf_bearbeiten", post_id=draft.id)) + "?media_created=1",
         status_code=303,
     )
+
+@router.post("/media-monitor/analysis/{item_id}/share-draft", name="medienmonitor_link_entwurf_erstellen")
+def medienmonitor_link_entwurf_erstellen(
+    request: Request,
+    item_id: str,
+    facebook_choice: str = Form("pointiert"),
+    force_new: int = Form(0),
+):
+    """Erstellt einen Facebook-Linkbeitrag: eigener Text + Originalartikel als Link-Preview."""
+    items = load_items()
+    item = next((entry for entry in items if str(entry.get("id")) == str(item_id)), None)
+    if item is None:
+        return RedirectResponse(url="/media-monitor", status_code=303)
+
+    existing_draft_id = str(item.get("share_draft_id") or "").strip()
+    if existing_draft_id and not force_new:
+        existing = post_service.get_post(existing_draft_id)
+        if existing is not None:
+            return RedirectResponse(
+                url=str(request.url_for("entwurf_bearbeiten", post_id=existing_draft_id)) + "?media_existing=1",
+                status_code=303,
+            )
+
+    editorial = item.get("editorial") if isinstance(item.get("editorial"), dict) else {}
+    fb_text = _selected_facebook_text(editorial, facebook_choice)
+    hashtags = editorial.get("hashtags") if isinstance(editorial.get("hashtags"), list) else []
+    text = _append_hashtags(fb_text, hashtags)
+    article_url = str(item.get("url") or "").strip()
+
+    if not text or not article_url.startswith(("http://", "https://")):
+        return RedirectResponse(url=f"/media-monitor/analysis/{item_id}?draft_error=1", status_code=303)
+
+    variants = [
+        {"title": variant["title"], "text": _append_hashtags(variant["text"], hashtags)}
+        for variant in _draft_variants(editorial)
+    ]
+    title = f"Link teilen: {str(item.get('title') or '')}".strip()[:120]
+    meta = _media_source_meta(
+        item,
+        editorial,
+        facebook_choice=facebook_choice,
+        publication_mode="link_share",
+    )
+
+    draft = post_service.create_draft(
+        title=title,
+        text=text,
+        text_variants=variants,
+        images=[],
+        videos=[],
+        source_url=article_url,
+        source_type="media_monitor_share",
+        source_name=str(item.get("source") or ""),
+        source_item_id=str(item.get("id") or ""),
+        source_meta=meta,
+    )
+
+    item["share_draft_id"] = draft.id
+    item["share_draft_created_at"] = datetime.now(tz=LOCAL_TIMEZONE).isoformat()
+    item["workflow_status"] = "share_draft_created"
+    save_items(items)
+
+    return RedirectResponse(
+        url=str(request.url_for("entwurf_bearbeiten", post_id=draft.id)) + "?media_created=1",
+        status_code=303,
+    )
+
+
+@router.post("/media-monitor/{item_id}/share-draft-quick", name="medienmonitor_link_entwurf_schnell")
+def medienmonitor_link_entwurf_schnell(request: Request, item_id: str):
+    """Ein-Klick-Einstieg aus der Medienliste; verwendet standardmäßig die pointierte Variante."""
+    items = load_items()
+    item = next((entry for entry in items if str(entry.get("id")) == str(item_id)), None)
+    if item is None:
+        return RedirectResponse(url="/media-monitor", status_code=303)
+
+    existing_draft_id = str(item.get("share_draft_id") or "").strip()
+    if existing_draft_id:
+        existing = post_service.get_post(existing_draft_id)
+        if existing is not None:
+            return RedirectResponse(
+                url=str(request.url_for("entwurf_bearbeiten", post_id=existing_draft_id)) + "?media_existing=1",
+                status_code=303,
+            )
+
+    if item.get("analysis_status") != "done" or not isinstance(item.get("editorial"), dict):
+        return RedirectResponse(url=f"/media-monitor/analysis/{item_id}", status_code=303)
+
+    editorial = item.get("editorial") or {}
+    facebook_choice = "pointiert"
+    fb_text = _selected_facebook_text(editorial, facebook_choice)
+    hashtags = editorial.get("hashtags") if isinstance(editorial.get("hashtags"), list) else []
+    text = _append_hashtags(fb_text, hashtags)
+    article_url = str(item.get("url") or "").strip()
+    if not text or not article_url.startswith(("http://", "https://")):
+        return RedirectResponse(url=f"/media-monitor/analysis/{item_id}?draft_error=1", status_code=303)
+
+    variants = [
+        {"title": variant["title"], "text": _append_hashtags(variant["text"], hashtags)}
+        for variant in _draft_variants(editorial)
+    ]
+    meta = _media_source_meta(
+        item,
+        editorial,
+        facebook_choice=facebook_choice,
+        publication_mode="link_share",
+    )
+    draft = post_service.create_draft(
+        title=f"Link teilen: {str(item.get('title') or '')}".strip()[:120],
+        text=text,
+        text_variants=variants,
+        images=[],
+        videos=[],
+        source_url=article_url,
+        source_type="media_monitor_share",
+        source_name=str(item.get("source") or ""),
+        source_item_id=str(item.get("id") or ""),
+        source_meta=meta,
+    )
+    item["share_draft_id"] = draft.id
+    item["share_draft_created_at"] = datetime.now(tz=LOCAL_TIMEZONE).isoformat()
+    item["workflow_status"] = "share_draft_created"
+    save_items(items)
+    return RedirectResponse(
+        url=str(request.url_for("entwurf_bearbeiten", post_id=draft.id)) + "?media_created=1",
+        status_code=303,
+    )
+

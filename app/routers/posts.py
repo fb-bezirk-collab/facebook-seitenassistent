@@ -247,18 +247,32 @@ def entwurf_loeschen(request: Request, post_id: str):
             detail="Entwurf nicht gefunden.",
         )
 
-    if draft and draft.source_type == "media_monitor" and draft.source_item_id:
+    if draft and draft.source_type in {"media_monitor", "media_monitor_share"} and draft.source_item_id:
         from app.media_monitor.storage import load_items, save_items
         items = load_items()
         changed = False
         for item in items:
             if str(item.get("id") or "") != draft.source_item_id:
                 continue
-            if str(item.get("draft_id") or "") == post_id:
-                item["draft_id"] = ""
-                item["created_post"] = False
-                item["workflow_status"] = "analysis_done" if item.get("analysis_status") == "done" else "analysis_pending"
-                changed = True
+
+            if draft.source_type == "media_monitor_share":
+                if str(item.get("share_draft_id") or "") == post_id:
+                    item["share_draft_id"] = ""
+                    item["share_draft_created_at"] = ""
+                    changed = True
+            else:
+                if str(item.get("draft_id") or "") == post_id:
+                    item["draft_id"] = ""
+                    item["created_post"] = False
+                    changed = True
+
+            if changed:
+                if item.get("share_draft_id"):
+                    item["workflow_status"] = "share_draft_created"
+                elif item.get("draft_id"):
+                    item["workflow_status"] = "draft_created"
+                else:
+                    item["workflow_status"] = "analysis_done" if item.get("analysis_status") == "done" else "analysis_pending"
             break
         if changed:
             save_items(items)

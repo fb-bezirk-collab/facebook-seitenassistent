@@ -332,6 +332,12 @@ async def publication_create(
             invalid_accounts.append(account_id)
             continue
 
+        if post.source_type == "media_monitor_share" and account.platform != "facebook":
+            raise HTTPException(
+                status_code=400,
+                detail="Facebook-Linkbeiträge können nur auf Facebook-Seiten veröffentlicht werden.",
+            )
+
         raw_choice = str(
             form.get(f"variant_choice__{account_id}", "0")
         ).strip()
