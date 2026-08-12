@@ -28,6 +28,8 @@ class FacebookComment:
     attachment_title: str = ""
     attachment_source: str = ""
     attachment_diagnostic: str = ""
+    media_refreshed_at: str = ""
+    media_refresh_error: str = ""
     is_hidden: bool = False
     can_hide: bool = False
     can_remove: bool = False
@@ -74,6 +76,8 @@ class FacebookComment:
             attachment_title=str(data.get("attachment_title", "") or ""),
             attachment_source=str(data.get("attachment_source", "") or ""),
             attachment_diagnostic=str(data.get("attachment_diagnostic", "") or ""),
+            media_refreshed_at=str(data.get("media_refreshed_at", "") or ""),
+            media_refresh_error=str(data.get("media_refresh_error", "") or ""),
             is_hidden=bool(data.get("is_hidden", False)),
             can_hide=bool(data.get("can_hide", False)),
             can_remove=bool(data.get("can_remove", False)),
