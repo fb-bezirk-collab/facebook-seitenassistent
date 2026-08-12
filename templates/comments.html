@@ -54,14 +54,15 @@
 
     {% if job_running %}<div class="notice info"><strong>Kommentarabruf läuft.</strong> Alle eingebundenen Facebook-Seiten werden im Hintergrund geprüft. Diese Seite aktualisiert sich automatisch.</div>{% endif %}
     {% if job_success %}<div class="notice success"><strong>Kommentarabruf abgeschlossen.</strong> Neu: {{ job.new_count or 0 }} · geprüft: {{ job.seen_count or 0 }} Kommentar(e){% if job.error_count %} · {{ job.error_count }} Seite(n) mit Fehler{% endif %}.</div>{% endif %}
+    {% if job_success and job.error_count and first_page_error %}<div class="notice error"><strong>Erster Facebook-Fehler:</strong> {{ first_page_error }}<br><span style="font-size:13px">Die vollständigen Fehler aller Seiten stehen direkt darunter.</span></div>{% endif %}
     {% if job_error %}<div class="notice error"><strong>Kommentarabruf fehlgeschlagen:</strong> {{ job.error }}</div>{% endif %}
     {% if already_running %}<div class="notice warning">Ein Kommentarabruf läuft bereits.</div>{% endif %}
     {% if action == 'hidden' %}<div class="notice success">Der Kommentar wurde auf Facebook ausgeblendet.</div>{% elif action == 'unhidden' %}<div class="notice success">Der Kommentar wurde wieder eingeblendet.</div>{% elif action == 'deleted' %}<div class="notice success">Der Kommentar wurde auf Facebook gelöscht.</div>{% elif action == 'handled' %}<div class="notice success">Der Kommentar wurde als erledigt markiert.</div>{% elif action == 'reopened' %}<div class="notice success">Der Kommentar wurde wieder geöffnet.</div>{% endif %}
     {% if action_error %}<div class="notice error"><strong>Facebook-Aktion fehlgeschlagen:</strong> {{ action_error }}</div>{% endif %}
 
     {% if job.pages %}
-    <details class="page-results">
-        <summary>Ergebnis nach Facebook-Seite anzeigen</summary>
+    <details class="page-results" {% if job.error_count %}open{% endif %}>
+        <summary>Ergebnis nach Facebook-Seite anzeigen{% if job.error_count %} – {{ job.error_count }} Fehler{% endif %}</summary>
         {% for page in job.pages %}
             <div class="source-row">
                 <strong>{{ page.page_name }}</strong><span>{{ page.posts }} Beiträge</span><span>{{ page.comments }} Kommentare</span><span>{{ page.new }} neu</span>
