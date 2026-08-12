@@ -49,6 +49,10 @@ class ManagedPost:
     video_url: str = ""
     page_id: str = ""
     source_url: str = ""
+    source_type: str = ""
+    source_name: str = ""
+    source_item_id: str = ""
+    source_meta: dict = field(default_factory=dict)
     status: str = "draft"
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
@@ -92,6 +96,10 @@ class ManagedPost:
             video_url=video_url,
             page_id=str(data.get("page_id", "")),
             source_url=str(data.get("source_url", "")),
+            source_type=str(data.get("source_type", "")),
+            source_name=str(data.get("source_name", "")),
+            source_item_id=str(data.get("source_item_id", "")),
+            source_meta=data.get("source_meta", {}) if isinstance(data.get("source_meta", {}), dict) else {},
             status=status,
             created_at=str(data.get("created_at", utc_now_iso())),
             updated_at=str(data.get("updated_at", utc_now_iso())),
