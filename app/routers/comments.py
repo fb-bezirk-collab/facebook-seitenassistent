@@ -13,6 +13,7 @@ from app.comment_monitor.ai import AI_CLASSIFICATION_VERSION
 from app.comment_monitor.ai_job import mark_ai_started, run_ai_job
 from app.comment_monitor.service import CommentMonitorService
 from app.comment_monitor.storage import CommentStorage
+from app.comment_monitor.users import build_user_profiles, get_user_profile, user_key_for_name
 from app.config import TEMPLATES_DIR
 from app.services.facebook_api import FacebookApiError
 
@@ -51,6 +52,9 @@ def kommentar_monitor(
         row["created_display"] = _format_datetime(item.created_time)
         row["post_preview"] = (item.post_message or "Beitrag ohne Text")[:180]
         row["ai_needs_update"] = item.ai_version != AI_CLASSIFICATION_VERSION
+        row["user_key"] = user_key_for_name(item.author_name)
+        row["moderation_recommended"] = item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}
+        row["reply_recommended"] = item.ai_recommendation == "Antworten"
         rows.append(row)
 
     job = storage.load_job()
@@ -59,6 +63,7 @@ def kommentar_monitor(
     ai_state = str(ai_job.get("state", "idle"))
 
     page_names = sorted({item.page_name for item in comments if item.page_name}, key=str.lower)
+    user_profiles = build_user_profiles(comments)
     counts = {
         "all": len(comments),
         "new": sum(1 for item in comments if item.status == "new"),
@@ -69,6 +74,11 @@ def kommentar_monitor(
         "critical": sum(1 for item in comments if item.ai_category in {"Meinung/Kritik", "Provokation", "Beleidigung", "Drohung/Gewalt"}),
         "moderation": sum(1 for item in comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
         "unanalyzed": sum(1 for item in comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and (item.message or "").strip()),
+        "reply_recommended": sum(1 for item in comments if item.ai_recommendation == "Antworten"),
+        "spam": sum(1 for item in comments if item.ai_category == "Spam"),
+        "off_topic": sum(1 for item in comments if item.ai_category == "Off-Topic"),
+        "users": len(user_profiles),
+        "repeat_users": sum(1 for profile in user_profiles if profile.get("repeated_comment_count", 0) >= 3 or profile.get("moderation_count", 0) >= 3),
     }
 
     first_page_error = next(
@@ -82,6 +92,7 @@ def kommentar_monitor(
         context={
             "comments": rows,
             "page_names": page_names,
+            "user_profiles": user_profiles[:25],
             "counts": counts,
             "job_running": state == "running",
             "job_success": state == "success",
@@ -178,3 +189,66 @@ def kommentar_wieder_offen(comment_id: str):
         return RedirectResponse(url="/comments?action=reopened", status_code=303)
     except FacebookApiError as error:
         return RedirectResponse(url="/comments?error=" + quote(str(error)), status_code=303)
+
+
+@router.get("/comments/users/{user_key}", name="kommentar_benutzerprofil")
+def kommentar_benutzerprofil(request: Request, user_key: str, action: str | None = None, error: str | None = None):
+    comments = storage.load()
+    profile = get_user_profile(comments, user_key)
+    if profile is None:
+        return RedirectResponse(url="/comments?error=" + quote("Das Benutzerprofil wurde nicht gefunden."), status_code=303)
+    rows = []
+    for item in profile["comments"]:
+        row = item.to_dict()
+        row["created_display"] = _format_datetime(item.created_time)
+        row["post_preview"] = (item.post_message or "Beitrag ohne Text")[:220]
+        rows.append(row)
+    profile = dict(profile)
+    profile["comments"] = rows
+    return templates.TemplateResponse(
+        request=request,
+        name="comment_user.html",
+        context={"profile": profile, "action": action or "", "action_error": error or ""},
+    )
+
+
+@router.post("/comments/users/{user_key}/watch", name="kommentar_benutzer_beobachten")
+def kommentar_benutzer_beobachten(user_key: str):
+    try:
+        service.set_user_watchlist(user_key, True)
+        return RedirectResponse(url=f"/comments/users/{user_key}?action=watch", status_code=303)
+    except FacebookApiError as error:
+        return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
+
+
+@router.post("/comments/users/{user_key}/unwatch", name="kommentar_benutzer_nicht_beobachten")
+def kommentar_benutzer_nicht_beobachten(user_key: str):
+    try:
+        service.set_user_watchlist(user_key, False)
+        return RedirectResponse(url=f"/comments/users/{user_key}?action=unwatch", status_code=303)
+    except FacebookApiError as error:
+        return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
+
+
+@router.post("/comments/users/{user_key}/block-known-pages", name="kommentar_benutzer_sperren")
+def kommentar_benutzer_sperren(user_key: str):
+    try:
+        result = service.set_user_blocked_on_known_pages(user_key, True)
+        return RedirectResponse(
+            url=f"/comments/users/{user_key}?action=blocked_{result['success_count']}_{result['error_count']}",
+            status_code=303,
+        )
+    except FacebookApiError as error:
+        return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
+
+
+@router.post("/comments/users/{user_key}/unblock-known-pages", name="kommentar_benutzer_entsperren")
+def kommentar_benutzer_entsperren(user_key: str):
+    try:
+        result = service.set_user_blocked_on_known_pages(user_key, False)
+        return RedirectResponse(
+            url=f"/comments/users/{user_key}?action=unblocked_{result['success_count']}_{result['error_count']}",
+            status_code=303,
+        )
+    except FacebookApiError as error:
+        return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
