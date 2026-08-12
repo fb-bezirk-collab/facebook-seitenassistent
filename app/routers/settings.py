@@ -27,6 +27,12 @@ from app.services.social_account_service import (
 from app.services.instagram_account_service import InstagramAccountService
 from app.services.instagram_api import InstagramApiError, InstagramApiService
 from app.services.instagram_config_service import load_instagram_config
+from app.media_monitor.social_profile import (
+    load_social_media_profile,
+    load_default_social_media_profile,
+    save_social_media_profile,
+    reset_social_media_profile,
+)
 
 
 router = APIRouter()
@@ -50,6 +56,9 @@ def einstellungen(
     instagram_connected: int = 0,
     instagram_count: int = 0,
     instagram_warning: str | None = None,
+    social_profile_saved: int = 0,
+    social_profile_reset: int = 0,
+    social_profile_error: str | None = None,
 ):
     meta_config = meta_config_service.load()
     facebook_pages = settings_service.load_pages()
@@ -111,8 +120,36 @@ def einstellungen(
 "instagram_is_connected": bool(InstagramAccountService().list_accounts()),
             "instagram_count": instagram_count,
             "instagram_warning": instagram_warning,
+            "fpoe_social_media_profile": load_social_media_profile(),
+            "social_profile_saved": bool(social_profile_saved),
+            "social_profile_reset": bool(social_profile_reset),
+            "social_profile_error": social_profile_error,
         },
     )
+
+
+@router.post("/settings/fpoe-social-profile")
+def fpoe_social_media_profil_speichern(profile_text: str = Form(...)):
+    try:
+        save_social_media_profile(profile_text)
+    except (OSError, ValueError) as exc:
+        return RedirectResponse(
+            url="/settings?social_profile_error=" + quote(str(exc)),
+            status_code=303,
+        )
+    return RedirectResponse(url="/settings?social_profile_saved=1", status_code=303)
+
+
+@router.post("/settings/fpoe-social-profile/reset")
+def fpoe_social_media_profil_zuruecksetzen():
+    try:
+        reset_social_media_profile()
+    except OSError as exc:
+        return RedirectResponse(
+            url="/settings?social_profile_error=" + quote(str(exc)),
+            status_code=303,
+        )
+    return RedirectResponse(url="/settings?social_profile_reset=1", status_code=303)
 
 
 @router.get("/facebook/connect")
