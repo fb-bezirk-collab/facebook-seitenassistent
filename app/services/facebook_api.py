@@ -348,7 +348,9 @@ class FacebookApiService:
             "fields": (
                 "id,message,created_time,from{id,name},permalink_url,"
                 "is_hidden,can_hide,can_remove,parent{id},"
-                "attachment{media{image},type,url,target}"
+                "attachment{type,url,title,description,target{id,url},"
+                "media{image{src,height,width},source},"
+                "subattachments{type,url,title,description,target{id,url},media{image{src,height,width},source}}}"
             ),
             "filter": "stream",
             "order": "reverse_chronological",
@@ -362,9 +364,17 @@ class FacebookApiService:
             fallback = dict(params)
             fallback["fields"] = (
                 "id,message,created_time,from{id,name},permalink_url,"
-                "is_hidden,can_hide,can_remove,parent{id}"
+                "is_hidden,can_hide,can_remove,parent{id},"
+                "attachment{media{image},type,url,target}"
             )
-            return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)))
+            try:
+                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)))
+            except FacebookApiError:
+                fallback["fields"] = (
+                    "id,message,created_time,from{id,name},permalink_url,"
+                    "is_hidden,can_hide,can_remove,parent{id}"
+                )
+                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)))
 
     def get_comment_details(
         self,
@@ -382,7 +392,9 @@ class FacebookApiService:
             "fields": (
                 "id,message,created_time,from{id,name},permalink_url,"
                 "is_hidden,can_hide,can_remove,parent{id},"
-                "attachment{media{image},type,url,target}"
+                "attachment{type,url,title,description,target{id,url},"
+                "media{image{src,height,width},source},"
+                "subattachments{type,url,title,description,target{id,url},media{image{src,height,width},source}}}"
             ),
         }
         try:
@@ -391,9 +403,17 @@ class FacebookApiService:
             fallback = dict(params)
             fallback["fields"] = (
                 "id,message,created_time,from{id,name},permalink_url,"
-                "is_hidden,can_hide,can_remove,parent{id}"
+                "is_hidden,can_hide,can_remove,parent{id},"
+                "attachment{media{image},type,url,target}"
             )
-            data = self._request_json(method="GET", url=url, params=fallback)
+            try:
+                data = self._request_json(method="GET", url=url, params=fallback)
+            except FacebookApiError:
+                fallback["fields"] = (
+                    "id,message,created_time,from{id,name},permalink_url,"
+                    "is_hidden,can_hide,can_remove,parent{id}"
+                )
+                data = self._request_json(method="GET", url=url, params=fallback)
         return data if isinstance(data, dict) else {}
 
     def set_comment_hidden(
