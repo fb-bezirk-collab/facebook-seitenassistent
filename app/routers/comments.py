@@ -56,7 +56,22 @@ def kommentar_monitor(
         row["moderation_recommended"] = item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}
         row["reply_recommended"] = item.ai_recommendation == "Antworten"
         at = (item.attachment_type or "").casefold()
-        row["attachment_label"] = ("Sticker" if "sticker" in at else "GIF" if "gif" in at else "Video" if "video" in at else "Bild" if item.attachment_image_url or "photo" in at or "image" in at else "Medienanhang" if (item.attachment_type or item.attachment_url) else "")
+        if at == "sticker_or_media":
+            row["attachment_label"] = "Sticker/Medienkommentar"
+        elif "sticker" in at:
+            row["attachment_label"] = "Sticker"
+        elif "gif" in at or "animated" in at:
+            row["attachment_label"] = "GIF"
+        elif "video" in at:
+            row["attachment_label"] = "Video"
+        elif at == "link" and item.attachment_image_url:
+            row["attachment_label"] = "Linkvorschau"
+        elif item.attachment_image_url or "photo" in at or "image" in at:
+            row["attachment_label"] = "Bild"
+        elif item.attachment_type or item.attachment_url:
+            row["attachment_label"] = "Medienanhang"
+        else:
+            row["attachment_label"] = ""
         rows.append(row)
 
     job = storage.load_job()
