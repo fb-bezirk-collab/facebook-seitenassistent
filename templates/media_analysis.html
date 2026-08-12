@@ -199,9 +199,35 @@
         </details>
 
 
+        <section class="draft-box" style="border-color:#84adff;background:#f5f8ff">
+            <h2>📤 Zeitungsartikel auf Facebook teilen</h2>
+            <p>Facebook veröffentlicht den Originalartikel als Linkbeitrag. Dein ausgewählter KI-Text steht als eigener Begleittext darüber. Die Link-Vorschau mit Bild, Überschrift und Quelle erzeugt Facebook beim Veröffentlichen.</p>
+            {% if item.share_draft_id %}
+                <div class="draft-created">📤 Für diese Meldung gibt es bereits einen Linkbeitrag. <a href="{{ url_for('entwurf_bearbeiten', post_id=item.share_draft_id) }}"><strong>Linkbeitrag öffnen</strong></a></div>
+            {% endif %}
+            <form method="post" action="{{ url_for('medienmonitor_link_entwurf_erstellen', item_id=item.id) }}">
+                <h3>Begleittext auswählen</h3>
+                <div class="choice-grid">
+                    {% set sharechoices = [('sachlich','Sachlich'),('pointiert','Pointiert'),('emotional','Emotional'),('kampagne','Kampagnenstil')] %}
+                    {% for key,label in sharechoices %}
+                        {% set sv = e.facebook_variants.get(key) if e.facebook_variants else '' %}
+                        {% if key == 'kampagne' and not sv and e.facebook_variants %}{% set sv = e.facebook_variants.get('mobil') %}{% endif %}
+                        <label class="choice">
+                            <strong><input type="radio" name="facebook_choice" value="{{ key }}" {% if key == 'pointiert' %}checked{% endif %}>{{ label }}</strong>
+                            <span>{{ sv or 'Kein Vorschlag vorhanden' }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                {% if item.share_draft_id %}
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><input type="checkbox" name="force_new" value="1"> Trotzdem einen weiteren Linkbeitrag erzeugen</label>
+                {% endif %}
+                <button class="analyse-button" type="submit">📤 Facebook-Linkbeitrag erstellen</button>
+            </form>
+        </section>
+
         <section class="draft-box">
-            <h2>📄 In Entwürfe übernehmen</h2>
-            <p>Wähle eine Headline und den gewünschten Facebook-Text. Die übrigen KI-Facebookvarianten bleiben im Entwurf erhalten und können später weiterverwendet oder automatisch auf Seiten verteilt werden.</p>
+            <h2>📝 Eigenen Beitrag vorbereiten</h2>
+            <p>Wähle eine Headline und den gewünschten Facebook-Text. Dieser Weg erzeugt einen eigenständigen Entwurf. Eigene Bilder oder die spätere KI-Grafik werden im Entwurfseditor ergänzt; der Originalartikel bleibt als Quellenreferenz verknüpft.</p>
             {% if draft_error %}<div class="draft-error">Es konnte kein Entwurf erzeugt werden, weil noch kein verwendbarer Facebook-Text vorhanden ist. Bitte die Analyse aktualisieren.</div>{% endif %}
             {% if item.draft_id %}
                 <div class="draft-created">📝 Für diese Meldung wurde bereits ein Entwurf erstellt. <a href="{{ url_for('entwurf_bearbeiten', post_id=item.draft_id) }}"><strong>Entwurf öffnen</strong></a></div>

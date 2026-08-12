@@ -108,15 +108,20 @@
     {% if media_created %}<div class="notice">Der KI-Vorschlag wurde als Entwurf übernommen. Du kannst Text, Medien, Varianten und Planung jetzt wie gewohnt bearbeiten.</div>{% endif %}
     {% if media_existing %}<div class="notice">Für diese Medienmeldung war bereits ein Entwurf vorhanden. Dieser Entwurf wurde geöffnet.</div>{% endif %}
 
-    {% if draft.source_type == 'media_monitor' %}
+    {% if draft.source_type in ['media_monitor', 'media_monitor_share'] %}
     <div class="media-origin">
-        <strong>📰 Erstellt aus dem KI-Medienmonitor</strong>
+        <strong>{% if draft.source_type == 'media_monitor_share' %}📤 Facebook-Linkbeitrag aus dem KI-Medienmonitor{% else %}📰 Erstellt aus dem KI-Medienmonitor{% endif %}</strong>
         <div class="meta-row">
             {% if draft.source_name %}<span>Quelle: <strong>{{ draft.source_name }}</strong></span>{% endif %}
             {% if draft.source_meta.priority %}<span>KI-Priorität: <strong>{{ draft.source_meta.priority }}</strong></span>{% endif %}
             {% if draft.source_meta.trend_level %}<span>{% if draft.source_meta.trend_level == 'breaking' %}🚨 BREAKING{% elif draft.source_meta.trend_level == 'trending' %}🔥 TRENDING{% else %}Mehrere Medien{% endif %}{% if draft.source_meta.trend_source_count %} · {{ draft.source_meta.trend_source_count }} Quellen{% endif %}</span>{% endif %}
         </div>
         {% if draft.source_url %}<div style="margin-top:8px"><a href="{{ draft.source_url }}" target="_blank" rel="noopener noreferrer">Originalartikel öffnen</a></div>{% endif %}
+        {% if draft.source_type == 'media_monitor_share' %}
+        <div class="hint" style="margin-top:10px">
+            <strong>Facebook-Linkbeitrag:</strong> Beim Veröffentlichen ohne eigenes Bild wird dieser Originalartikel als Facebook-Link geteilt. Facebook erzeugt die Linkvorschau. Fügst du dem Entwurf eigene Bilder hinzu, werden diese stattdessen als normaler Bildbeitrag veröffentlicht.
+        </div>
+        {% endif %}
         <details>
             <summary>KI-Daten anzeigen</summary>
             {% if draft.source_meta.original_title %}<p><strong>Originaltitel:</strong> {{ draft.source_meta.original_title }}</p>{% endif %}
@@ -232,6 +237,7 @@
 
                 <div class="account-list">
                     {% for account in social_accounts %}
+                    {% if draft.source_type != 'media_monitor_share' or account.platform == 'facebook' %}
                     <div class="account-row" data-platform="{{ account.platform }}">
                         <input type="checkbox" name="account_ids" value="{{ account.id }}" onchange="updateSelectionCount()">
                         <span class="account-meta">
@@ -253,6 +259,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>

@@ -202,8 +202,15 @@
                             <td>
                                 <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
                                     <a class="open-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>
+                                    {% if item.share_draft_id %}
+                                        <a class="open-link" href="{{ url_for('entwurf_bearbeiten', post_id=item.share_draft_id) }}">📤 Linkbeitrag öffnen</a>
+                                    {% elif item.analysis_status == 'done' %}
+                                        <form method="post" action="{{ url_for('medienmonitor_link_entwurf_schnell', item_id=item.id) }}" style="margin:0">
+                                            <button type="submit" class="open-link" style="border:0;background:transparent;padding:0;cursor:pointer;font:inherit">📤 Facebook-Linkbeitrag</button>
+                                        </form>
+                                    {% endif %}
                                     {% if item.draft_id %}
-                                        <a class="open-link" href="{{ url_for('entwurf_bearbeiten', post_id=item.draft_id) }}">📝 Entwurf öffnen</a>
+                                        <a class="open-link" href="{{ url_for('entwurf_bearbeiten', post_id=item.draft_id) }}">📝 Eigener Entwurf öffnen</a>
                                     {% endif %}
                                     {% if item.analysis_status == 'done' %}
                                         <a class="open-link" href="{{ url_for('medienmonitor_analyse', item_id=item.id) }}">KI-Analyse öffnen</a>
@@ -237,7 +244,7 @@
     </section>
 
     <div class="phase-note">
-        <strong>Version 2.4 – Filterung, Trends und KI-Analyse:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Zusätzlich erkennt der Monitor dasselbe konkrete Ereignis in mehreren Medien: 2 Quellen = „Mehrere Medien“, 3 Quellen innerhalb von 12 Stunden = „TRENDING“, ab 4 Quellen innerhalb von 6 Stunden = „BREAKING“. Eine automatische Veröffentlichung ist ausgeschlossen.
+        <strong>Version 3.0 – Medienmonitor, KI-Analyse und Facebook-Linkbeiträge:</strong> Offensichtliche Sport-, Kultur-, Lifestyle- und Unterhaltungsmeldungen werden ohne KI ausgeschlossen. Die übrigen Meldungen bewertet die KI nach sechs Kriterien. Zusätzlich erkennt der Monitor dasselbe konkrete Ereignis in mehreren Medien: 2 Quellen = „Mehrere Medien“, 3 Quellen innerhalb von 12 Stunden = „TRENDING“, ab 4 Quellen innerhalb von 6 Stunden = „BREAKING“. Eine automatische Veröffentlichung ist ausgeschlossen.
     </div>
 </div>
 </main>
