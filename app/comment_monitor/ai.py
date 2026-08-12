@@ -23,6 +23,7 @@ CATEGORIES = (
     "Beleidigung",
     "Drohung/Gewalt",
     "Spam",
+    "Off-Topic",
     "Neutral",
 )
 
@@ -35,7 +36,7 @@ RECOMMENDATIONS = (
     "Löschen prüfen",
 )
 
-AI_CLASSIFICATION_VERSION = "2.7.5"
+AI_CLASSIFICATION_VERSION = "2.8.0"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -284,6 +285,10 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
             priority = "niedrig"
             if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
                 recommendation = "Keine Aktion"
+        elif category == "Off-Topic":
+            priority = "niedrig"
+            if recommendation in {"Ausblenden prüfen", "Löschen prüfen", "Antworten"}:
+                recommendation = "Ignorieren"
         elif category == "Frage" and priority == "hoch":
             priority = "mittel"
         elif category == "Provokation" and priority == "hoch":

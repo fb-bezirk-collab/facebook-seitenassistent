@@ -203,3 +203,86 @@ class CommentMonitorService:
             comment.reply_error = str(error)
         self.storage.update(comment)
         return comment
+
+    def set_user_blocked_on_known_pages(self, user_key: str, blocked: bool = True) -> dict:
+        """Blockiert/entsperrt einen gebündelten Kommentator auf allen eindeutig bekannten Seiten.
+
+        Facebook verwendet Page-Scoped User IDs. Deshalb wird pro Seite ausschließlich die
+        dort tatsächlich beobachtete PSID verwendet. Seiten mit mehrdeutiger Namenszuordnung
+        werden nicht automatisch verändert.
+        """
+        from app.comment_monitor.users import CommentUserStateStorage, get_user_profile
+        from app.models.facebook_comment_user import FacebookCommentUserState
+
+        comments = self.storage.load()
+        profile = get_user_profile(comments, user_key)
+        if profile is None:
+            raise FacebookApiError("Das Benutzerprofil wurde nicht gefunden.")
+        if not profile.get("page_ids"):
+            raise FacebookApiError("Für diesen Benutzer ist auf keiner Seite eine eindeutige Facebook-ID gespeichert.")
+
+        pages = {page.page_id: page for page in self.settings_service.load_pages() if page.is_active}
+        api = FacebookApiService(config=self.meta_config_service.load())
+        results = []
+        success_count = 0
+        error_count = 0
+
+        for page_id, psid in profile.get("page_ids", {}).items():
+            page = pages.get(page_id)
+            page_name = page.name if page else page_id
+            if page is None or not page.access_token:
+                results.append({"page_id": page_id, "page_name": page_name, "success": False, "error": "Kein Seitenzugriffstoken gespeichert."})
+                error_count += 1
+                continue
+            try:
+                api.set_page_user_blocked(
+                    page_id=page_id,
+                    page_access_token=page.access_token,
+                    user_id=psid,
+                    blocked=blocked,
+                )
+                results.append({"page_id": page_id, "page_name": page_name, "success": True, "error": ""})
+                success_count += 1
+            except FacebookApiError as error:
+                results.append({"page_id": page_id, "page_name": page_name, "success": False, "error": str(error)})
+                error_count += 1
+
+        state_storage = CommentUserStateStorage()
+        state = state_storage.get(user_key) or FacebookCommentUserState(
+            user_key=user_key,
+            display_name=str(profile.get("display_name", "")),
+        )
+        state.status = "blocked" if blocked and success_count else ("normal" if not blocked and success_count else state.status)
+        state.last_action = "blocked" if blocked else "unblocked"
+        state.last_action_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for item in results:
+            if item["success"]:
+                state.page_block_status[item["page_id"]] = "blocked" if blocked else "unblocked"
+            else:
+                state.page_block_status[item["page_id"]] = "error: " + item["error"]
+        state_storage.update(state)
+
+        return {
+            "success_count": success_count,
+            "error_count": error_count,
+            "results": results,
+            "blocked": blocked,
+            "display_name": profile.get("display_name", ""),
+        }
+
+    def set_user_watchlist(self, user_key: str, enabled: bool = True) -> None:
+        from app.comment_monitor.users import CommentUserStateStorage, get_user_profile
+        from app.models.facebook_comment_user import FacebookCommentUserState
+
+        profile = get_user_profile(self.storage.load(), user_key)
+        if profile is None:
+            raise FacebookApiError("Das Benutzerprofil wurde nicht gefunden.")
+        state_storage = CommentUserStateStorage()
+        state = state_storage.get(user_key) or FacebookCommentUserState(
+            user_key=user_key,
+            display_name=str(profile.get("display_name", "")),
+        )
+        state.status = "watchlist" if enabled else "normal"
+        state.last_action = "watchlist_on" if enabled else "watchlist_off"
+        state.last_action_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        state_storage.update(state)
