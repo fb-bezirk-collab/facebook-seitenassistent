@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.comment_monitor.job import mark_started, run_fetch_job
+from app.comment_monitor.ai import AI_CLASSIFICATION_VERSION
 from app.comment_monitor.ai_job import mark_ai_started, run_ai_job
 from app.comment_monitor.service import CommentMonitorService
 from app.comment_monitor.storage import CommentStorage
@@ -49,6 +50,7 @@ def kommentar_monitor(
         row = item.to_dict()
         row["created_display"] = _format_datetime(item.created_time)
         row["post_preview"] = (item.post_message or "Beitrag ohne Text")[:180]
+        row["ai_needs_update"] = item.ai_version != AI_CLASSIFICATION_VERSION
         rows.append(row)
 
     job = storage.load_job()
@@ -64,9 +66,9 @@ def kommentar_monitor(
         "hidden": sum(1 for item in comments if item.status == "hidden"),
         "deleted": sum(1 for item in comments if item.status == "deleted"),
         "questions": sum(1 for item in comments if item.ai_category == "Frage"),
-        "critical": sum(1 for item in comments if item.ai_category in {"Sachliche Kritik", "Politische Kritik", "Provokation", "Beleidigung"}),
+        "critical": sum(1 for item in comments if item.ai_category in {"Meinung/Kritik", "Provokation", "Beleidigung", "Drohung/Gewalt"}),
         "moderation": sum(1 for item in comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
-        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and not item.ai_category and (item.message or "").strip()),
+        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and (item.message or "").strip()),
     }
 
     first_page_error = next(
