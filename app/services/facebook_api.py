@@ -18,6 +18,15 @@ FACEBOOK_DIALOG_URL = (
     "/dialog/oauth"
 )
 
+REQUIRED_PAGE_PERMISSIONS = (
+    "pages_show_list",
+    "business_management",
+    "pages_read_engagement",
+    "pages_manage_posts",
+    "pages_read_user_content",
+    "pages_manage_engagement",
+)
+
 
 class FacebookApiError(Exception):
     pass
@@ -144,6 +153,42 @@ class FacebookApiService:
                 data.get("expires_in")
             ),
         )
+
+    def get_user_permissions(
+        self,
+        user_access_token: str,
+    ) -> dict[str, str]:
+        """Liest die tatsächlich am User-Token gewährten Facebook-Rechte."""
+        url = GRAPH_API_BASE_URL + "/me/permissions"
+        data = self._request_json(
+            method="GET",
+            url=url,
+            params={
+                "access_token": user_access_token,
+                "limit": 100,
+            },
+        )
+
+        permissions: dict[str, str] = {}
+        for item in data.get("data", []):
+            if not isinstance(item, dict):
+                continue
+            permission = str(item.get("permission", "")).strip()
+            status = str(item.get("status", "")).strip().lower()
+            if permission:
+                permissions[permission] = status
+        return permissions
+
+    def missing_required_page_permissions(
+        self,
+        user_access_token: str,
+    ) -> list[str]:
+        granted = self.get_user_permissions(user_access_token)
+        return [
+            permission
+            for permission in REQUIRED_PAGE_PERMISSIONS
+            if granted.get(permission) != "granted"
+        ]
 
     def get_managed_pages(
         self,
