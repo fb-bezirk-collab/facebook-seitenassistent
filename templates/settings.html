@@ -59,6 +59,9 @@
             .meta-grid, .manual-form { grid-template-columns: 1fr; }
             .header-row, .platform-head, .account-row { align-items: stretch; flex-direction: column; }
         }
+            .profile-editor { width: 100%; min-height: 520px; resize: vertical; padding: 14px; border: 1px solid #d0d5dd; border-radius: 10px; font-family: Consolas, "Courier New", monospace; font-size: 14px; line-height: 1.45; }
+        .profile-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+        .primary { background:#175cd3 !important; color:#fff !important; border-color:#175cd3 !important; }
     </style>
 </head>
 <body>
@@ -239,6 +242,28 @@
                 </article>
             {% endfor %}
         </div>
+    </section>
+
+
+    <section class="card" id="fpoe-social-media-profil">
+        <h2>FPÖ-Social-Media-Profil</h2>
+        <p class="muted">
+            Dieses Redaktionsprofil steuert den politischen Spin der KI-Vorschläge im Medienmonitor.
+            Du kannst hier Themengruppen, typische Formulierungen und redaktionelle Regeln selbst ergänzen.
+            Änderungen wirken bei der nächsten KI-Analyse sofort und bleiben auf dem Railway-Volume gespeichert.
+        </p>
+        {% if social_profile_saved %}<div class="message success">FPÖ-Social-Media-Profil gespeichert. Die nächste KI-Analyse verwendet die neue Fassung.</div>{% endif %}
+        {% if social_profile_reset %}<div class="message success">FPÖ-Social-Media-Profil auf die mitgelieferte Standardfassung zurückgesetzt.</div>{% endif %}
+        {% if social_profile_error %}<div class="message error">{{ social_profile_error }}</div>{% endif %}
+        <form method="post" action="/settings/fpoe-social-profile">
+            <textarea class="profile-editor" name="profile_text" spellcheck="false">{{ fpoe_social_media_profile }}</textarea>
+            <div class="profile-actions">
+                <button class="button primary" type="submit">Profil speichern</button>
+            </div>
+        </form>
+        <form method="post" action="/settings/fpoe-social-profile/reset" style="margin-top:10px" onsubmit="return confirm('Wirklich auf die Standardfassung zurücksetzen? Eigene Änderungen gehen verloren.')">
+            <button class="button" type="submit">Standardprofil wiederherstellen</button>
+        </form>
     </section>
 
     <section class="card">
