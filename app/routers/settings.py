@@ -251,6 +251,24 @@ def facebook_callback(
         except FacebookApiError:
             final_token = short_token
 
+        missing_permissions = (
+            facebook_api.missing_required_page_permissions(
+                final_token.access_token
+            )
+        )
+        if missing_permissions:
+            missing_text = ", ".join(missing_permissions)
+            raise FacebookApiError(
+                "Die Facebook-Anmeldung wurde abgeschlossen, aber Meta hat "
+                "nicht alle erforderlichen Seitenberechtigungen in das Token "
+                "übernommen. Es fehlen: " + missing_text + ". "
+                "Da diese App Facebook Login for Business mit META_CONFIG_ID "
+                "verwendet, müssen diese Rechte in der zugehörigen Meta-"
+                "Konfiguration unter Facebook Login for Business → "
+                "Configurations/Berechtigungen aktiviert werden. "
+                "Danach bitte Meta in den Einstellungen erneut verbinden."
+            )
+
         pages = facebook_api.get_managed_pages(
             user_access_token=(
                 final_token.access_token
