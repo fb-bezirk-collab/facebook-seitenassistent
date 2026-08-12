@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Kommentar-Monitor – Seitenassistent</title>
+    <style>
+        *{box-sizing:border-box}
+        body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f8;color:#1f2937}
+        .header{background:#fff;border-bottom:1px solid #dfe3e8;padding:20px 0}
+        .container{width:min(1220px,calc(100% - 40px));margin:0 auto}
+        .header-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
+        h1{margin:0 0 6px;font-size:28px}.subtitle{margin:0;color:#667085}
+        .nav{display:flex;gap:10px;flex-wrap:wrap}.nav a,.nav button{color:#344054;text-decoration:none;padding:10px 14px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;font-weight:700;cursor:pointer}
+        main{padding:34px 0 60px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:18px}.topbar h2{font-size:30px;margin:0 0 6px}.topbar p{margin:0;color:#667085;line-height:1.45}
+        .primary{border:0;background:#1877f2;color:#fff;border-radius:10px;min-height:48px;padding:0 20px;font-weight:800;font-size:15px;cursor:pointer}.primary[disabled]{opacity:.55;cursor:not-allowed}
+        .notice{padding:14px 16px;border-radius:11px;margin-bottom:16px;line-height:1.45}.success{background:#ecfdf3;border:1px solid #a6f4c5;color:#067647}.info{background:#eff8ff;border:1px solid #b2ddff;color:#175cd3}.error{background:#fef3f2;border:1px solid #fda29b;color:#b42318}.warning{background:#fffaeb;border:1px solid #fedf89;color:#93370d}
+        .stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:18px 0}.stat{background:#fff;border:1px solid #e4e7ec;border-radius:13px;padding:16px}.stat-label{font-size:12px;color:#667085;text-transform:uppercase;font-weight:800}.stat-value{font-size:25px;font-weight:900;margin-top:5px}
+        .filters{display:grid;grid-template-columns:minmax(260px,1.6fr) minmax(190px,.7fr) minmax(190px,.7fr);gap:12px;background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:14px;margin-bottom:18px}.filters input,.filters select{width:100%;min-height:44px;border:1px solid #d0d5dd;border-radius:9px;padding:0 12px;background:#fff;font-size:15px}
+        .result-line{color:#667085;font-size:14px;margin:0 0 12px}.comment-list{display:grid;gap:14px}.comment{background:#fff;border:1px solid #e4e7ec;border-radius:15px;box-shadow:0 5px 18px rgba(16,24,40,.04);overflow:hidden}.comment-head{display:flex;justify-content:space-between;gap:18px;padding:15px 17px;border-bottom:1px solid #edf0f3;align-items:flex-start}.page{display:inline-block;background:#eef4ff;color:#1849c6;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.author{font-weight:800;margin-top:9px}.time{font-size:13px;color:#667085;margin-top:4px}.status{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.status-new{background:#eff8ff;color:#175cd3}.status-handled{background:#ecfdf3;color:#067647}.status-hidden{background:#fff3d6;color:#9a6500}.status-deleted{background:#fee4e2;color:#b42318}
+        .comment-body{padding:17px}.message{font-size:17px;line-height:1.55;white-space:pre-wrap;margin:0 0 14px}.post-box{background:#f8fafc;border-radius:10px;padding:11px 13px;color:#667085;font-size:13px;line-height:1.45}.post-box strong{color:#344054}.actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 17px 17px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border-radius:8px;border:1px solid #d0d5dd;background:#fff;color:#344054;text-decoration:none;font-weight:700;cursor:pointer}.button.hide{background:#fffaeb;color:#93370d;border-color:#fedf89}.button.delete{background:#fef3f2;color:#b42318;border-color:#fda29b}.button.done{background:#ecfdf3;color:#067647;border-color:#a6f4c5}.button.open{background:#eff8ff;color:#175cd3;border-color:#b2ddff}.empty{background:#fff;border-radius:14px;padding:36px;text-align:center;color:#667085}.page-results{margin:10px 0 18px;background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:12px 15px}.page-results summary{font-weight:800;cursor:pointer}.source-row{display:grid;grid-template-columns:minmax(180px,1fr) auto auto auto;gap:10px;padding:8px 0;border-top:1px solid #f0f2f5;font-size:13px}.source-row:first-of-type{margin-top:10px}.source-error{color:#b42318;grid-column:1/-1}
+        [hidden]{display:none!important}
+        @media(max-width:900px){.header-row,.topbar{flex-direction:column;align-items:stretch}.stats{grid-template-columns:repeat(2,1fr)}.filters{grid-template-columns:1fr}.source-row{grid-template-columns:1fr 1fr}.source-error{grid-column:1/-1}}
+        @media(max-width:560px){.container{width:min(100% - 24px,1220px)}.stats{grid-template-columns:1fr 1fr}.comment-head{flex-direction:column}.actions form,.actions .button{width:100%}.actions .button{justify-content:center}}
+    </style>
+</head>
+<body>
+<header class="header">
+    <div class="container header-row">
+        <div><h1>Kommentar-Monitor</h1><p class="subtitle">Facebook-Kommentare aller eingebundenen Seiten zentral prüfen und moderieren</p></div>
+        <nav class="nav">
+            <a href="{{ url_for('startseite') }}">Import</a>
+            <a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a>
+            <a href="{{ url_for('veroeffentlichungsplanung') }}">Planung</a>
+            <a href="{{ url_for('medienmonitor') }}">KI-Medienmonitor</a>
+            <a href="{{ url_for('kommentar_monitor') }}">Kommentare</a>
+            <a href="/settings">Einstellungen</a>
+            <form method="post" action="/logout" style="margin:0"><button type="submit">Abmelden</button></form>
+        </nav>
+    </div>
+</header>
+<main>
+<div class="container">
+    <section class="topbar">
+        <div>
+            <h2>Facebook-Kommentare</h2>
+            <p>Es werden die letzten 25 veröffentlichten Beiträge je Seite geprüft. Bereits bekannte Kommentare werden nicht doppelt gespeichert.</p>
+            {% if last_fetch_display %}<p style="margin-top:5px;font-size:13px">Letzter Abruf: {{ last_fetch_display }}</p>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('kommentare_abrufen') }}">
+            <button class="primary" type="submit" {% if job_running %}disabled{% endif %}>{% if job_running %}Kommentare werden abgerufen …{% else %}Kommentare jetzt abrufen{% endif %}</button>
+        </form>
+    </section>
+
+    {% if job_running %}<div class="notice info"><strong>Kommentarabruf läuft.</strong> Alle eingebundenen Facebook-Seiten werden im Hintergrund geprüft. Diese Seite aktualisiert sich automatisch.</div>{% endif %}
+    {% if job_success %}<div class="notice success"><strong>Kommentarabruf abgeschlossen.</strong> Neu: {{ job.new_count or 0 }} · geprüft: {{ job.seen_count or 0 }} Kommentar(e){% if job.error_count %} · {{ job.error_count }} Seite(n) mit Fehler{% endif %}.</div>{% endif %}
+    {% if job_error %}<div class="notice error"><strong>Kommentarabruf fehlgeschlagen:</strong> {{ job.error }}</div>{% endif %}
+    {% if already_running %}<div class="notice warning">Ein Kommentarabruf läuft bereits.</div>{% endif %}
+    {% if action == 'hidden' %}<div class="notice success">Der Kommentar wurde auf Facebook ausgeblendet.</div>{% elif action == 'unhidden' %}<div class="notice success">Der Kommentar wurde wieder eingeblendet.</div>{% elif action == 'deleted' %}<div class="notice success">Der Kommentar wurde auf Facebook gelöscht.</div>{% elif action == 'handled' %}<div class="notice success">Der Kommentar wurde als erledigt markiert.</div>{% elif action == 'reopened' %}<div class="notice success">Der Kommentar wurde wieder geöffnet.</div>{% endif %}
+    {% if action_error %}<div class="notice error"><strong>Facebook-Aktion fehlgeschlagen:</strong> {{ action_error }}</div>{% endif %}
+
+    {% if job.pages %}
+    <details class="page-results">
+        <summary>Ergebnis nach Facebook-Seite anzeigen</summary>
+        {% for page in job.pages %}
+            <div class="source-row">
+                <strong>{{ page.page_name }}</strong><span>{{ page.posts }} Beiträge</span><span>{{ page.comments }} Kommentare</span><span>{{ page.new }} neu</span>
+                {% if page.error %}<div class="source-error">{{ page.error }}</div>{% endif %}
+            </div>
+        {% endfor %}
+    </details>
+    {% endif %}
+
+    <section class="stats">
+        <div class="stat"><div class="stat-label">Gesamt gespeichert</div><div class="stat-value">{{ counts.all }}</div></div>
+        <div class="stat"><div class="stat-label">Neu / offen</div><div class="stat-value">{{ counts.new }}</div></div>
+        <div class="stat"><div class="stat-label">Erledigt</div><div class="stat-value">{{ counts.handled }}</div></div>
+        <div class="stat"><div class="stat-label">Ausgeblendet</div><div class="stat-value">{{ counts.hidden }}</div></div>
+        <div class="stat"><div class="stat-label">Gelöscht</div><div class="stat-value">{{ counts.deleted }}</div></div>
+    </section>
+
+    <section class="filters">
+        <input id="comment-search" type="search" placeholder="Kommentare, Autor, Beitrag oder Seite durchsuchen">
+        <select id="page-filter"><option value="">Alle Facebook-Seiten</option>{% for name in page_names %}<option value="{{ name|lower }}">{{ name }}</option>{% endfor %}</select>
+        <select id="status-filter">
+            <option value="new">Nur neue / offene</option>
+            <option value="handled">Erledigt</option>
+            <option value="hidden">Ausgeblendet</option>
+            <option value="deleted">Gelöscht</option>
+            <option value="">Alle Status</option>
+        </select>
+    </section>
+    <p class="result-line"><strong id="visible-count">0</strong> Kommentar(e) sichtbar</p>
+
+    {% if comments %}
+    <section class="comment-list" id="comment-list">
+        {% for c in comments %}
+        <article class="comment" data-status="{{ c.status }}" data-page="{{ c.page_name|lower }}" data-search="{{ (c.page_name ~ ' ' ~ c.author_name ~ ' ' ~ c.message ~ ' ' ~ c.post_message)|lower|e }}">
+            <div class="comment-head">
+                <div><span class="page">{{ c.page_name }}</span><div class="author">{{ c.author_name or 'Unbekannt' }}</div><div class="time">{{ c.created_display }}{% if c.parent_id %} · Antwort auf Kommentar{% endif %}</div></div>
+                <span class="status status-{{ c.status }}">{% if c.status == 'new' %}Neu{% elif c.status == 'handled' %}Erledigt{% elif c.status == 'hidden' %}Ausgeblendet{% elif c.status == 'deleted' %}Gelöscht{% else %}{{ c.status }}{% endif %}</span>
+            </div>
+            <div class="comment-body">
+                <p class="message">{{ c.message or '[Kommentar ohne Textinhalt]' }}</p>
+                <div class="post-box"><strong>Zugehöriger Beitrag:</strong> {{ c.post_preview }}</div>
+            </div>
+            <div class="actions">
+                {% set original = c.permalink_url or c.post_permalink %}
+                {% if original %}<a class="button open" href="{{ original }}" target="_blank" rel="noopener noreferrer">Original öffnen</a>{% endif %}
+                {% if c.status != 'deleted' %}
+                    {% if c.is_hidden %}
+                    <form method="post" action="/comments/{{ c.comment_id }}/unhide"><button class="button" type="submit">Wieder einblenden</button></form>
+                    {% else %}
+                    <form method="post" action="/comments/{{ c.comment_id }}/hide"><button class="button hide" type="submit">Ausblenden</button></form>
+                    {% endif %}
+                    {% if c.status == 'handled' %}
+                    <form method="post" action="/comments/{{ c.comment_id }}/reopen"><button class="button" type="submit">Wieder öffnen</button></form>
+                    {% elif c.status != 'hidden' %}
+                    <form method="post" action="/comments/{{ c.comment_id }}/handled"><button class="button done" type="submit">Erledigt</button></form>
+                    {% endif %}
+                    <form method="post" action="/comments/{{ c.comment_id }}/delete" onsubmit="return confirm('Diesen Kommentar wirklich dauerhaft auf Facebook löschen?');"><button class="button delete" type="submit">Löschen</button></form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+    {% else %}
+        <div class="empty"><h3>Noch keine Kommentare geladen</h3><p>Klicke auf „Kommentare jetzt abrufen“, um die eingebundenen Facebook-Seiten erstmals zu prüfen.</p></div>
+    {% endif %}
+</div>
+</main>
+<script>
+(function(){
+    const search=document.getElementById('comment-search');
+    const page=document.getElementById('page-filter');
+    const status=document.getElementById('status-filter');
+    const cards=[...document.querySelectorAll('.comment')];
+    const count=document.getElementById('visible-count');
+    function apply(){
+        const q=(search.value||'').trim().toLowerCase();
+        const p=(page.value||'').toLowerCase();
+        const s=status.value||'';
+        let visible=0;
+        cards.forEach(card=>{
+            const okSearch=!q||(card.dataset.search||'').includes(q);
+            const okPage=!p||(card.dataset.page||'')===p;
+            const okStatus=!s||(card.dataset.status||'')===s;
+            const show=okSearch&&okPage&&okStatus;
+            card.hidden=!show;
+            if(show) visible++;
+        });
+        count.textContent=String(visible);
+    }
+    [search,page,status].forEach(el=>el&&el.addEventListener(el===search?'input':'change',apply));
+    apply();
+    {% if job_running %}setTimeout(()=>window.location.reload(),5000);{% endif %}
+})();
+</script>
+</body>
+</html>

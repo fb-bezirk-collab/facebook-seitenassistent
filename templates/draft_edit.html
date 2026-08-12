@@ -90,6 +90,7 @@
             <a href="{{ url_for('entwuerfe_anzeigen') }}">Entwürfe</a>
             <a href="{{ url_for('veroeffentlichungsplanung') }}">Planung</a>
             <a href="{{ url_for('medienmonitor') }}">KI-Medienmonitor</a>
+            <a href="{{ url_for('kommentar_monitor') }}">Kommentare</a>
             <a href="/settings">Einstellungen</a>
             <form method="post" action="/logout" style="margin:0">
                 <button type="submit" class="back">Abmelden</button>
@@ -334,8 +335,7 @@
             </div>
         </form>
         {% else %}
-            <div class="hint">Noch kein Konto vorhanden. Lege unter <a href="{{ url_for('medienmonitor') }}">KI-Medienmonitor</a>
-            <a href="/settings">Einstellungen</a> zuerst ein Facebook-Konto an.</div>
+            <div class="hint">Noch kein Konto vorhanden. Lege unter <a href="/settings">Einstellungen</a> zuerst ein Facebook-Konto an.</div>
         {% endif %}
 
         {% if publications %}
