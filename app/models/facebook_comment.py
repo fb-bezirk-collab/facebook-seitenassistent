@@ -16,6 +16,8 @@ class FacebookComment:
     post_permalink: str = ""
     author_id: str = ""
     author_name: str = ""
+    author_lookup_source: str = ""
+    author_diagnostic: str = ""
     message: str = ""
     created_time: str = ""
     permalink_url: str = ""
@@ -51,6 +53,8 @@ class FacebookComment:
             post_permalink=str(data.get("post_permalink", "") or ""),
             author_id=str(data.get("author_id", "") or ""),
             author_name=str(data.get("author_name", "") or ""),
+            author_lookup_source=str(data.get("author_lookup_source", "") or ""),
+            author_diagnostic=str(data.get("author_diagnostic", "") or ""),
             message=str(data.get("message", "") or ""),
             created_time=str(data.get("created_time", "") or ""),
             permalink_url=str(data.get("permalink_url", "") or ""),
