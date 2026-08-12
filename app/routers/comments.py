@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.comment_monitor.job import mark_started, run_fetch_job
+from app.comment_monitor.ai_job import mark_ai_started, run_ai_job
 from app.comment_monitor.service import CommentMonitorService
 from app.comment_monitor.storage import CommentStorage
 from app.config import TEMPLATES_DIR
@@ -52,6 +53,8 @@ def kommentar_monitor(
 
     job = storage.load_job()
     state = str(job.get("state", "idle"))
+    ai_job = storage.load_ai_job()
+    ai_state = str(ai_job.get("state", "idle"))
 
     page_names = sorted({item.page_name for item in comments if item.page_name}, key=str.lower)
     counts = {
@@ -60,6 +63,10 @@ def kommentar_monitor(
         "handled": sum(1 for item in comments if item.status == "handled"),
         "hidden": sum(1 for item in comments if item.status == "hidden"),
         "deleted": sum(1 for item in comments if item.status == "deleted"),
+        "questions": sum(1 for item in comments if item.ai_category == "Frage"),
+        "critical": sum(1 for item in comments if item.ai_category in {"Sachliche Kritik", "Politische Kritik", "Provokation", "Beleidigung"}),
+        "moderation": sum(1 for item in comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
+        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and not item.ai_category and (item.message or "").strip()),
     }
 
     first_page_error = next(
@@ -80,6 +87,11 @@ def kommentar_monitor(
             "started": bool(started),
             "already_running": bool(already_running),
             "job": job,
+            "ai_job": ai_job,
+            "ai_job_running": ai_state == "running",
+            "ai_job_success": ai_state == "success",
+            "ai_job_error": ai_state == "error",
+            "any_reply_running": any(item.reply_status == "running" for item in comments),
             "first_page_error": first_page_error,
             "last_fetch_display": _format_datetime(job.get("finished_at")) if job.get("finished_at") else None,
             "action": action or "",
@@ -94,6 +106,31 @@ def kommentare_abrufen(background_tasks: BackgroundTasks):
         return RedirectResponse(url="/comments?already_running=1", status_code=303)
     background_tasks.add_task(run_fetch_job)
     return RedirectResponse(url="/comments?started=1", status_code=303)
+
+
+@router.post("/comments/analyze", name="kommentare_analysieren")
+def kommentare_analysieren(background_tasks: BackgroundTasks):
+    if not mark_ai_started():
+        return RedirectResponse(url="/comments?already_running=1", status_code=303)
+    background_tasks.add_task(run_ai_job)
+    return RedirectResponse(url="/comments?action=ai_started", status_code=303)
+
+
+def _run_reply_suggestion(comment_id: str) -> None:
+    service.generate_reply_suggestion(comment_id)
+
+
+@router.post("/comments/{comment_id}/suggest-reply", name="kommentar_antwort_vorschlagen")
+def kommentar_antwort_vorschlagen(comment_id: str, background_tasks: BackgroundTasks):
+    comment = storage.get(comment_id)
+    if comment is None:
+        return RedirectResponse(url="/comments?error=" + quote("Der Kommentar wurde nicht gefunden."), status_code=303)
+    if comment.reply_status != "running":
+        comment.reply_status = "running"
+        comment.reply_error = ""
+        storage.update(comment)
+        background_tasks.add_task(_run_reply_suggestion, comment_id)
+    return RedirectResponse(url="/comments?action=reply_started", status_code=303)
 
 
 @router.post("/comments/{comment_id}/hide", name="kommentar_ausblenden")
