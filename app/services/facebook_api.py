@@ -410,14 +410,26 @@ class FacebookApiService:
         error_data = data.get("error", {})
 
         if isinstance(error_data, dict):
-            message = error_data.get(
-                "message",
-                "Unbekannter Facebook-Fehler",
-            )
+            message = str(error_data.get("message", "Unbekannter Facebook-Fehler"))
+            details = []
+            code = error_data.get("code")
+            error_type = error_data.get("type")
+            subcode = error_data.get("error_subcode")
+            trace_id = error_data.get("fbtrace_id")
+            if code is not None:
+                details.append(f"Code {code}")
+            if error_type:
+                details.append(str(error_type))
+            if subcode is not None:
+                details.append(f"Subcode {subcode}")
+            if trace_id:
+                details.append(f"Trace {trace_id}")
+            if details:
+                message += " [" + " · ".join(details) + "]"
         else:
             message = str(error_data)
 
-        raise FacebookApiError(str(message))
+        raise FacebookApiError(message)
 
     @staticmethod
     def _to_int_or_none(
