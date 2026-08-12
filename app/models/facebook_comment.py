@@ -24,6 +24,15 @@ class FacebookComment:
     can_hide: bool = False
     can_remove: bool = False
     status: str = "new"
+    ai_category: str = ""
+    ai_priority: str = ""
+    ai_recommendation: str = ""
+    ai_reason: str = ""
+    ai_analyzed_at: str = ""
+    reply_suggestion: str = ""
+    reply_style: str = ""
+    reply_status: str = ""
+    reply_error: str = ""
     fetched_at: str = field(default_factory=utc_now_iso)
     last_seen_at: str = field(default_factory=utc_now_iso)
 
@@ -49,6 +58,15 @@ class FacebookComment:
             can_hide=bool(data.get("can_hide", False)),
             can_remove=bool(data.get("can_remove", False)),
             status=str(data.get("status", "new") or "new"),
+            ai_category=str(data.get("ai_category", "") or ""),
+            ai_priority=str(data.get("ai_priority", "") or ""),
+            ai_recommendation=str(data.get("ai_recommendation", "") or ""),
+            ai_reason=str(data.get("ai_reason", "") or ""),
+            ai_analyzed_at=str(data.get("ai_analyzed_at", "") or ""),
+            reply_suggestion=str(data.get("reply_suggestion", "") or ""),
+            reply_style=str(data.get("reply_style", "") or ""),
+            reply_status=str(data.get("reply_status", "") or ""),
+            reply_error=str(data.get("reply_error", "") or ""),
             fetched_at=str(data.get("fetched_at", utc_now_iso()) or utc_now_iso()),
             last_seen_at=str(data.get("last_seen_at", utc_now_iso()) or utc_now_iso()),
         )
