@@ -55,6 +55,8 @@ def kommentar_monitor(
         row["user_key"] = user_key_for_name(item.author_name)
         row["moderation_recommended"] = item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}
         row["reply_recommended"] = item.ai_recommendation == "Antworten"
+        at = (item.attachment_type or "").casefold()
+        row["attachment_label"] = ("Sticker" if "sticker" in at else "GIF" if "gif" in at else "Video" if "video" in at else "Bild" if item.attachment_image_url or "photo" in at or "image" in at else "Medienanhang" if (item.attachment_type or item.attachment_url) else "")
         rows.append(row)
 
     job = storage.load_job()
@@ -73,7 +75,9 @@ def kommentar_monitor(
         "questions": sum(1 for item in comments if item.ai_category == "Frage"),
         "critical": sum(1 for item in comments if item.ai_category in {"Meinung/Kritik", "Provokation", "Beleidigung", "Drohung/Gewalt"}),
         "moderation": sum(1 for item in comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
-        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and (item.message or "").strip()),
+        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and ((item.message or "").strip() or item.attachment_type or item.attachment_url or item.attachment_image_url)),
+        "ai_errors": sum(1 for item in comments if item.status != "deleted" and bool(item.ai_error)),
+        "media_comments": sum(1 for item in comments if item.attachment_type or item.attachment_url or item.attachment_image_url),
         "reply_recommended": sum(1 for item in comments if item.ai_recommendation == "Antworten"),
         "spam": sum(1 for item in comments if item.ai_category == "Spam"),
         "off_topic": sum(1 for item in comments if item.ai_category == "Off-Topic"),
@@ -102,7 +106,8 @@ def kommentar_monitor(
             "job": job,
             "ai_job": ai_job,
             "ai_job_running": ai_state == "running",
-            "ai_job_success": ai_state == "success",
+            "ai_job_success": ai_state in {"success", "success_with_errors"},
+            "ai_job_partial": ai_state == "success_with_errors",
             "ai_job_error": ai_state == "error",
             "any_reply_running": any(item.reply_status == "running" for item in comments),
             "first_page_error": first_page_error,
@@ -123,11 +128,19 @@ def kommentare_abrufen(background_tasks: BackgroundTasks):
 
 @router.post("/comments/analyze", name="kommentare_analysieren")
 def kommentare_analysieren(background_tasks: BackgroundTasks):
-    if not mark_ai_started():
+    if not mark_ai_started("all"):
         return RedirectResponse(url="/comments?already_running=1", status_code=303)
-    background_tasks.add_task(run_ai_job)
+    background_tasks.add_task(run_ai_job, "all")
     return RedirectResponse(url="/comments?action=ai_started", status_code=303)
 
+
+
+@router.post("/comments/analyze-errors", name="kommentare_analysefehler_wiederholen")
+def kommentare_analysefehler_wiederholen(background_tasks: BackgroundTasks):
+    if not mark_ai_started("errors"):
+        return RedirectResponse(url="/comments?already_running=1", status_code=303)
+    background_tasks.add_task(run_ai_job, "errors")
+    return RedirectResponse(url="/comments?action=ai_errors_started", status_code=303)
 
 def _run_reply_suggestion(comment_id: str) -> None:
     service.generate_reply_suggestion(comment_id)
