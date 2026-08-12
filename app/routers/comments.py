@@ -62,6 +62,11 @@ def kommentar_monitor(
         "deleted": sum(1 for item in comments if item.status == "deleted"),
     }
 
+    first_page_error = next(
+        (str(page.get("error", "")) for page in job.get("pages", []) if page.get("error")),
+        "",
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="comments.html",
@@ -75,6 +80,7 @@ def kommentar_monitor(
             "started": bool(started),
             "already_running": bool(already_running),
             "job": job,
+            "first_page_error": first_page_error,
             "last_fetch_display": _format_datetime(job.get("finished_at")) if job.get("finished_at") else None,
             "action": action or "",
             "action_error": error or "",
