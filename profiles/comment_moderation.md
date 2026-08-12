@@ -92,6 +92,13 @@ Werbung, Scam, massenhafte irrelevante Wiederholungen oder themenfremder Müll.
 Priorität: mittel; bei gefährlichem Scam hoch  
 Empfehlung: Löschen prüfen
 
+
+### Off-Topic
+Ein Kommentar hat keinen erkennbaren inhaltlichen Bezug zum Beitrag, ist aber weder Spam noch Beleidigung. Einzelne Off-Topic-Kommentare sind normalerweise kein Moderationsfall. Wiederholtes themenfremdes Kommentieren kann im Benutzerprofil als Muster auffallen.
+
+Priorität: niedrig  
+Empfehlung: Ignorieren
+
 ### Neutral
 Kein erkennbarer Handlungsbedarf.
 
@@ -112,6 +119,7 @@ Empfehlung: Keine Aktion
 
 **Niedrig** bei:
 - Zustimmung,
+- einzelnen Off-Topic-Kommentaren,
 - politischer Meinung/Kritik,
 - Sarkasmus,
 - Ärger,
