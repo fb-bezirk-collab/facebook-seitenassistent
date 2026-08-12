@@ -141,8 +141,21 @@
             </div>
             <div class="comment-body">
                 {% if c.ai_category %}<div class="ai-row"><span class="ai-badge {% if c.ai_category == 'Zustimmung' %}positive{% elif c.ai_category == 'Frage' %}question{% elif c.ai_category in ['Beleidigung','Drohung/Gewalt','Spam'] %}danger{% elif c.ai_category in ['Meinung/Kritik','Provokation','Off-Topic','Medienkommentar'] %}critical{% endif %}">{{ c.ai_category }}</span><span class="ai-badge priority-{{ c.ai_priority }}">Priorität: {{ c.ai_priority }}</span><span class="ai-badge">Empfehlung: {{ c.ai_recommendation }}</span>{% if c.ai_needs_update %}<span class="ai-badge question">Bewertung nach 2.8.2 neu durchführen</span>{% endif %}</div>{% if c.ai_reason %}<p class="ai-reason">{{ c.ai_reason }}</p>{% endif %}{% if c.ai_error %}<p class="ai-reason" style="color:#b42318"><strong>KI-Fehler:</strong> {{ c.ai_error }}</p>{% endif %}{% else %}<div class="ai-row"><span class="ai-badge">Noch nicht KI-bewertet</span></div>{% endif %}
-                {% if c.attachment_label %}<div class="media-box"><div class="media-label">{{ c.attachment_label }} im Kommentar</div>{% if c.attachment_image_url %}<img src="{{ c.attachment_image_url }}" alt="Medienanhang des Facebook-Kommentars" loading="lazy">{% endif %}{% if c.attachment_url %}<div style="margin-top:8px"><a href="{{ c.attachment_url }}" target="_blank" rel="noopener noreferrer">Medienanhang öffnen</a></div>{% endif %}</div>{% endif %}
-                <p class="message">{{ c.message or ('[Kommentar nur mit ' ~ c.attachment_label ~ ']' if c.attachment_label else '[Kommentar ohne Textinhalt]') }}</p>
+                {% if c.attachment_label %}
+                <div class="media-box">
+                    <div class="media-label">{{ c.attachment_label }} im Kommentar</div>
+                    {% if c.attachment_title %}<div style="margin-top:5px;font-weight:700;color:#344054">{{ c.attachment_title }}</div>{% endif %}
+                    {% if c.attachment_image_url %}<img src="{{ c.attachment_image_url }}" alt="Medienanhang des Facebook-Kommentars" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+                    {% if c.attachment_url %}<div style="margin-top:8px"><a href="{{ c.attachment_url }}" target="_blank" rel="noopener noreferrer">{% if c.attachment_source == 'comment_link' %}Verlinkte Seite öffnen{% else %}Medienanhang öffnen{% endif %}</a></div>{% endif %}
+                    {% if c.attachment_diagnostic %}
+                    <details class="author-diag" style="margin-top:8px">
+                        <summary>Medien-Diagnose anzeigen</summary>
+                        {{ c.attachment_diagnostic }}
+                    </details>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <p class="message">{{ c.message or ('[Sticker/Medienkommentar – Meta liefert keine Vorschau]' if c.attachment_type == 'sticker_or_media' else ('[Kommentar nur mit ' ~ c.attachment_label ~ ']' if c.attachment_label else '[Kommentar ohne Textinhalt]')) }}</p>
                 <div class="post-box"><strong>Zugehöriger Beitrag:</strong> {{ c.post_preview }}</div>
             </div>
             <div class="actions">
