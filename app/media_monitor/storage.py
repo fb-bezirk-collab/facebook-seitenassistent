@@ -114,14 +114,32 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
         for item in existing
         if isinstance(item, dict) and item.get("fingerprint")
     }
+    by_source_url = {
+        (str(item.get("source", "")).strip().lower(), str(item.get("url", "")).split("#", 1)[0].split("?", 1)[0]): item
+        for item in existing
+        if isinstance(item, dict) and item.get("url")
+    }
 
     for raw_item in fetched_items:
-        fingerprint = _fingerprint(str(raw_item.get("source", "")), str(raw_item.get("url", "")), str(raw_item.get("title", "")))
-        if fingerprint in known:
-            # Bereits gespeicherte Artikel nachträglich mit einer inzwischen
-            # ermittelten Veröffentlichungszeit ergänzen.
-            existing_item = by_fingerprint.get(fingerprint)
-            if existing_item and not existing_item.get("published_at") and raw_item.get("published_at"):
+        raw_source = str(raw_item.get("source", ""))
+        raw_url = str(raw_item.get("url", ""))
+        raw_title = str(raw_item.get("title", ""))
+        fingerprint = _fingerprint(raw_source, raw_url, raw_title)
+        canonical_url = raw_url.split("#", 1)[0].split("?", 1)[0]
+        existing_item = by_fingerprint.get(fingerprint) or by_source_url.get((raw_source.strip().lower(), canonical_url))
+        if existing_item is not None:
+            # Nicht nur das Datum nachtragen: 3.0.3 korrigiert damit auch
+            # bereits gespeicherte Mojibake-Titel (z. B. fÃ¼r -> für), ohne
+            # denselben Artikel wegen des geänderten Titels doppelt anzulegen.
+            if raw_title and raw_title != str(existing_item.get("title", "")):
+                existing_item["title"] = raw_title
+            if raw_item.get("teaser") and raw_item.get("teaser") != existing_item.get("teaser"):
+                existing_item["teaser"] = raw_item.get("teaser")
+            if raw_item.get("image_url") and not existing_item.get("image_url"):
+                existing_item["image_url"] = raw_item.get("image_url")
+            if raw_item.get("source_category"):
+                existing_item["source_category"] = raw_item.get("source_category")
+            if not existing_item.get("published_at") and raw_item.get("published_at"):
                 existing_item["published_at"] = raw_item.get("published_at")
             continue
         item = {
