@@ -105,6 +105,11 @@ def build_user_profiles(comments: list[FacebookComment]) -> list[dict]:
         ambiguous_pages = [page_id for page_id, ids in page_ids.items() if len(ids) > 1]
 
         categories = Counter(c.ai_category for c in items if c.ai_category)
+        attachment_types = Counter((c.attachment_type or "").casefold() for c in items if c.attachment_type or c.attachment_url or c.attachment_image_url)
+        image_count = sum(1 for c in items if c.attachment_image_url and "gif" not in (c.attachment_type or "").casefold() and "sticker" not in (c.attachment_type or "").casefold())
+        gif_count = sum(1 for c in items if "gif" in (c.attachment_type or "").casefold())
+        sticker_count = sum(1 for c in items if "sticker" in (c.attachment_type or "").casefold())
+        media_count = sum(1 for c in items if c.attachment_type or c.attachment_url or c.attachment_image_url)
         moderation_count = sum(1 for c in items if c.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"})
         high_count = sum(1 for c in items if c.ai_priority == "hoch")
 
@@ -156,6 +161,10 @@ def build_user_profiles(comments: list[FacebookComment]) -> list[dict]:
             "ambiguous_page_count": len(ambiguous_pages),
             "identity_notice": len({c.page_id for c in items if c.page_id}) > 1,
             "category_counts": dict(categories),
+            "media_count": media_count,
+            "image_count": image_count,
+            "gif_count": gif_count,
+            "sticker_count": sticker_count,
             "moderation_count": moderation_count,
             "high_count": high_count,
             "repeated_comment_count": repeated_comment_count,

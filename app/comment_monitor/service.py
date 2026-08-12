@@ -22,6 +22,23 @@ class CommentMonitorService:
         fields = sorted(str(key) for key in raw.keys())
         return ", ".join(fields) if fields else "keine"
 
+
+    @staticmethod
+    def _attachment_info(raw: dict) -> tuple[str, str, str, str]:
+        attachment = raw.get("attachment") if isinstance(raw.get("attachment"), dict) else {}
+        if not attachment:
+            return "", "", "", ""
+        atype = str(attachment.get("type", "") or "").strip()
+        url = str(attachment.get("url", "") or "").strip()
+        target = attachment.get("target") if isinstance(attachment.get("target"), dict) else {}
+        if not url:
+            url = str(target.get("url", "") or "").strip()
+        media = attachment.get("media") if isinstance(attachment.get("media"), dict) else {}
+        image = media.get("image") if isinstance(media.get("image"), dict) else {}
+        image_url = str(image.get("src", "") or "").strip()
+        title = str(attachment.get("title", "") or attachment.get("description", "") or "").strip()
+        return atype, url, image_url, title
+
     def _resolve_author_for_new_comment(
         self,
         *,
@@ -144,6 +161,7 @@ class CommentMonitorService:
 
                         edge_author = raw.get("from") if isinstance(raw.get("from"), dict) else {}
                         parent = raw.get("parent") if isinstance(raw.get("parent"), dict) else {}
+                        attachment_type, attachment_url, attachment_image_url, attachment_title = self._attachment_info(raw)
                         is_hidden = bool(raw.get("is_hidden", False))
 
                         current = existing.get(comment_id)
@@ -173,6 +191,10 @@ class CommentMonitorService:
                                 created_time=str(raw.get("created_time", "") or ""),
                                 permalink_url=str(raw.get("permalink_url", "") or ""),
                                 parent_id=str(parent.get("id", "") or ""),
+                                attachment_type=attachment_type,
+                                attachment_url=attachment_url,
+                                attachment_image_url=attachment_image_url,
+                                attachment_title=attachment_title,
                                 is_hidden=is_hidden,
                                 can_hide=bool(raw.get("can_hide", False)),
                                 can_remove=bool(raw.get("can_remove", False)),
@@ -201,6 +223,10 @@ class CommentMonitorService:
                             current.created_time = str(raw.get("created_time", "") or current.created_time)
                             current.permalink_url = str(raw.get("permalink_url", "") or current.permalink_url)
                             current.parent_id = str(parent.get("id", "") or current.parent_id)
+                            current.attachment_type = attachment_type or current.attachment_type
+                            current.attachment_url = attachment_url or current.attachment_url
+                            current.attachment_image_url = attachment_image_url or current.attachment_image_url
+                            current.attachment_title = attachment_title or current.attachment_title
                             current.is_hidden = is_hidden
                             current.can_hide = bool(raw.get("can_hide", current.can_hide))
                             current.can_remove = bool(raw.get("can_remove", current.can_remove))

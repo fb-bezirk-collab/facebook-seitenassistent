@@ -24,6 +24,7 @@ CATEGORIES = (
     "Drohung/Gewalt",
     "Spam",
     "Off-Topic",
+    "Medienkommentar",
     "Neutral",
 )
 
@@ -36,7 +37,7 @@ RECOMMENDATIONS = (
     "Löschen prüfen",
 )
 
-AI_CLASSIFICATION_VERSION = "2.8.0"
+AI_CLASSIFICATION_VERSION = "2.8.2"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -199,6 +200,7 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
             "page": str(item.get("page", ""))[:200],
             "post": str(item.get("post", ""))[:1400],
             "comment": str(item.get("comment", ""))[:1800],
+            "attachment": str(item.get("attachment", ""))[:300],
         })
 
     parsed = _call(
@@ -310,6 +312,7 @@ def suggest_reply(item: dict[str, str]) -> dict[str, str]:
             "page": str(item.get("page", ""))[:200],
             "post": str(item.get("post", ""))[:1800],
             "comment": str(item.get("comment", ""))[:1800],
+            "attachment": str(item.get("attachment", ""))[:300],
             "category": str(item.get("category", "")),
             "priority": str(item.get("priority", "")),
             "recommendation": str(item.get("recommendation", "")),
