@@ -355,6 +355,31 @@ class FacebookApiService:
         }
         return self._read_edge(url=url, params=params, max_items=max(1, int(limit)))
 
+    def get_comment_details(
+        self,
+        comment_id: str,
+        page_access_token: str,
+    ) -> dict:
+        """Liest ein einzelnes Kommentarobjekt direkt bei Meta.
+
+        Diese Abfrage dient insbesondere als Fallback, wenn die Comments-Edge
+        das Feld ``from`` nicht mitsendet.
+        """
+        url = GRAPH_API_BASE_URL + f"/{comment_id}"
+        params = {
+            "access_token": page_access_token,
+            "fields": (
+                "id,message,created_time,from{id,name},permalink_url,"
+                "is_hidden,can_hide,can_remove,parent{id}"
+            ),
+        }
+        data = self._request_json(
+            method="GET",
+            url=url,
+            params=params,
+        )
+        return data if isinstance(data, dict) else {}
+
     def set_comment_hidden(
         self,
         comment_id: str,
