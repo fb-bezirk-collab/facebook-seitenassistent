@@ -84,7 +84,7 @@
     <section class="filters">
         <input id="comment-search" type="search" placeholder="Kommentare, Autor, Beitrag oder Seite durchsuchen">
         <select id="page-filter"><option value="">Alle Facebook-Seiten</option>{% for name in page_names %}<option value="{{ name|lower }}">{{ name }}</option>{% endfor %}</select>
-        <select id="category-filter"><option value="">Alle KI-Kategorien</option><option>Zustimmung</option><option>Frage</option><option>Sachliche Kritik</option><option>Politische Kritik</option><option>Provokation</option><option>Beleidigung</option><option>Spam</option><option>Neutral</option><option value="__unanalyzed__">Noch nicht bewertet</option></select>
+        <select id="category-filter"><option value="">Alle KI-Kategorien</option><option>Zustimmung</option><option>Frage</option><option>Meinung/Kritik</option><option>Provokation</option><option>Beleidigung</option><option>Drohung/Gewalt</option><option>Spam</option><option>Neutral</option><option value="__unanalyzed__">Noch nicht / neu zu bewerten</option></select>
         <select id="status-filter">
             <option value="new">Nur neue / offene</option>
             <option value="handled">Erledigt</option>
@@ -98,13 +98,13 @@
     {% if comments %}
     <section class="comment-list" id="comment-list">
         {% for c in comments %}
-        <article class="comment" data-status="{{ c.status }}" data-page="{{ c.page_name|lower }}" data-category="{{ c.ai_category|lower }}" data-search="{{ (c.page_name ~ ' ' ~ c.author_name ~ ' ' ~ c.message ~ ' ' ~ c.post_message ~ ' ' ~ c.ai_category ~ ' ' ~ c.ai_reason)|lower|e }}">
+        <article class="comment" data-status="{{ c.status }}" data-page="{{ c.page_name|lower }}" data-category="{{ c.ai_category|lower }}" data-needs-update="{{ '1' if c.ai_needs_update else '0' }}" data-search="{{ (c.page_name ~ ' ' ~ c.author_name ~ ' ' ~ c.message ~ ' ' ~ c.post_message ~ ' ' ~ c.ai_category ~ ' ' ~ c.ai_reason)|lower|e }}">
             <div class="comment-head">
                 <div><span class="page">{{ c.page_name }}</span><div class="author">{{ c.author_name or 'Autor von Meta nicht übermittelt' }}</div><div class="time">{{ c.created_display }}{% if c.parent_id %} · Antwort auf Kommentar{% endif %}</div></div>
                 <span class="status status-{{ c.status }}">{% if c.status == 'new' %}Neu{% elif c.status == 'handled' %}Erledigt{% elif c.status == 'hidden' %}Ausgeblendet{% elif c.status == 'deleted' %}Gelöscht{% else %}{{ c.status }}{% endif %}</span>
             </div>
             <div class="comment-body">
-                {% if c.ai_category %}<div class="ai-row"><span class="ai-badge {% if c.ai_category == 'Zustimmung' %}positive{% elif c.ai_category == 'Frage' %}question{% elif c.ai_category in ['Beleidigung','Spam'] %}danger{% elif c.ai_category in ['Sachliche Kritik','Politische Kritik','Provokation'] %}critical{% endif %}">{{ c.ai_category }}</span><span class="ai-badge priority-{{ c.ai_priority }}">Priorität: {{ c.ai_priority }}</span><span class="ai-badge">Empfehlung: {{ c.ai_recommendation }}</span></div>{% if c.ai_reason %}<p class="ai-reason">{{ c.ai_reason }}</p>{% endif %}{% else %}<div class="ai-row"><span class="ai-badge">Noch nicht KI-bewertet</span></div>{% endif %}
+                {% if c.ai_category %}<div class="ai-row"><span class="ai-badge {% if c.ai_category == 'Zustimmung' %}positive{% elif c.ai_category == 'Frage' %}question{% elif c.ai_category in ['Beleidigung','Drohung/Gewalt','Spam'] %}danger{% elif c.ai_category in ['Meinung/Kritik','Provokation'] %}critical{% endif %}">{{ c.ai_category }}</span><span class="ai-badge priority-{{ c.ai_priority }}">Priorität: {{ c.ai_priority }}</span><span class="ai-badge">Empfehlung: {{ c.ai_recommendation }}</span>{% if c.ai_needs_update %}<span class="ai-badge question">Bewertung nach 2.7.4 neu durchführen</span>{% endif %}</div>{% if c.ai_reason %}<p class="ai-reason">{{ c.ai_reason }}</p>{% endif %}{% else %}<div class="ai-row"><span class="ai-badge">Noch nicht KI-bewertet</span></div>{% endif %}
                 <p class="message">{{ c.message or '[Kommentar ohne Textinhalt]' }}</p>
                 <div class="post-box"><strong>Zugehöriger Beitrag:</strong> {{ c.post_preview }}</div>
             </div>
@@ -154,7 +154,8 @@
             const okPage=!p||(card.dataset.page||'')===p;
             const okStatus=!s||(card.dataset.status||'')===s;
             const cardCat=(card.dataset.category||'');
-            const okCategory=!cat||(cat==='__unanalyzed__'?!cardCat:cardCat===cat);
+            const needsUpdate=(card.dataset.needsUpdate||'0')==='1';
+            const okCategory=!cat||(cat==='__unanalyzed__'?(needsUpdate||!cardCat):cardCat===cat);
             const show=okSearch&&okPage&&okStatus&&okCategory;
             card.hidden=!show;
             if(show) visible++;
