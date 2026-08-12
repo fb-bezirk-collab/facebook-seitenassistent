@@ -277,6 +277,104 @@ class FacebookApiService:
 
         return accounts, warnings
 
+    def get_page_published_posts(
+        self,
+        page_id: str,
+        page_access_token: str,
+        limit: int = 25,
+    ) -> list[dict]:
+        url = GRAPH_API_BASE_URL + f"/{page_id}/published_posts"
+        params = {
+            "access_token": page_access_token,
+            "fields": "id,message,created_time,permalink_url",
+            "limit": max(1, min(int(limit), 100)),
+        }
+        return self._read_edge(url=url, params=params, max_items=max(1, min(int(limit), 100)))
+
+    def get_post_comments(
+        self,
+        post_id: str,
+        page_access_token: str,
+        limit: int = 100,
+    ) -> list[dict]:
+        url = GRAPH_API_BASE_URL + f"/{post_id}/comments"
+        params = {
+            "access_token": page_access_token,
+            "fields": (
+                "id,message,created_time,from{id,name},permalink_url,"
+                "is_hidden,can_hide,can_remove,parent{id}"
+            ),
+            "filter": "stream",
+            "order": "reverse_chronological",
+            "limit": min(max(1, int(limit)), 100),
+        }
+        return self._read_edge(url=url, params=params, max_items=max(1, int(limit)))
+
+    def set_comment_hidden(
+        self,
+        comment_id: str,
+        page_access_token: str,
+        hidden: bool = True,
+    ) -> None:
+        url = GRAPH_API_BASE_URL + f"/{comment_id}"
+        data = self._request_json(
+            method="POST",
+            url=url,
+            params={
+                "access_token": page_access_token,
+                "is_hidden": "true" if hidden else "false",
+            },
+        )
+        if data is False or (isinstance(data, dict) and data.get("success") is False):
+            raise FacebookApiError("Facebook konnte den Kommentarstatus nicht ändern.")
+
+    def delete_comment(
+        self,
+        comment_id: str,
+        page_access_token: str,
+    ) -> None:
+        url = GRAPH_API_BASE_URL + f"/{comment_id}"
+        data = self._request_json(
+            method="DELETE",
+            url=url,
+            params={"access_token": page_access_token},
+        )
+        if data is False or (isinstance(data, dict) and data.get("success") is False):
+            raise FacebookApiError("Facebook konnte den Kommentar nicht löschen.")
+
+    def _read_edge(
+        self,
+        url: str,
+        params: dict | None,
+        max_items: int,
+    ) -> list[dict]:
+        items: list[dict] = []
+        next_url: str | None = url
+        next_params = params
+
+        while next_url and len(items) < max_items:
+            data = self._request_json(
+                method="GET",
+                url=next_url,
+                params=next_params,
+            )
+            for item in data.get("data", []):
+                if isinstance(item, dict):
+                    items.append(item)
+                    if len(items) >= max_items:
+                        break
+
+            paging = data.get("paging")
+            if not isinstance(paging, dict):
+                break
+            raw_next = paging.get("next")
+            if not raw_next:
+                break
+            next_url = str(raw_next)
+            next_params = None
+
+        return items
+
     @staticmethod
     def _request_json(
         method: str,
