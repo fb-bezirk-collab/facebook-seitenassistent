@@ -40,6 +40,10 @@ class PostService:
         video_url: str = "",
         page_id: str = "",
         source_url: str = "",
+        source_type: str = "",
+        source_name: str = "",
+        source_item_id: str = "",
+        source_meta: dict | None = None,
     ) -> ManagedPost:
         now = utc_now_iso()
 
@@ -53,6 +57,10 @@ class PostService:
             video_url=video_url.strip(),
             page_id=page_id.strip(),
             source_url=source_url.strip(),
+            source_type=source_type.strip(),
+            source_name=source_name.strip(),
+            source_item_id=source_item_id.strip(),
+            source_meta=source_meta if isinstance(source_meta, dict) else {},
             status="draft",
             created_at=now,
             updated_at=now,
