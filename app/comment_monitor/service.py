@@ -7,6 +7,7 @@ from app.services.facebook_api import FacebookApiError, FacebookApiService
 from app.services.meta_config_service import MetaConfigService
 from app.services.settings_service import SettingsService
 from app.comment_monitor.storage import CommentStorage
+from app.comment_monitor.link_preview import fetch_link_preview, first_http_url
 
 
 class CommentMonitorService:
@@ -24,20 +25,98 @@ class CommentMonitorService:
 
 
     @staticmethod
-    def _attachment_info(raw: dict) -> tuple[str, str, str, str]:
+    def _attachment_info(raw: dict) -> tuple[str, str, str, str, str]:
         attachment = raw.get("attachment") if isinstance(raw.get("attachment"), dict) else {}
         if not attachment:
-            return "", "", "", ""
+            return "", "", "", "", ""
+
+        candidates = [attachment]
+        subs = attachment.get("subattachments")
+        if isinstance(subs, dict):
+            data = subs.get("data")
+            if isinstance(data, list):
+                candidates.extend(item for item in data if isinstance(item, dict))
+
         atype = str(attachment.get("type", "") or "").strip()
         url = str(attachment.get("url", "") or "").strip()
-        target = attachment.get("target") if isinstance(attachment.get("target"), dict) else {}
-        if not url:
-            url = str(target.get("url", "") or "").strip()
-        media = attachment.get("media") if isinstance(attachment.get("media"), dict) else {}
-        image = media.get("image") if isinstance(media.get("image"), dict) else {}
-        image_url = str(image.get("src", "") or "").strip()
         title = str(attachment.get("title", "") or attachment.get("description", "") or "").strip()
-        return atype, url, image_url, title
+        image_url = ""
+
+        for item in candidates:
+            if not atype:
+                atype = str(item.get("type", "") or "").strip()
+            if not url:
+                url = str(item.get("url", "") or "").strip()
+            target = item.get("target") if isinstance(item.get("target"), dict) else {}
+            if not url:
+                url = str(target.get("url", "") or "").strip()
+            if not title:
+                title = str(item.get("title", "") or item.get("description", "") or "").strip()
+
+            media = item.get("media") if isinstance(item.get("media"), dict) else {}
+            image = media.get("image") if isinstance(media.get("image"), dict) else {}
+            if not image_url:
+                image_url = str(image.get("src", "") or "").strip()
+            if not url:
+                url = str(media.get("source", "") or "").strip()
+
+        fields = ", ".join(sorted(str(key) for key in attachment.keys())) or "keine"
+        diagnostic = f"Meta-Attachment vorhanden. Typ: {atype or 'nicht angegeben'}. Felder: {fields}."
+        return atype, url, image_url, title, diagnostic
+
+    def _enrich_external_link(
+        self,
+        *,
+        message: str,
+        attachment_type: str,
+        attachment_url: str,
+        attachment_image_url: str,
+        attachment_title: str,
+        attachment_diagnostic: str,
+    ) -> tuple[str, str, str, str, str, str]:
+        """Ergänzt bei Kommentar-Links eine OpenGraph-Vorschau.
+
+        Facebook liefert die auf facebook.com sichtbare Link-Karte nicht immer als
+        Comment-Attachment. In diesem Fall lesen wir ausschließlich die öffentliche
+        Zielseite des im Kommentar enthaltenen Links und übernehmen deren OG-Bild.
+        """
+        if attachment_image_url:
+            return (
+                attachment_type, attachment_url, attachment_image_url,
+                attachment_title, "meta", attachment_diagnostic
+            )
+
+        link = first_http_url(message)
+        if not link:
+            return (
+                attachment_type, attachment_url, attachment_image_url,
+                attachment_title, "meta" if (attachment_type or attachment_url) else "",
+                attachment_diagnostic,
+            )
+
+        preview = fetch_link_preview(link)
+        if not preview:
+            diag = attachment_diagnostic or ""
+            if diag:
+                diag += " "
+            diag += "Im Kommentar wurde ein Link erkannt, aber keine öffentliche Bildvorschau konnte geladen werden."
+            return (
+                attachment_type or "link", attachment_url or link, "",
+                attachment_title, "comment_link", diag
+            )
+
+        diag = attachment_diagnostic or ""
+        if diag:
+            diag += " "
+        diag += "Linkvorschau aus den öffentlichen OpenGraph-Metadaten der verlinkten Seite ergänzt."
+        return (
+            attachment_type or "link",
+            attachment_url or preview.get("url", "") or link,
+            preview.get("image_url", ""),
+            attachment_title or preview.get("title", ""),
+            "comment_link",
+            diag,
+        )
 
     def _resolve_author_for_new_comment(
         self,
@@ -46,7 +125,7 @@ class CommentMonitorService:
         raw: dict,
         comment_id: str,
         page_access_token: str,
-    ) -> tuple[dict, str, str]:
+    ) -> tuple[dict, str, str, dict]:
         """Ermittelt den Autor eines neu gefundenen Kommentars.
 
         Zuerst wird ``from`` aus der Comments-Edge verwendet. Fehlt es, folgt
@@ -61,6 +140,7 @@ class CommentMonitorService:
                 "comments_edge",
                 "Comments-Edge lieferte from{id,name}. "
                 f"Felder: {self._field_list(raw)}",
+                {},
             )
 
         edge_fields = self._field_list(raw)
@@ -76,6 +156,7 @@ class CommentMonitorService:
                 "Comments-Edge ohne from. "
                 f"Edge-Felder: {edge_fields}. "
                 f"Direktabfrage fehlgeschlagen: {error}",
+                {},
             )
 
         direct_author = (
@@ -91,6 +172,7 @@ class CommentMonitorService:
                 "Comments-Edge ohne from; direkte Kommentarabfrage lieferte "
                 "from{id,name}. "
                 f"Edge-Felder: {edge_fields}. Direkt-Felder: {direct_fields}",
+                direct,
             )
 
         return (
@@ -99,6 +181,7 @@ class CommentMonitorService:
             "Meta hat den Autor weder über die Comments-Edge noch über die "
             "direkte Kommentarabfrage geliefert. "
             f"Edge-Felder: {edge_fields}. Direkt-Felder: {direct_fields}",
+            direct,
         )
 
     def fetch_all(self, post_limit: int = 25, comment_limit: int = 100) -> dict:
@@ -161,21 +244,60 @@ class CommentMonitorService:
 
                         edge_author = raw.get("from") if isinstance(raw.get("from"), dict) else {}
                         parent = raw.get("parent") if isinstance(raw.get("parent"), dict) else {}
-                        attachment_type, attachment_url, attachment_image_url, attachment_title = self._attachment_info(raw)
+                        (
+                            attachment_type, attachment_url, attachment_image_url,
+                            attachment_title, attachment_diagnostic
+                        ) = self._attachment_info(raw)
+                        attachment_source = "meta" if (attachment_type or attachment_url or attachment_image_url) else ""
                         is_hidden = bool(raw.get("is_hidden", False))
 
                         current = existing.get(comment_id)
                         author = edge_author
                         author_source = ""
                         author_diagnostic = ""
+                        direct_raw: dict = {}
 
                         if current is None:
-                            author, author_source, author_diagnostic = self._resolve_author_for_new_comment(
+                            author, author_source, author_diagnostic, direct_raw = self._resolve_author_for_new_comment(
                                 api=api,
                                 raw=raw,
                                 comment_id=comment_id,
                                 page_access_token=page.access_token,
                             )
+                            if not (attachment_type or attachment_url or attachment_image_url):
+                                (
+                                    direct_type, direct_url, direct_image, direct_title, direct_diag
+                                ) = self._attachment_info(direct_raw)
+                                attachment_type = direct_type or attachment_type
+                                attachment_url = direct_url or attachment_url
+                                attachment_image_url = direct_image or attachment_image_url
+                                attachment_title = direct_title or attachment_title
+                                attachment_diagnostic = direct_diag or attachment_diagnostic
+                                if direct_type or direct_url or direct_image:
+                                    attachment_source = "meta_direct"
+
+                            message = str(raw.get("message", "") or direct_raw.get("message", "") or "")
+                            (
+                                attachment_type, attachment_url, attachment_image_url,
+                                attachment_title, enriched_source, attachment_diagnostic
+                            ) = self._enrich_external_link(
+                                message=message,
+                                attachment_type=attachment_type,
+                                attachment_url=attachment_url,
+                                attachment_image_url=attachment_image_url,
+                                attachment_title=attachment_title,
+                                attachment_diagnostic=attachment_diagnostic,
+                            )
+                            attachment_source = enriched_source or attachment_source
+                            if not message and not (attachment_type or attachment_url or attachment_image_url):
+                                attachment_type = "sticker_or_media"
+                                attachment_source = "meta_missing_preview"
+                                attachment_diagnostic = (
+                                    "Kommentar enthält keinen Text. Meta liefert für diesen Kommentar weder "
+                                    "Attachment noch Vorschaubild; er wird daher als unkritischer Sticker-/"
+                                    "Medienkommentar behandelt."
+                                )
+
                             current = FacebookComment(
                                 comment_id=comment_id,
                                 page_id=page.page_id,
@@ -187,7 +309,7 @@ class CommentMonitorService:
                                 author_name=str(author.get("name", "") or raw.get("username", "") or ""),
                                 author_lookup_source=author_source,
                                 author_diagnostic=author_diagnostic,
-                                message=str(raw.get("message", "") or ""),
+                                message=message,
                                 created_time=str(raw.get("created_time", "") or ""),
                                 permalink_url=str(raw.get("permalink_url", "") or ""),
                                 parent_id=str(parent.get("id", "") or ""),
@@ -195,6 +317,8 @@ class CommentMonitorService:
                                 attachment_url=attachment_url,
                                 attachment_image_url=attachment_image_url,
                                 attachment_title=attachment_title,
+                                attachment_source=attachment_source,
+                                attachment_diagnostic=attachment_diagnostic,
                                 is_hidden=is_hidden,
                                 can_hide=bool(raw.get("can_hide", False)),
                                 can_remove=bool(raw.get("can_remove", False)),
@@ -223,10 +347,57 @@ class CommentMonitorService:
                             current.created_time = str(raw.get("created_time", "") or current.created_time)
                             current.permalink_url = str(raw.get("permalink_url", "") or current.permalink_url)
                             current.parent_id = str(parent.get("id", "") or current.parent_id)
+
+                            # Bestehende Kommentare aus 2.8.2 werden beim nächsten Abruf
+                            # nachträglich um Link-/Medienvorschauen ergänzt.
+                            if not (attachment_type or attachment_url or attachment_image_url) and not current.attachment_image_url:
+                                try:
+                                    direct_media = api.get_comment_details(
+                                        comment_id=comment_id,
+                                        page_access_token=page.access_token,
+                                    )
+                                except FacebookApiError:
+                                    direct_media = {}
+                                (
+                                    direct_type, direct_url, direct_image, direct_title, direct_diag
+                                ) = self._attachment_info(direct_media)
+                                attachment_type = direct_type or attachment_type
+                                attachment_url = direct_url or attachment_url
+                                attachment_image_url = direct_image or attachment_image_url
+                                attachment_title = direct_title or attachment_title
+                                attachment_diagnostic = direct_diag or attachment_diagnostic
+                                if direct_type or direct_url or direct_image:
+                                    attachment_source = "meta_direct"
+
+                            message_for_preview = str(raw.get("message", "") or current.message or "")
+                            (
+                                attachment_type, attachment_url, attachment_image_url,
+                                attachment_title, enriched_source, attachment_diagnostic
+                            ) = self._enrich_external_link(
+                                message=message_for_preview,
+                                attachment_type=attachment_type or current.attachment_type,
+                                attachment_url=attachment_url or current.attachment_url,
+                                attachment_image_url=attachment_image_url or current.attachment_image_url,
+                                attachment_title=attachment_title or current.attachment_title,
+                                attachment_diagnostic=attachment_diagnostic or current.attachment_diagnostic,
+                            )
+                            attachment_source = enriched_source or attachment_source or current.attachment_source
+
+                            if not message_for_preview and not (attachment_type or attachment_url or attachment_image_url):
+                                attachment_type = "sticker_or_media"
+                                attachment_source = "meta_missing_preview"
+                                attachment_diagnostic = (
+                                    "Kommentar enthält keinen Text. Meta liefert für diesen Kommentar weder "
+                                    "Attachment noch Vorschaubild; er wird daher als unkritischer Sticker-/"
+                                    "Medienkommentar behandelt."
+                                )
+
                             current.attachment_type = attachment_type or current.attachment_type
                             current.attachment_url = attachment_url or current.attachment_url
                             current.attachment_image_url = attachment_image_url or current.attachment_image_url
                             current.attachment_title = attachment_title or current.attachment_title
+                            current.attachment_source = attachment_source or current.attachment_source
+                            current.attachment_diagnostic = attachment_diagnostic or current.attachment_diagnostic
                             current.is_hidden = is_hidden
                             current.can_hide = bool(raw.get("can_hide", current.can_hide))
                             current.can_remove = bool(raw.get("can_remove", current.can_remove))
