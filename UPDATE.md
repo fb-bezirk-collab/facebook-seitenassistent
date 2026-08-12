@@ -1,20 +1,18 @@
-# Update 2.4.0
+# Update auf 2.7.3
 
 ## Neu
-
-- `app/media_monitor/analysis.py`
-- `templates/media_analysis.html`
+- app/comment_monitor/ai.py
+- app/comment_monitor/ai_job.py
+- VERSION_2.7.3.md
 
 ## Geändert
+- app/config.py
+- app/comment_monitor/service.py
+- app/comment_monitor/storage.py
+- app/models/facebook_comment.py
+- app/routers/comments.py
+- templates/comments.html
+- CHANGELOG.md
 
-- `app/media_monitor/storage.py`
-- `app/routers/media_monitor.py`
-- `templates/media_monitor.html`
-- `CHANGELOG.md`
-- `UPDATE.md`
-
-## Funktion
-
-Im Medienmonitor steht bei jeder Meldung jetzt „KI analysieren“. Die Analyse läuft als Hintergrundjob. Die Detailseite aktualisiert sich während der Verarbeitung automatisch und zeigt danach eine strukturierte redaktionelle Analyse. Wenn ein Artikel zu einem bereits erkannten medienübergreifenden Ereignis gehört, werden die weiteren Quellen in die Analyse einbezogen.
-
-Es werden keine Beiträge automatisch erstellt oder veröffentlicht. Das bleibt für den nächsten Entwicklungsschritt vorgesehen.
+## Unverändert
+Alle übrigen Dateien aus 2.7.2.

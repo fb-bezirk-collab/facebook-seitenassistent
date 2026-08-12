@@ -1,3 +1,36 @@
+## 2.7.2
+- Meta-Login: tatsächliche Token-Berechtigungen werden nach OAuth geprüft.
+- Fehlendes `pages_read_user_content` wird bereits beim Verbinden klar gemeldet.
+- Keine Änderung am funktionierenden Facebook-Login-for-Business-Flow mit `config_id`.
+
+# Changelog
+
+## 2.6.0
+- KI-Redaktionsanalyse kann mit ausgewählter Headline und Facebook-Variante direkt in den bestehenden Entwurfsworkflow übernommen werden.
+- Hashtags und alle KI-Textvarianten werden mitgenommen.
+- Medienmeldung ↔ Entwurf wird dauerhaft verknüpft.
+- Entwurfseditor zeigt Herkunft und interne KI-Metadaten.
+- Medienmonitor kennzeichnet bereits erzeugte Entwürfe.
+
+# 2.5.3
+- Facebook-Kommunikationsprofil deutlich geschärft.
+- Politisch relevante, im Artikel belegte Angaben zu Staatsangehörigkeit/Herkunft, Asyl-/Migrationsbezug, Aufenthaltsstatus oder religiösem Zwang werden bei relevanten Fällen nicht mehr wegneutralisiert.
+- Facebook-Varianten als politische Arbeitsentwürfe statt neutraler Presseschau definiert.
+- `Kampagnenstil` ersetzt die bisherige mobilfreundliche Variante.
+- Pointierte, emotionale und Kampagnen-Varianten erhalten eine klarere politische Kernbotschaft.
+- Fakten-, Verfahrens- und Quellenregeln bleiben bestehen; keine erfundenen Angaben oder Kollektivzuschreibungen.
+- Alte Analysen mit Feld `mobil` bleiben in der Oberfläche lesbar.
+
+# 2.5.2
+- KI-Analyse befüllt jetzt die vollständige Redaktionsmaske.
+- Politische Brisanz und Kommunikationspotenzial 0–10.
+- Priorität inklusive Begründung.
+- FPÖ-NÖ-orientierter politischer Kommunikationsansatz auf Basis belegter Fakten.
+- Vier Headline-Varianten.
+- Vier Facebook-Arbeitsentwürfe.
+- Zielgruppen, Grafikidee, Faktencheck und Hashtags.
+- Alte Analysen bleiben kompatibel.
+
 ## 2.1.0 – Multi-Source-Medienmonitor
 - Kurier, Heute und oe24 zusätzlich zu Krone eingebunden.
 - Quellen werden unabhängig voneinander abgerufen; ein Einzel-Fehler stoppt den Gesamtabruf nicht.
@@ -105,3 +138,31 @@
 - Neue Analysebereiche: Kurzüberblick, Kernaussagen/Fakten, politische Einordnung, Bedeutung für die Bevölkerung, Social-Media-Potenzial, offene Prüfpunkte, Gegenpositionen/Einwände, sachliche Aufhänger und Arbeitsüberschriften.
 - Bei bereits erkannten Trending-/Breaking-Clustern werden die weiteren Medien desselben konkreten Ereignisses in die Analyse einbezogen und auf der Detailseite verlinkt.
 - Analyse kann jederzeit aktualisiert werden; der vorherige Medienabruf und die Filterlogik bleiben unverändert.
+
+## 2.4.1
+- Manuelle Beitragserstellung: Mehrbild-Auswahl deutlich verbessert.
+- Dateien können in mehreren Auswahlvorgängen gesammelt werden.
+- Vorschau und Entfernen einzelner Medien vor dem Speichern ergänzt.
+
+## 2.5.0 – Prompt- und Wissensbasis
+- Versionierbare Prompt-Struktur unter `prompts/` eingeführt.
+- Kommunikationsprofile unter `profiles/` eingeführt, zunächst FPÖ Niederösterreich und Kommunalpolitik.
+- Redaktionelle Wissensdateien unter `knowledge/` eingeführt.
+- JSON-Schemas unter `schemas/` ausgelagert.
+- Die bestehende KI-Analyse lädt ihren Systemprompt und ihr Schema nun aus diesen Dateien statt aus hart im Python-Code hinterlegten Texten.
+- Bestehende Analyse-Oberfläche und JSON-Felder bleiben kompatibel.
+
+## 2.7.0 – Facebook-Kommentar-Monitor Phase 1
+- Zentraler Kommentar-Posteingang für alle verbundenen Facebook-Seiten ergänzt.
+- Kommentarabruf als Hintergrundjob umgesetzt.
+- Dublettenerkennung über Facebook-Comment-ID.
+- Suche sowie Seiten- und Statusfilter ergänzt.
+- Ausblenden, Wieder einblenden, Löschen und lokales Erledigt-Markieren direkt aus der App möglich.
+- Seitenweise Abrufstatistik und unabhängige Fehlerbehandlung ergänzt.
+
+## 2.7.3
+- KI-Kategorisierung, Priorität und Moderationsempfehlung für Facebook-Kommentare ergänzt.
+- Hintergrundjob zur Bewertung unanalysierter Kommentare ergänzt.
+- Filter nach KI-Kategorie und neue Kennzahlen ergänzt.
+- KI-Antwortvorschläge mit Copy-Funktion ergänzt; keine automatische Veröffentlichung.
+- Autor-Fallback verständlicher dargestellt, wenn Meta keine `from`-Daten liefert.
