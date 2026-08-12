@@ -119,14 +119,102 @@ def extract_article_published_at(html_text: str) -> str | None:
     return _parse_local_visible_datetime(html_text)
 
 
+def extract_article_details(html_text: str, *, source_name: str, url: str) -> dict[str, Any]:
+    """Liest Titel, Teaser, Bild und Veröffentlichungszeit einer Artikelseite."""
+    parser = _ArticleMetaParser()
+    parser.feed(html_text or "")
+
+    title = ""
+    teaser = ""
+    image_url = ""
+    published_at: str | None = None
+
+    for block in parser.jsonld_blocks:
+        try:
+            parsed = json.loads(block)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for article in iter_jsonld_articles(parsed):
+            if not title:
+                title = clean_text(str(article.get("headline") or article.get("name") or ""))
+            if not teaser:
+                teaser = clean_text(str(article.get("description") or ""))
+            if not image_url:
+                image_url = _image_url(article.get("image"))
+            if not published_at:
+                published_at = parse_published(str(article.get("datePublished") or article.get("dateModified") or ""))
+            if title and teaser and image_url and published_at:
+                break
+        if title and teaser and image_url and published_at:
+            break
+
+    if not title:
+        title = clean_text(parser.meta.get("og:title") or parser.meta.get("twitter:title") or parser.meta.get("title"))
+    if not teaser:
+        teaser = clean_text(parser.meta.get("og:description") or parser.meta.get("description") or parser.meta.get("twitter:description"))
+    if not image_url:
+        image_url = clean_text(parser.meta.get("og:image") or parser.meta.get("twitter:image"))
+    if not published_at:
+        published_at = extract_article_published_at(html_text)
+
+    return {
+        "source": source_name,
+        "title": title,
+        "teaser": teaser,
+        "url": url,
+        "image_url": image_url,
+        "published_at": published_at,
+        "source_category": category_from_url(url),
+    }
+
+
 ARTICLE_TYPES = {"article", "newsarticle", "reportagenewsarticle", "analysisnewsarticle", "blogposting"}
+
+
+MOJIBAKE_MARKERS = (
+    "Ã", "Â", "â€", "â€“", "â€”", "â„¢", "â€¦", "â€ž", "â€œ", "â€˜", "â€™", "ðŸ", "ï¿½"
+)
+
+
+def _mojibake_score(value: str) -> int:
+    return sum(value.count(marker) for marker in MOJIBAKE_MARKERS)
+
+
+def repair_mojibake(value: str | None) -> str:
+    """Repariert typische UTF-8/Windows-1252-Fehlinterpretationen.
+
+    Beispiel: ``fÃ¼r`` -> ``für`` und ``BrÃ¼ssel`` -> ``Brüssel``.
+    Die Reparatur wird nur übernommen, wenn der Kandidat weniger typische
+    Mojibake-Marker enthält als der Ausgangstext.
+    """
+    text = value or ""
+    if not text or _mojibake_score(text) == 0:
+        return text
+
+    current = text
+    for _ in range(2):
+        candidates: list[str] = []
+        for encoding in ("cp1252", "latin1"):
+            try:
+                candidates.append(current.encode(encoding).decode("utf-8"))
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                pass
+        if not candidates:
+            break
+        best = min(candidates, key=lambda item: (_mojibake_score(item), len(item)))
+        if _mojibake_score(best) >= _mojibake_score(current):
+            break
+        current = best
+    return current
 
 
 def clean_text(value: str | None) -> str:
     if not value:
         return ""
     without_tags = re.sub(r"<[^>]+>", " ", value)
-    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+    decoded = html.unescape(without_tags)
+    repaired = repair_mojibake(decoded)
+    return re.sub(r"\s+", " ", repaired).strip()
 
 
 def parse_published(value: str | None) -> str | None:

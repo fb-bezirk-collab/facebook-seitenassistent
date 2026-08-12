@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 import requests
@@ -8,10 +9,11 @@ from app.media_monitor.fetchers.common import extract_article_published_at, pars
 
 REQUEST_TIMEOUT_SECONDS = 30
 REQUEST_ATTEMPTS = 2
-USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Facebook-Seitenassistent/2.2'
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Facebook-Seitenassistent/3.0'
 HEADERS = {
     'User-Agent': USER_AGENT,
     'Accept-Language': 'de-AT,de;q=0.9,en;q=0.5',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 }
 
 
@@ -29,6 +31,56 @@ def _get_with_retry(session: requests.Session, url: str) -> requests.Response:
     raise RuntimeError(f'Abruf fehlgeschlagen: {url}')
 
 
+def response_text(response: requests.Response) -> str:
+    """Dekodiert HTML robust und bevorzugt echtes UTF-8.
+
+    requests setzt bei ``text/html`` ohne Charset historisch oft ISO-8859-1.
+    Viele österreichische Seiten liefern in diesem Fall trotzdem UTF-8. Das
+    führte zu Texten wie ``fÃ¼r``. Hier wird zuerst ein im HTML deklarierter
+    Charset berücksichtigt; ist der Byte-Inhalt gültiges UTF-8, hat UTF-8
+    Vorrang vor einem bloßen ISO-8859-1-Default.
+    """
+    raw = response.content or b''
+    if not raw:
+        return ''
+
+    # BOM ist eindeutig.
+    if raw.startswith(b'\xef\xbb\xbf'):
+        return raw.decode('utf-8-sig', errors='replace')
+
+    head = raw[:8192].decode('ascii', errors='ignore')
+    match = re.search(
+        r'<meta[^>]+charset\s*=\s*["\']?\s*([a-zA-Z0-9._-]+)',
+        head,
+        flags=re.I,
+    )
+    if not match:
+        match = re.search(
+            r'<meta[^>]+content\s*=\s*["\'][^"\']*charset\s*=\s*([a-zA-Z0-9._-]+)',
+            head,
+            flags=re.I,
+        )
+    declared = (match.group(1) if match else '').strip().lower()
+
+    # Gültiges UTF-8 ist bei modernen News-Seiten die verlässlichste Wahl.
+    try:
+        utf8 = raw.decode('utf-8')
+        if declared in {'', 'utf-8', 'utf8', 'iso-8859-1', 'latin-1', 'latin1'}:
+            return utf8
+    except UnicodeDecodeError:
+        pass
+
+    for encoding in (declared, response.encoding or '', response.apparent_encoding or '', 'cp1252', 'latin1'):
+        if not encoding:
+            continue
+        try:
+            return raw.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+
+    return raw.decode('utf-8', errors='replace')
+
+
 def enrich_published_dates(items: list[dict[str, Any]], session: requests.Session, source_name: str) -> None:
     for item in items:
         if item.get('published_at') or not item.get('url'):
@@ -36,7 +88,7 @@ def enrich_published_dates(items: list[dict[str, Any]], session: requests.Sessio
         try:
             response = _get_with_retry(session, str(item['url']))
             response.raise_for_status()
-            published_at = extract_article_published_at(response.text)
+            published_at = extract_article_published_at(response_text(response))
             if published_at:
                 item['published_at'] = published_at
         except requests.RequestException as exc:
@@ -55,10 +107,11 @@ def fetch_homepage_source(
     with requests.Session() as session:
         response = _get_with_retry(session, source_url)
         response.raise_for_status()
-        if not response.text.strip():
+        html_text = response_text(response)
+        if not html_text.strip():
             raise RuntimeError(f'{source_name} hat keine Daten geliefert.')
         items = parse_homepage_articles(
-            response.text,
+            html_text,
             source_name=source_name,
             base_url=base_url,
             article_url_predicate=article_url_predicate,
