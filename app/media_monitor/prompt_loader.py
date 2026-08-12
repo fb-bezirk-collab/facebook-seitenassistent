@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.media_monitor.social_profile import load_social_media_profile
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,6 +33,7 @@ def build_analysis_system_prompt() -> str:
     sections = [
         _read_text("prompts/analysis_prompt.md"),
         "\n# AKTIVES KOMMUNIKATIONSPROFIL\n" + _read_text("profiles/fpoe_noe.md"),
+        "\n# FPÖ SOCIAL-MEDIA-SPIN\n" + load_social_media_profile(),
         "\n# ZUSATZPROFIL KOMMUNALPOLITIK\n" + _read_text("profiles/kommunalpolitik.md"),
         "\n# REDAKTIONELLE WISSENSREGELN\n" + _read_text("knowledge/argumentation.md"),
         _read_text("knowledge/kommunalpolitik.md"),

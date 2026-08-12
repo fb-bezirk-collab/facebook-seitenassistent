@@ -26,7 +26,6 @@ class MediaAnalysisError(RuntimeError):
 from app.media_monitor.prompt_loader import build_analysis_system_prompt, load_analysis_schema
 
 ANALYSIS_SCHEMA = load_analysis_schema()
-SYSTEM_PROMPT = build_analysis_system_prompt()
 
 
 class _ArticleTextParser(HTMLParser):
@@ -222,7 +221,7 @@ def _call_analysis_model(item: dict[str, Any], article_text: str, content_mode: 
     payload = {
         "model": model,
         "input": [
-            {"role": "developer", "content": SYSTEM_PROMPT},
+            {"role": "developer", "content": build_analysis_system_prompt()},
             {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
         ],
         "reasoning": {"effort": "minimal"},
