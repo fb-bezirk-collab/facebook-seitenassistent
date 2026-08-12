@@ -77,6 +77,42 @@ def _is_public_http_url(url: str) -> bool:
     return True
 
 
+
+
+def is_facebook_url(url: str) -> bool:
+    """True für URLs, die eindeutig zu Facebook/Meta gehören."""
+    if not url:
+        return False
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == "facebook.com" or host.endswith(".facebook.com") or host == "fb.com" or host.endswith(".fb.com")
+
+
+def is_facebook_media_permalink(url: str) -> bool:
+    """Erkennt Facebook-Links, die auf ein Foto/Video/Medienobjekt verweisen.
+
+    Solche URLs sind ein stärkeres Signal als versteckte/extrahierte externe Links
+    im Graph-API-message-Feld. Wir versuchen sie nicht per OpenGraph zu scrapen,
+    sondern zeigen den Facebook-Link selbst als Medienreferenz an.
+    """
+    if not is_facebook_url(url):
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    path = (parsed.path or "").lower()
+    query = (parsed.query or "").lower()
+    if path.endswith("/photo.php") or "/photos/" in path or "/photo/" in path:
+        return True
+    if "/videos/" in path or path.endswith("/video.php") or "/reel/" in path:
+        return True
+    if "fbid=" in query and ("photo" in path or path.endswith("/photo.php")):
+        return True
+    return False
+
 def fetch_link_preview(url: str, timeout: int = 8) -> dict[str, str]:
     """Liest eine kleine OpenGraph-Vorschau für einen öffentlichen Kommentar-Link.
 
@@ -89,7 +125,7 @@ def fetch_link_preview(url: str, timeout: int = 8) -> dict[str, str]:
 
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (compatible; FacebookSeitenassistent/2.8.3; "
+            "Mozilla/5.0 (compatible; FacebookSeitenassistent/2.8.5; "
             "+https://facebook.com/)"
         ),
         "Accept": "text/html,application/xhtml+xml",

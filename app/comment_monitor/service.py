@@ -7,7 +7,9 @@ from app.services.facebook_api import FacebookApiError, FacebookApiService
 from app.services.meta_config_service import MetaConfigService
 from app.services.settings_service import SettingsService
 from app.comment_monitor.storage import CommentStorage
-from app.comment_monitor.link_preview import fetch_link_preview, first_http_url
+from app.comment_monitor.link_preview import (
+    fetch_link_preview, first_http_url, is_facebook_media_permalink, is_facebook_url,
+)
 
 
 class CommentMonitorService:
@@ -73,33 +75,81 @@ class CommentMonitorService:
         attachment_image_url: str,
         attachment_title: str,
         attachment_diagnostic: str,
+        permalink_url: str = "",
+        existing_source: str = "",
     ) -> tuple[str, str, str, str, str, str]:
-        """Ergänzt bei Kommentar-Links eine OpenGraph-Vorschau.
+        """Ergänzt nur bei echten Link-Kommentaren eine externe OpenGraph-Vorschau.
 
-        Facebook liefert die auf facebook.com sichtbare Link-Karte nicht immer als
-        Comment-Attachment. In diesem Fall lesen wir ausschließlich die öffentliche
-        Zielseite des im Kommentar enthaltenen Links und übernehmen deren OG-Bild.
+        Priorität:
+        1. Von Meta geliefertes Bild/Attachment.
+        2. Erkennbarer Facebook-Foto-/Video-Permalink.
+        3. Erst dann ein externer Link aus dem Kommentartext.
+
+        Das verhindert, dass versteckte oder technisch mitgelieferte URLs aus
+        ``message`` fälschlich als Kommentarbild dargestellt werden.
         """
-        if attachment_image_url:
+        # Ein echtes Meta-Bild ist immer die beste Quelle.
+        if attachment_image_url and existing_source not in {"comment_link"}:
             return (
                 attachment_type, attachment_url, attachment_image_url,
-                attachment_title, "meta", attachment_diagnostic
+                attachment_title, existing_source or "meta", attachment_diagnostic
             )
+
+        # Ein Facebook-Medien-Permalink ist ein starkes Signal dafür, dass der
+        # Kommentar selbst ein Foto/Video enthält. In diesem Fall darf niemals
+        # ein externer Link aus dem message-Feld als Bildersatz verwendet werden.
+        fb_media_url = ""
+        for candidate in (attachment_url, permalink_url):
+            if is_facebook_media_permalink(candidate):
+                fb_media_url = candidate
+                break
+        if fb_media_url:
+            diag = attachment_diagnostic or ""
+            if diag:
+                diag += " "
+            diag += (
+                "Facebook-Foto-/Medienlink erkannt. Externe OpenGraph-Vorschauen "
+                "werden für diesen Kommentar bewusst nicht verwendet."
+            )
+            media_type = attachment_type
+            if not media_type or media_type in {"link", "sticker_or_media"}:
+                media_type = "facebook_media"
+            # Falls zuvor eine falsche externe Vorschau gespeichert war, wird sie
+            # bewusst verworfen. Der Facebook-Link bleibt als Originalreferenz.
+            safe_title = "" if existing_source == "comment_link" else attachment_title
+            return media_type, fb_media_url, "", safe_title, "facebook_media_permalink", diag
+
+        # Wenn Meta selbst ein Attachment liefert (auch ohne Bild), respektieren wir
+        # dieses und überschreiben es nicht mit irgendeinem message-Link.
+        if attachment_type or attachment_url:
+            source = existing_source or "meta"
+            if source != "comment_link":
+                return (
+                    attachment_type, attachment_url, attachment_image_url,
+                    attachment_title, source, attachment_diagnostic
+                )
 
         link = first_http_url(message)
         if not link:
             return (
                 attachment_type, attachment_url, attachment_image_url,
-                attachment_title, "meta" if (attachment_type or attachment_url) else "",
-                attachment_diagnostic,
+                attachment_title, existing_source or "", attachment_diagnostic,
             )
+
+        # Facebook-Links werden nie per OpenGraph als externe Vorschau behandelt.
+        if is_facebook_url(link):
+            diag = attachment_diagnostic or ""
+            if diag:
+                diag += " "
+            diag += "Facebook-Link im Kommentar erkannt; keine externe OpenGraph-Vorschau erzeugt."
+            return attachment_type or "facebook_link", attachment_url or link, "", attachment_title, "facebook_link", diag
 
         preview = fetch_link_preview(link)
         if not preview:
             diag = attachment_diagnostic or ""
             if diag:
                 diag += " "
-            diag += "Im Kommentar wurde ein Link erkannt, aber keine öffentliche Bildvorschau konnte geladen werden."
+            diag += "Im Kommentar wurde ein externer Link erkannt, aber keine öffentliche Bildvorschau konnte geladen werden."
             return (
                 attachment_type or "link", attachment_url or link, "",
                 attachment_title, "comment_link", diag
@@ -108,7 +158,7 @@ class CommentMonitorService:
         diag = attachment_diagnostic or ""
         if diag:
             diag += " "
-        diag += "Linkvorschau aus den öffentlichen OpenGraph-Metadaten der verlinkten Seite ergänzt."
+        diag += "Linkvorschau aus den öffentlichen OpenGraph-Metadaten der ausdrücklich verlinkten Seite ergänzt."
         return (
             attachment_type or "link",
             attachment_url or preview.get("url", "") or link,
@@ -282,11 +332,13 @@ class CommentMonitorService:
                                 attachment_title, enriched_source, attachment_diagnostic
                             ) = self._enrich_external_link(
                                 message=message,
+                                permalink_url=str(raw.get("permalink_url", "") or direct_raw.get("permalink_url", "") or ""),
                                 attachment_type=attachment_type,
                                 attachment_url=attachment_url,
                                 attachment_image_url=attachment_image_url,
                                 attachment_title=attachment_title,
                                 attachment_diagnostic=attachment_diagnostic,
+                                existing_source=attachment_source,
                             )
                             attachment_source = enriched_source or attachment_source
                             if not message and not (attachment_type or attachment_url or attachment_image_url):
@@ -375,13 +427,23 @@ class CommentMonitorService:
                                 attachment_title, enriched_source, attachment_diagnostic
                             ) = self._enrich_external_link(
                                 message=message_for_preview,
+                                permalink_url=str(raw.get("permalink_url", "") or current.permalink_url or ""),
                                 attachment_type=attachment_type or current.attachment_type,
                                 attachment_url=attachment_url or current.attachment_url,
                                 attachment_image_url=attachment_image_url or current.attachment_image_url,
                                 attachment_title=attachment_title or current.attachment_title,
                                 attachment_diagnostic=attachment_diagnostic or current.attachment_diagnostic,
+                                existing_source=attachment_source or current.attachment_source,
                             )
                             attachment_source = enriched_source or attachment_source or current.attachment_source
+
+                            # War in einer älteren Version eine externe OpenGraph-Vorschau
+                            # gespeichert, wird sie bei erkanntem Facebook-Medienlink bewusst
+                            # entfernt. Lieber kein Vorschaubild als ein falsches.
+                            if attachment_source == "facebook_media_permalink":
+                                current.attachment_image_url = ""
+                                if current.attachment_source == "comment_link":
+                                    current.attachment_title = ""
 
                             if not message_for_preview and not (attachment_type or attachment_url or attachment_image_url):
                                 attachment_type = "sticker_or_media"
@@ -490,13 +552,24 @@ class CommentMonitorService:
                     atype, aurl, aimage, atitle, enriched_source, adiag
                 ) = self._enrich_external_link(
                     message=current.message or str(direct.get("message", "") or ""),
+                    permalink_url=str(direct.get("permalink_url", "") or current.permalink_url or ""),
                     attachment_type=atype or ("" if current.attachment_type == "sticker_or_media" else current.attachment_type),
                     attachment_url=aurl or current.attachment_url,
                     attachment_image_url=aimage or current.attachment_image_url,
                     attachment_title=atitle or current.attachment_title,
                     attachment_diagnostic=adiag or current.attachment_diagnostic,
+                    existing_source=("meta_direct_refresh" if (atype or aurl or aimage) else current.attachment_source),
                 )
                 source = enriched_source or source
+
+                if source == "facebook_media_permalink":
+                    # Falsche externe Vorschaubilder aus 2.8.3/2.8.4 aktiv entfernen.
+                    if current.attachment_image_url:
+                        current.attachment_image_url = ""
+                        changed = True
+                    if current.attachment_source == "comment_link" and current.attachment_title:
+                        current.attachment_title = ""
+                        changed = True
 
                 if atype or aurl or aimage:
                     if not before_any:
