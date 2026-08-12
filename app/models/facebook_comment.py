@@ -26,6 +26,8 @@ class FacebookComment:
     attachment_url: str = ""
     attachment_image_url: str = ""
     attachment_title: str = ""
+    attachment_source: str = ""
+    attachment_diagnostic: str = ""
     is_hidden: bool = False
     can_hide: bool = False
     can_remove: bool = False
@@ -70,6 +72,8 @@ class FacebookComment:
             attachment_url=str(data.get("attachment_url", "") or ""),
             attachment_image_url=str(data.get("attachment_image_url", "") or ""),
             attachment_title=str(data.get("attachment_title", "") or ""),
+            attachment_source=str(data.get("attachment_source", "") or ""),
+            attachment_diagnostic=str(data.get("attachment_diagnostic", "") or ""),
             is_hidden=bool(data.get("is_hidden", False)),
             can_hide=bool(data.get("can_hide", False)),
             can_remove=bool(data.get("can_remove", False)),
