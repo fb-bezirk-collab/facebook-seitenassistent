@@ -162,6 +162,8 @@ def entwurf_bearbeiten(
     published_count: int = 0,
     failed_count: int = 0,
     publish_error: str | None = None,
+    media_created: int = 0,
+    media_existing: int = 0,
 ):
     draft = post_service.get_post(post_id)
 
@@ -184,6 +186,8 @@ def entwurf_bearbeiten(
             "published_count": published_count,
             "failed_count": failed_count,
             "publish_error": publish_error,
+            "media_created": bool(media_created),
+            "media_existing": bool(media_existing),
             "publications": publication_service.list_publications(post_id),
             "social_accounts": account_service.list_accounts(
                 include_inactive=False
@@ -234,6 +238,7 @@ def entwurf_aktualisieren(
 
 @router.post("/drafts/{post_id}/delete")
 def entwurf_loeschen(request: Request, post_id: str):
+    draft = post_service.get_post(post_id)
     publication_service.delete_for_post(post_id)
 
     if not post_service.delete_draft(post_id):
@@ -241,6 +246,22 @@ def entwurf_loeschen(request: Request, post_id: str):
             status_code=404,
             detail="Entwurf nicht gefunden.",
         )
+
+    if draft and draft.source_type == "media_monitor" and draft.source_item_id:
+        from app.media_monitor.storage import load_items, save_items
+        items = load_items()
+        changed = False
+        for item in items:
+            if str(item.get("id") or "") != draft.source_item_id:
+                continue
+            if str(item.get("draft_id") or "") == post_id:
+                item["draft_id"] = ""
+                item["created_post"] = False
+                item["workflow_status"] = "analysis_done" if item.get("analysis_status") == "done" else "analysis_pending"
+                changed = True
+            break
+        if changed:
+            save_items(items)
 
     return RedirectResponse(
         url=str(request.url_for("entwuerfe_anzeigen")) + "?deleted=1",
