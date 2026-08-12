@@ -158,7 +158,7 @@
                     <div class="media-label">{{ c.attachment_label }} im Kommentar</div>
                     {% if c.attachment_title %}<div style="margin-top:5px;font-weight:700;color:#344054">{{ c.attachment_title }}</div>{% endif %}
                     {% if c.attachment_image_url %}<img src="{{ c.attachment_image_url }}" alt="Medienanhang des Facebook-Kommentars" loading="lazy" referrerpolicy="no-referrer">{% endif %}
-                    {% if c.attachment_url %}<div style="margin-top:8px"><a href="{{ c.attachment_url }}" target="_blank" rel="noopener noreferrer">{% if c.attachment_source == 'comment_link' %}Verlinkte Seite öffnen{% else %}Medienanhang öffnen{% endif %}</a></div>{% endif %}
+                    {% if c.attachment_url %}<div style="margin-top:8px"><a href="{{ c.attachment_url }}" target="_blank" rel="noopener noreferrer">{% if c.attachment_source == 'comment_link' %}Verlinkte Seite öffnen{% elif c.attachment_source in ['facebook_media_permalink','facebook_link'] %}Facebook-Medium öffnen{% else %}Medienanhang öffnen{% endif %}</a></div>{% endif %}
                     {% if c.attachment_diagnostic %}
                     <details class="author-diag" style="margin-top:8px">
                         <summary>Medien-Diagnose anzeigen</summary>
