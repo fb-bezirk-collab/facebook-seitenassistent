@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.config import COMMENT_AI_JOB_FILE, COMMENT_JOB_FILE, COMMENTS_FILE
+from app.config import COMMENT_AI_JOB_FILE, COMMENT_JOB_FILE, COMMENT_REFRESH_JOB_FILE, COMMENTS_FILE
 from app.models.facebook_comment import FacebookComment
 
 
@@ -13,10 +13,12 @@ class CommentStorage:
         comments_file: Path = COMMENTS_FILE,
         job_file: Path = COMMENT_JOB_FILE,
         ai_job_file: Path = COMMENT_AI_JOB_FILE,
+        refresh_job_file: Path = COMMENT_REFRESH_JOB_FILE,
     ):
         self.comments_file = comments_file
         self.job_file = job_file
         self.ai_job_file = ai_job_file
+        self.refresh_job_file = refresh_job_file
         self.comments_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.comments_file.exists():
             self.save([])
@@ -24,6 +26,8 @@ class CommentStorage:
             self.save_job({"state": "idle"})
         if not self.ai_job_file.exists():
             self.save_ai_job({"state": "idle"})
+        if not self.refresh_job_file.exists():
+            self.save_refresh_job({"state": "idle"})
 
     def load(self) -> list[FacebookComment]:
         try:
@@ -83,6 +87,19 @@ class CommentStorage:
 
     def save_ai_job(self, data: dict) -> None:
         self.ai_job_file.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def load_refresh_job(self) -> dict:
+        try:
+            raw = json.loads(self.refresh_job_file.read_text(encoding="utf-8") or "{}")
+        except (OSError, json.JSONDecodeError):
+            return {"state": "idle"}
+        return raw if isinstance(raw, dict) else {"state": "idle"}
+
+    def save_refresh_job(self, data: dict) -> None:
+        self.refresh_job_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )

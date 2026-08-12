@@ -417,6 +417,144 @@ class CommentMonitorService:
         self.storage.save(comments)
         return result
 
+    def refresh_existing(self, progress_callback=None) -> dict:
+        """Aktualisiert bereits gespeicherte Kommentare direkt über ihre Comment-ID.
+
+        Dieser Lauf ist bewusst unabhängig von den letzten 25 Seitenbeiträgen. Er
+        ergänzt insbesondere Medien-/Linkvorschauen und – falls Meta sie später
+        doch liefert – Autorinformationen, ohne neue Kommentar-Datensätze anzulegen.
+        """
+        comments = [item for item in self.storage.load() if item.status != "deleted"]
+        pages = {page.page_id: page for page in self.settings_service.load_pages() if page.is_active}
+        api = FacebookApiService(config=self.meta_config_service.load())
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+        result = {
+            "total": len(comments),
+            "processed": 0,
+            "updated": 0,
+            "media_found": 0,
+            "preview_found": 0,
+            "author_found": 0,
+            "errors": 0,
+            "last_error": "",
+        }
+
+        def emit():
+            if progress_callback:
+                progress_callback(dict(result))
+
+        for index, current in enumerate(comments, start=1):
+            changed = False
+            page = pages.get(current.page_id)
+            if page is None or not page.access_token:
+                current.media_refresh_error = "Kein aktives Seitenzugriffstoken vorhanden."
+                result["errors"] += 1
+                result["last_error"] = current.media_refresh_error
+                result["processed"] = index
+                emit()
+                continue
+
+            try:
+                direct = api.get_comment_details(
+                    comment_id=current.comment_id,
+                    page_access_token=page.access_token,
+                )
+
+                direct_author = direct.get("from") if isinstance(direct.get("from"), dict) else {}
+                if (direct_author.get("id") or direct_author.get("name")) and not (current.author_id and current.author_name):
+                    current.author_id = str(direct_author.get("id", "") or current.author_id)
+                    current.author_name = str(direct_author.get("name", "") or current.author_name)
+                    current.author_lookup_source = "direct_comment_refresh"
+                    current.author_diagnostic = (
+                        "Bestehender Kommentar wurde direkt aktualisiert; Meta lieferte from{id,name}. "
+                        f"Felder: {self._field_list(direct)}"
+                    )
+                    result["author_found"] += 1
+                    changed = True
+
+                if direct.get("message") and not current.message:
+                    current.message = str(direct.get("message") or "")
+                    changed = True
+                if direct.get("permalink_url") and not current.permalink_url:
+                    current.permalink_url = str(direct.get("permalink_url") or "")
+                    changed = True
+
+                atype, aurl, aimage, atitle, adiag = self._attachment_info(direct)
+                source = "meta_direct_refresh" if (atype or aurl or aimage) else current.attachment_source
+
+                before_image = current.attachment_image_url
+                before_any = bool(current.attachment_type or current.attachment_url or current.attachment_image_url)
+
+                (
+                    atype, aurl, aimage, atitle, enriched_source, adiag
+                ) = self._enrich_external_link(
+                    message=current.message or str(direct.get("message", "") or ""),
+                    attachment_type=atype or ("" if current.attachment_type == "sticker_or_media" else current.attachment_type),
+                    attachment_url=aurl or current.attachment_url,
+                    attachment_image_url=aimage or current.attachment_image_url,
+                    attachment_title=atitle or current.attachment_title,
+                    attachment_diagnostic=adiag or current.attachment_diagnostic,
+                )
+                source = enriched_source or source
+
+                if atype or aurl or aimage:
+                    if not before_any:
+                        result["media_found"] += 1
+                    if aimage and not before_image:
+                        result["preview_found"] += 1
+                    if atype and atype != current.attachment_type:
+                        current.attachment_type = atype
+                        changed = True
+                    if aurl and aurl != current.attachment_url:
+                        current.attachment_url = aurl
+                        changed = True
+                    if aimage and aimage != current.attachment_image_url:
+                        current.attachment_image_url = aimage
+                        changed = True
+                    if atitle and atitle != current.attachment_title:
+                        current.attachment_title = atitle
+                        changed = True
+                    if source and source != current.attachment_source:
+                        current.attachment_source = source
+                        changed = True
+                    if adiag and adiag != current.attachment_diagnostic:
+                        current.attachment_diagnostic = adiag
+                        changed = True
+                elif not (current.message or "").strip():
+                    # Sticker/Avatar ohne von Meta gelieferte Vorschau bleibt bewusst unkritisch.
+                    if current.attachment_type != "sticker_or_media":
+                        current.attachment_type = "sticker_or_media"
+                        changed = True
+                    current.attachment_source = current.attachment_source or "meta_missing_preview"
+                    current.attachment_diagnostic = (
+                        "Bestehender Kommentar direkt nachgeladen. Meta liefert weiterhin weder "
+                        "Attachment noch Vorschaubild; Behandlung als unkritischer Sticker-/Medienkommentar."
+                    )
+
+                current.media_refreshed_at = now
+                current.media_refresh_error = ""
+                if changed:
+                    result["updated"] += 1
+
+            except FacebookApiError as error:
+                current.media_refreshed_at = now
+                current.media_refresh_error = str(error)
+                result["errors"] += 1
+                result["last_error"] = str(error)
+
+            result["processed"] = index
+
+            # Regelmäßig persistieren, damit ein langer Lauf nach einem Neustart
+            # nicht vollständig verloren ist.
+            if index % 25 == 0 or index == len(comments):
+                self.storage.save(comments)
+                emit()
+
+        self.storage.save(comments)
+        emit()
+        return result
+
     def _page_token(self, page_id: str) -> str:
         page = next(
             (item for item in self.settings_service.load_pages() if item.page_id == page_id),
