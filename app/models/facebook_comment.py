@@ -29,6 +29,7 @@ class FacebookComment:
     ai_recommendation: str = ""
     ai_reason: str = ""
     ai_analyzed_at: str = ""
+    ai_version: str = ""
     reply_suggestion: str = ""
     reply_style: str = ""
     reply_status: str = ""
@@ -63,6 +64,7 @@ class FacebookComment:
             ai_recommendation=str(data.get("ai_recommendation", "") or ""),
             ai_reason=str(data.get("ai_reason", "") or ""),
             ai_analyzed_at=str(data.get("ai_analyzed_at", "") or ""),
+            ai_version=str(data.get("ai_version", "") or ""),
             reply_suggestion=str(data.get("reply_suggestion", "") or ""),
             reply_style=str(data.get("reply_style", "") or ""),
             reply_status=str(data.get("reply_status", "") or ""),
