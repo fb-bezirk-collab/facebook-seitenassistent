@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.comment_monitor.job import mark_started, run_fetch_job
+from app.comment_monitor.refresh_job import mark_refresh_started, run_refresh_job
 from app.comment_monitor.ai import AI_CLASSIFICATION_VERSION
 from app.comment_monitor.ai_job import mark_ai_started, run_ai_job
 from app.comment_monitor.service import CommentMonitorService
@@ -78,6 +79,8 @@ def kommentar_monitor(
     state = str(job.get("state", "idle"))
     ai_job = storage.load_ai_job()
     ai_state = str(ai_job.get("state", "idle"))
+    refresh_job = storage.load_refresh_job()
+    refresh_state = str(refresh_job.get("state", "idle"))
 
     page_names = sorted({item.page_name for item in comments if item.page_name}, key=str.lower)
     user_profiles = build_user_profiles(comments)
@@ -124,6 +127,11 @@ def kommentar_monitor(
             "ai_job_success": ai_state in {"success", "success_with_errors"},
             "ai_job_partial": ai_state == "success_with_errors",
             "ai_job_error": ai_state == "error",
+            "refresh_job": refresh_job,
+            "refresh_job_running": refresh_state == "running",
+            "refresh_job_success": refresh_state in {"success", "success_with_errors"},
+            "refresh_job_partial": refresh_state == "success_with_errors",
+            "refresh_job_error": refresh_state == "error",
             "any_reply_running": any(item.reply_status == "running" for item in comments),
             "first_page_error": first_page_error,
             "last_fetch_display": _format_datetime(job.get("finished_at")) if job.get("finished_at") else None,
@@ -139,6 +147,14 @@ def kommentare_abrufen(background_tasks: BackgroundTasks):
         return RedirectResponse(url="/comments?already_running=1", status_code=303)
     background_tasks.add_task(run_fetch_job)
     return RedirectResponse(url="/comments?started=1", status_code=303)
+
+
+@router.post("/comments/refresh-existing", name="kommentare_bestehende_aktualisieren")
+def kommentare_bestehende_aktualisieren(background_tasks: BackgroundTasks):
+    if not mark_refresh_started():
+        return RedirectResponse(url="/comments?already_running=1", status_code=303)
+    background_tasks.add_task(run_refresh_job)
+    return RedirectResponse(url="/comments?action=refresh_started", status_code=303)
 
 
 @router.post("/comments/analyze", name="kommentare_analysieren")
