@@ -4,16 +4,21 @@ from app.media_monitor.ai_rating import MediaRatingError, rate_items
 from app.media_monitor.fetchers import (
     fetch_apa,
     fetch_exxpress,
+    fetch_fob,
     fetch_heute,
     fetch_kleine,
     fetch_krone,
     fetch_kurier,
+    fetch_nfz,
+    fetch_nius_at,
     fetch_noen,
     fetch_oe24,
     fetch_orf,
     fetch_presse,
     fetch_sn,
     fetch_standard,
+    fetch_unzensuriert,
+    fetch_zurzeit,
 )
 from app.media_monitor.prefilter import classify_item
 from app.media_monitor.storage import load_items, merge_fetched_items, save_items
@@ -34,6 +39,11 @@ SOURCE_FETCHERS = (
     ("Kleine Zeitung", fetch_kleine),
     ("NÖN", fetch_noen),
     ("APA (öffentlich)", fetch_apa),
+    ("Unzensuriert", fetch_unzensuriert),
+    ("NIUS Österreich", fetch_nius_at),
+    ("FoB News", fetch_fob),
+    ("ZurZeit", fetch_zurzeit),
+    ("NFZ", fetch_nfz),
 )
 
 
