@@ -136,7 +136,7 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             "score_political": None, "score_people": None, "score_profile": None,
             "score_social": None, "score_interest": None, "score_reliable": None,
             "score_total": None, "visibility": "pending", "status": "new",
-            "notes": "", "created_post": False,
+            "notes": "", "created_post": False, "draft_id": "", "draft_created_at": None, "workflow_status": "analysis_pending",
             "analysis_status": "", "analysis_error": "", "analysis_updated_at": None,
             "analysis_content_mode": "", "analysis_article_chars": 0, "analysis": {},
             "editorial": _editorial_defaults(),
