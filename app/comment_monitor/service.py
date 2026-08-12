@@ -87,7 +87,7 @@ class CommentMonitorService:
                                 post_message=str(post.get("message", "") or ""),
                                 post_permalink=str(post.get("permalink_url", "") or ""),
                                 author_id=str(author.get("id", "") or ""),
-                                author_name=str(author.get("name", "") or "Unbekannt"),
+                                author_name=str(author.get("name", "") or raw.get("username", "") or ""),
                                 message=str(raw.get("message", "") or ""),
                                 created_time=str(raw.get("created_time", "") or ""),
                                 permalink_url=str(raw.get("permalink_url", "") or ""),
@@ -109,7 +109,7 @@ class CommentMonitorService:
                             current.post_message = str(post.get("message", "") or current.post_message)
                             current.post_permalink = str(post.get("permalink_url", "") or current.post_permalink)
                             current.author_id = str(author.get("id", "") or current.author_id)
-                            current.author_name = str(author.get("name", "") or current.author_name or "Unbekannt")
+                            current.author_name = str(author.get("name", "") or raw.get("username", "") or current.author_name or "")
                             current.message = str(raw.get("message", "") or current.message)
                             current.created_time = str(raw.get("created_time", "") or current.created_time)
                             current.permalink_url = str(raw.get("permalink_url", "") or current.permalink_url)
@@ -172,5 +172,34 @@ class CommentMonitorService:
         if comment.status == "deleted":
             return comment
         comment.status = "handled" if handled else ("hidden" if comment.is_hidden else "new")
+        self.storage.update(comment)
+        return comment
+
+    def generate_reply_suggestion(self, comment_id: str) -> FacebookComment:
+        from app.comment_monitor.ai import CommentAiError, suggest_reply
+
+        comment = self.storage.get(comment_id)
+        if comment is None:
+            raise FacebookApiError("Der Kommentar wurde im Monitor nicht gefunden.")
+
+        comment.reply_status = "running"
+        comment.reply_error = ""
+        self.storage.update(comment)
+        try:
+            suggestion = suggest_reply({
+                "page": comment.page_name,
+                "post": comment.post_message,
+                "comment": comment.message,
+                "category": comment.ai_category,
+                "priority": comment.ai_priority,
+                "recommendation": comment.ai_recommendation,
+            })
+            comment.reply_suggestion = suggestion.get("reply", "")
+            comment.reply_style = suggestion.get("style", "")
+            comment.reply_status = "ready"
+            comment.reply_error = ""
+        except CommentAiError as error:
+            comment.reply_status = "error"
+            comment.reply_error = str(error)
         self.storage.update(comment)
         return comment
