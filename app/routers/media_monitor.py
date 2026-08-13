@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
 from app.services.post_service import PostService
-from app.media_monitor.job import load_status, mark_started, run_fetch_job
+from app.media_monitor.job import load_status, mark_started, request_cancel, reset_status, run_fetch_job
 from app.media_monitor.analysis import run_item_analysis
 from app.media_monitor.storage import load_items, save_items
 
@@ -50,6 +50,9 @@ def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already
             "all_count": len(all_items),
             "show_all": bool(show_all),
             "job_running": state == "running",
+            "job_cancelling": state == "cancel_requested",
+            "job_cancelled": state == "cancelled",
+            "job_message": str(job.get("message", "") or ""),
             "job_success": state == "success",
             "job_error": state == "error",
             "job_started": bool(started),
@@ -69,10 +72,23 @@ def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already
 
 @router.post("/media-monitor/fetch", name="medienmonitor_abrufen")
 def medienmonitor_abrufen(background_tasks: BackgroundTasks):
-    if not mark_started():
+    job_id = mark_started()
+    if not job_id:
         return RedirectResponse(url="/media-monitor?already_running=1", status_code=303)
-    background_tasks.add_task(run_fetch_job)
+    background_tasks.add_task(run_fetch_job, job_id)
     return RedirectResponse(url="/media-monitor?started=1", status_code=303)
+
+
+@router.post("/media-monitor/cancel", name="medienmonitor_abbrechen")
+def medienmonitor_abbrechen():
+    request_cancel()
+    return RedirectResponse(url="/media-monitor", status_code=303)
+
+
+@router.post("/media-monitor/reset-job", name="medienmonitor_status_zuruecksetzen")
+def medienmonitor_status_zuruecksetzen():
+    reset_status()
+    return RedirectResponse(url="/media-monitor", status_code=303)
 
 @router.get("/media-monitor/analysis/{item_id}", name="medienmonitor_analyse")
 def medienmonitor_analyse(request: Request, item_id: str, started: int = 0, draft_error: int = 0):
