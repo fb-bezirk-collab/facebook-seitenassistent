@@ -564,8 +564,15 @@ def test_noen_subscription(url: str, *, force_login: bool = False) -> dict[str, 
     if not target or not is_noen_url(target):
         raise SubscriptionError("Bitte eine vollständige noen.at-Artikel-URL eintragen.")
 
+    # 3.1.3: Eine bereits gespeicherte, frische Sitzung hat immer Vorrang.
+    # Ein neuer Browser-Login wird nur aufgebaut, wenn keine verwendbare Sitzung
+    # vorhanden ist bzw. ausdrücklich erzwungen wurde UND keine frische Session existiert.
     login_result: dict[str, object] | None = None
-    if noen_credentials_configured() and force_login:
+    reused_saved_session = bool(_automatic_cookies() and _automatic_session_is_fresh())
+
+    if noen_credentials_configured() and not reused_saved_session:
+        login_result = refresh_noen_login(force=True)
+    elif force_login and noen_credentials_configured() and not _automatic_cookies():
         login_result = refresh_noen_login(force=True)
 
     session = build_noen_session()
@@ -576,15 +583,36 @@ def test_noen_subscription(url: str, *, force_login: bool = False) -> dict[str, 
             "Es sind weder NOEN_USERNAME/NOEN_PASSWORD in Railway noch eine ältere Cookie-Sitzung hinterlegt."
         )
 
+    def fetch_with_session(active_session: requests.Session):
+        try:
+            response = active_session.get(target, timeout=30, allow_redirects=True)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            raise SubscriptionError(f"NÖN-Testabruf fehlgeschlagen: {exc}") from exc
+
     try:
         public_response = requests.get(target, headers=HEADERS, timeout=30, allow_redirects=True)
-        auth_response = session.get(target, timeout=30, allow_redirects=True)
-        auth_response.raise_for_status()
     except requests.RequestException as exc:
-        raise SubscriptionError(f"NÖN-Testabruf fehlgeschlagen: {exc}") from exc
+        raise SubscriptionError(f"Öffentlicher NÖN-Testabruf fehlgeschlagen: {exc}") from exc
 
+    auth_response = fetch_with_session(session)
     public_page = response_text(public_response) if public_response.ok else ""
     auth_page = response_text(auth_response)
+
+    # Wenn eine ältere gespeicherte Sitzung offensichtlich auf eine Login-Seite
+    # umleitet, versuchen wir genau einmal eine echte Erneuerung über Railway.
+    final_lower = str(auth_response.url or "").lower()
+    looks_like_login_redirect = any(part in final_lower for part in ("login", "signin", "anmelden"))
+    if looks_like_login_redirect and noen_credentials_configured():
+        login_result = refresh_noen_login(force=True)
+        session = build_noen_session()
+        if session is None:
+            raise SubscriptionError("Die NÖN-Sitzung konnte nach dem erneuten Login nicht aufgebaut werden.")
+        auth_response = fetch_with_session(session)
+        auth_page = response_text(auth_response)
+        reused_saved_session = False
+
     public_visible = _visible_text_size(public_page)
     auth_visible = _visible_text_size(auth_page)
     gain = max(0, auth_visible - public_visible)
@@ -600,5 +628,6 @@ def test_noen_subscription(url: str, *, force_login: bool = False) -> dict[str, 
         "cookie_count": len(session.cookies),
         "credentials_configured": noen_credentials_configured(),
         "automatic_session": bool(_automatic_cookies()),
+        "reused_saved_session": reused_saved_session,
         "login_result": login_result,
     }
