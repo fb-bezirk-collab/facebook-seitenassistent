@@ -11,6 +11,8 @@ from typing import Any
 import requests
 
 from app.media_monitor.storage import load_items, save_items
+from app.media_monitor.subscriptions import build_noen_session, is_noen_url
+from app.media_monitor.fetchers.generic import response_text
 
 API_URL = "https://api.openai.com/v1/responses"
 USER_AGENT = (
@@ -127,19 +129,28 @@ def fetch_article_text(url: str, teaser: str = "") -> tuple[str, str]:
         fallback = _clean_text(teaser)
         return fallback, "teaser"
 
+    subscription_session = build_noen_session() if is_noen_url(url) else None
+    used_subscription = subscription_session is not None
     try:
-        response = requests.get(
-            url,
-            headers={"User-Agent": USER_AGENT, "Accept-Language": "de-AT,de;q=0.9,en;q=0.5"},
-            timeout=30,
-            allow_redirects=True,
-        )
+        if subscription_session is not None:
+            response = subscription_session.get(
+                url,
+                timeout=30,
+                allow_redirects=True,
+            )
+        else:
+            response = requests.get(
+                url,
+                headers={"User-Agent": USER_AGENT, "Accept-Language": "de-AT,de;q=0.9,en;q=0.5"},
+                timeout=30,
+                allow_redirects=True,
+            )
         response.raise_for_status()
     except requests.RequestException:
         fallback = _clean_text(teaser)
         return fallback, "teaser"
 
-    page = response.text or ""
+    page = response_text(response) or ""
     parser = _ArticleTextParser()
     try:
         parser.feed(page)
@@ -160,6 +171,8 @@ def fetch_article_text(url: str, teaser: str = "") -> tuple[str, str]:
         # Navigation/Boilerplate kann bei generischen Seiten sehr lang sein. Für die KI reicht ein sauber begrenzter Ausschnitt.
         text = _clean_text(text.replace("\n\n", "\n"))[:18000]
         if len(text) >= 300:
+            if used_subscription:
+                return text, "subscription"
             return text, mode
 
     fallback_parts = [_clean_text(teaser), _meta_description(page)]
