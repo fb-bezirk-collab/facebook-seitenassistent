@@ -319,6 +319,93 @@
         </div>
     </section>
 
+
+    <section class="card" id="noen-debug">
+        <h2>NÖN-Diagnose</h2>
+        <p class="muted">
+            Dieser Test verändert den NÖN-Login nicht. Er öffnet den angegebenen Artikel im bereits vorhandenen
+            Playwright-Browserprofil und protokolliert nur, was Railway tatsächlich sieht. Zugangsdaten, Cookies
+            und Query-Parameter werden nicht angezeigt.
+        </p>
+
+        <form method="post" action="/settings/media-subscriptions/noen/debug">
+            <label for="noen_debug_url">NÖN-Bezahlartikel</label>
+            <input id="noen_debug_url" type="url" name="article_url" placeholder="https://www.noen.at/..." required>
+            <button class="button primary" style="margin-top:12px" type="submit">NÖN-Debug starten</button>
+        </form>
+
+        {% if noen_debug_job %}
+            <div class="note" style="margin-top:18px">
+                <strong>Status:</strong> {{ noen_debug_job.status or 'unbekannt' }}<br>
+                {% if noen_debug_job.article_url %}<strong>Artikel:</strong> {{ noen_debug_job.article_url }}<br>{% endif %}
+                {% if noen_debug_job.navigation_status %}<strong>Navigation HTTP:</strong> {{ noen_debug_job.navigation_status }}<br>{% endif %}
+                {% if noen_debug_job.navigation_error %}<strong>Navigation:</strong> {{ noen_debug_job.navigation_error }}<br>{% endif %}
+                {% if noen_debug_job.final_url %}<strong>Finale URL:</strong> {{ noen_debug_job.final_url }}<br>{% endif %}
+                {% if noen_debug_job.final_title %}<strong>Seitentitel:</strong> {{ noen_debug_job.final_title }}<br>{% endif %}
+                {% if noen_debug_job.cookie_count_browser is defined %}<strong>Browser-Cookies:</strong> {{ noen_debug_job.cookie_count_browser }}<br>{% endif %}
+                {% if noen_debug_job.error %}<strong>Fehler:</strong> {{ noen_debug_job.error }}{% endif %}
+            </div>
+
+            {% if noen_debug_job.steps %}
+                <h3 style="margin-top:18px">Seitenzustand</h3>
+                <div style="overflow-x:auto">
+                    <table style="width:100%; border-collapse:collapse">
+                        <thead><tr><th>Zeit</th><th>Textzeichen</th><th>user-logged-in</th><th>Passwortfeld</th><th>Paywall-Hinweise</th><th>Artikelbereiche</th></tr></thead>
+                        <tbody>
+                        {% for step in noen_debug_job.steps %}
+                            <tr>
+                                <td>{{ step.after_seconds }} s</td>
+                                <td>{{ step.visible_chars }}</td>
+                                <td>{{ 'JA' if step.body_user_logged_in_class else 'NEIN' }}</td>
+                                <td>{{ 'JA' if step.password_field_visible else 'NEIN' }}</td>
+                                <td>{{ step.paywall_markers|join(', ') if step.paywall_markers else '—' }}</td>
+                                <td>
+                                    {% if step.article_selector_chars %}
+                                        {% for selector, size in step.article_selector_chars.items() %}{{ selector }}={{ size }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+
+            {% if noen_debug_job.http_errors %}
+                <details style="margin-top:16px"><summary><strong>HTTP-Fehler anzeigen ({{ noen_debug_job.http_errors|length }})</strong></summary>
+                    <ul>{% for item in noen_debug_job.http_errors %}<li>{{ item.status }} – {{ item.url }}</li>{% endfor %}</ul>
+                </details>
+            {% endif %}
+            {% if noen_debug_job.failures %}
+                <details style="margin-top:12px"><summary><strong>Fehlgeschlagene Requests anzeigen ({{ noen_debug_job.failures|length }})</strong></summary>
+                    <ul>{% for item in noen_debug_job.failures %}<li>{{ item.method }} – {{ item.url }} – {{ item.error }}</li>{% endfor %}</ul>
+                </details>
+            {% endif %}
+            {% if noen_debug_job.console_errors or noen_debug_job.page_errors %}
+                <details style="margin-top:12px"><summary><strong>JavaScript-/Konsolenfehler anzeigen</strong></summary>
+                    <ul>
+                    {% for item in noen_debug_job.page_errors %}<li>PageError: {{ item }}</li>{% endfor %}
+                    {% for item in noen_debug_job.console_errors %}<li>Console: {{ item }}</li>{% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+            {% if noen_debug_job.hosts %}
+                <details style="margin-top:12px"><summary><strong>Aufgerufene Hosts anzeigen ({{ noen_debug_job.hosts|length }})</strong></summary>
+                    <p>{{ noen_debug_job.hosts|join(', ') }}</p>
+                </details>
+            {% endif %}
+            {% if noen_debug_screenshot_available %}
+                <p style="margin-top:16px"><a class="button" href="/settings/media-subscriptions/noen/debug/screenshot" target="_blank">Playwright-Screenshot öffnen</a></p>
+            {% endif %}
+        {% endif %}
+    </section>
+
+    {% if noen_debug_job and noen_debug_job.status == 'running' %}
+    <script>
+        window.setTimeout(function () { window.location.reload(); }, 3000);
+    </script>
+    {% endif %}
+
     <section class="card" id="fpoe-social-media-profil">
         <h2>FPÖ-Social-Media-Profil</h2>
         <p class="muted">
