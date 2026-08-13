@@ -1,3 +1,10 @@
+# 2.8.1
+
+- Autor-Fallback über direkte Comment-Abfrage ergänzt.
+- Diagnose für fehlende `from`-Daten ergänzt.
+- Autor-Diagnose in der Kommentaransicht sichtbar.
+- Bestehende Kommentardaten bleiben kompatibel.
+
 ## 2.7.2
 - Meta-Login: tatsächliche Token-Berechtigungen werden nach OAuth geprüft.
 - Fehlendes `pages_read_user_content` wird bereits beim Verbinden klar gemeldet.
@@ -166,3 +173,77 @@
 - Filter nach KI-Kategorie und neue Kennzahlen ergänzt.
 - KI-Antwortvorschläge mit Copy-Funktion ergänzt; keine automatische Veröffentlichung.
 - Autor-Fallback verständlicher dargestellt, wenn Meta keine `from`-Daten liefert.
+## 2.7.4
+- Kommentar-Moderation deutlich zurückhaltender ausgerichtet.
+- Normale politische Kritik/Forderungen werden nicht mehr als Beleidigung oder hohe Priorität behandelt.
+- Kategorien `Meinung/Kritik` und `Drohung/Gewalt` ergänzt.
+- Hohe Priorität auf echte Beschimpfungen, Drohungen/Gewalt und gefährlichen Scam beschränkt.
+- Bestehende 2.7.3-KI-Bewertungen werden automatisch zur Neubewertung markiert.
+
+## 2.7.5
+- Moderationsprofil in `profiles/comment_moderation.md` ausgelagert.
+- KI-Moderation deutlich zurückhaltender; politische Kritik wird nicht als Beleidigung behandelt.
+- Bewertungs-Version auf 2.7.5 erhöht.
+
+## 2.8.0
+- Moderations-Schnellfilter und Dropdown „Moderation empfohlen“/„Antwort empfohlen“.
+- KI-Kategorie Off-Topic ergänzt.
+- Seitenübergreifende Benutzerübersicht mit Historie, Wiederholungsmustern und Risiko-Score.
+- Interne Beobachtungsliste für Kommentatoren.
+- Facebook-Sperren/Entsperren auf allen eindeutig bekannten Seiten-PSIDs.
+- Sicherheitslogik für Page-Scoped User IDs und mehrdeutige Namenszuordnungen.
+
+
+## 2.8.2
+- Alle offenen Kommentare automatisch in 200er-Blöcken bewerten
+- KI-Fehler je Kommentar speichern und wiederholen
+- Kommentar-Medien/Attachments erfassen und anzeigen
+
+## 2.8.3
+- Erweiterter Abruf von Facebook-Comment-Attachments inklusive Story-Attachment-Mediendaten.
+- Link-Kommentare erhalten bei fehlender Meta-Vorschau eine OpenGraph-Bildvorschau der öffentlichen Zielseite.
+- Bestehende Kommentare werden beim nächsten Abruf nachträglich um Medienvorschauen ergänzt.
+- Leere Sticker-/Medienkommentare werden ohne automatische Inhaltsbewertung als unkritische Medienkommentare gekennzeichnet.
+- Medien-Diagnose im Kommentar-Monitor ergänzt.
+
+## 2.8.4
+- Hintergrundjob zum Nachaktualisieren bereits gespeicherter Facebook-Kommentare.
+- Fehlende Medien-/Linkvorschauen werden direkt über bekannte Comment-IDs nachgeladen.
+- Fortschrittsanzeige und persistenter Refresh-Status ergänzt.
+
+## 2.8.5
+- Facebook-Foto-/Video-Permalinks haben Vorrang vor externen URLs aus Kommentartexten.
+- Keine OpenGraph-Fallbacks mehr bei erkannten Facebook-Medienkommentaren.
+- Falsch gespeicherte externe Vorschaubilder werden beim Aktualisieren bestehender Kommentare entfernt.
+- Anzeige „Facebook-Medium öffnen“ für Facebook-Medienreferenzen.
+
+
+## 3.0.0 – Medienmonitor → Facebook-Linkbeitrag
+- Neuer Facebook-Linkshare-Workflow aus der KI-Analyse.
+- Ein-Klick-Linkentwurf aus dem Medienmonitor.
+- FacebookPublisher übergibt Originalartikel als `link` an `/feed`.
+- Linkentwürfe sind auf Facebook beschränkt und separat mit der Medienmeldung verknüpft.
+
+## 3.0.1
+- Editierbares FPÖ-Social-Media-Profil ergänzt.
+- Neue themenspezifische Social-Media-Frames und Sprachregeln.
+- Profil kann in Einstellungen ohne Deploy geändert werden.
+- Persistente benutzerdefinierte Fassung im data-Ordner.
+- Analyseprompt wird pro KI-Analyse dynamisch neu geladen.
+
+## 3.0.2
+- Medienmonitor um Unzensuriert, NIUS Österreich, FoB News, ZurZeit und NFZ erweitert.
+- NIUS wird ausschließlich über `/tag/oesterreich` eingelesen.
+- Neue Quellen laufen unabhängig; einzelne Abruffehler blockieren den Gesamtlauf nicht.
+
+## 3.0.3
+- Zentraler UTF-8-/Mojibake-Fix für HTML-Medien.
+- Bestehende Artikel können über Quelle + URL textlich korrigiert werden, ohne Dubletten.
+- Eigener NIUS-Österreich-Fetcher für die clientseitig gerenderte Tag-Seite.
+## 3.1.0
+- NÖN-Abo-Pilot mit verschlüsselter Sitzungsablage, Testfunktion und Abo-Abruf für KI-Analysen.
+
+## 3.1.1
+- NÖN-Abo: automatischer Login über Railway-Variablen `NOEN_USERNAME`/`NOEN_PASSWORD`.
+- Zugangsdaten werden nicht im Projekt gespeichert; nur die erzeugte Sitzung wird verschlüsselt persistiert.
+- Automatische Sitzungserneuerung und Login-Test in den Einstellungen.
