@@ -19,6 +19,7 @@ STATIC_DIR = BASE_DIR / "static"
 UPLOADS_DIR = STORAGE_ROOT / "uploads"
 DATA_DIR = STORAGE_ROOT / "data"
 PLAYWRIGHT_PROFILE_DIR = STORAGE_ROOT / "playwright_profile"
+NOEN_PLAYWRIGHT_PROFILE_DIR = STORAGE_ROOT / "playwright_noen_profile"
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
 PAGES_FILE = DATA_DIR / "pages.json"
@@ -45,6 +46,7 @@ def create_required_directories() -> None:
         UPLOADS_DIR,
         DATA_DIR,
         PLAYWRIGHT_PROFILE_DIR,
+        NOEN_PLAYWRIGHT_PROFILE_DIR,
     )
 
     for directory in directories:
