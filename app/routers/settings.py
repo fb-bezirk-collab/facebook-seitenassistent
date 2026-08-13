@@ -31,7 +31,8 @@ from app.media_monitor.subscriptions import (
     SubscriptionError,
     delete_noen_cookie,
     get_noen_status,
-    save_noen_cookie,
+    noen_credentials_configured,
+    refresh_noen_login,
     test_noen_subscription,
 )
 from app.media_monitor.social_profile import (
@@ -168,21 +169,6 @@ def fpoe_social_media_profil_zuruecksetzen():
     return RedirectResponse(url="/settings?social_profile_reset=1", status_code=303)
 
 
-@router.post("/settings/media-subscriptions/noen")
-def noen_abo_sitzung_speichern(cookie_header: str = Form(...)):
-    try:
-        save_noen_cookie(cookie_header)
-    except SubscriptionError as exc:
-        return RedirectResponse(
-            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
-            status_code=303,
-        )
-    return RedirectResponse(
-        url="/settings?noen_subscription_saved=1#medien-abos",
-        status_code=303,
-    )
-
-
 @router.post("/settings/media-subscriptions/noen/delete")
 def noen_abo_sitzung_loeschen():
     delete_noen_cookie()
@@ -192,10 +178,29 @@ def noen_abo_sitzung_loeschen():
     )
 
 
+@router.post("/settings/media-subscriptions/noen/login")
+def noen_abo_login_erneuern():
+    try:
+        result = refresh_noen_login(force=True)
+        message = (
+            "NÖN-Login erfolgreich. "
+            f"{result.get('cookie_count', 0)} Sitzungs-Cookies wurden verschlüsselt gespeichert."
+        )
+        return RedirectResponse(
+            url="/settings?noen_test_result=" + quote(message) + "#medien-abos",
+            status_code=303,
+        )
+    except SubscriptionError as exc:
+        return RedirectResponse(
+            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
+            status_code=303,
+        )
+
+
 @router.post("/settings/media-subscriptions/noen/test")
 def noen_abo_sitzung_testen(article_url: str = Form(...)):
     try:
-        result = test_noen_subscription(article_url)
+        result = test_noen_subscription(article_url, force_login=True)
         if result.get("likely_more_content"):
             message = (
                 "Test erfolgreich: Die hinterlegte Sitzung lieferte deutlich mehr sichtbaren Inhalt "
