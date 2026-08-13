@@ -200,15 +200,22 @@ def noen_abo_login_erneuern():
 @router.post("/settings/media-subscriptions/noen/test")
 def noen_abo_sitzung_testen(article_url: str = Form(...)):
     try:
-        result = test_noen_subscription(article_url, force_login=True)
+        result = test_noen_subscription(article_url, force_login=False)
+        session_note = (
+            "Gespeicherte NÖN-Sitzung verwendet. "
+            if result.get("reused_saved_session")
+            else "NÖN-Sitzung wurde bei Bedarf neu aufgebaut. "
+        )
         if result.get("likely_more_content"):
             message = (
-                "Test erfolgreich: Die hinterlegte Sitzung lieferte deutlich mehr sichtbaren Inhalt "
-                f"(+{result.get('visible_gain', 0)} Zeichen). HTTP {result.get('status_code')}."
+                session_note
+                + "Test erfolgreich: Die Abo-Sitzung lieferte deutlich mehr sichtbaren Inhalt "
+                + f"(+{result.get('visible_gain', 0)} Zeichen). HTTP {result.get('status_code')}."
             )
         elif result.get("content_changed"):
             message = (
-                "Die NÖN-Seite wurde mit der Abo-Sitzung erfolgreich geladen und unterschied sich "
+                session_note
+                + "Die NÖN-Seite wurde mit der Abo-Sitzung erfolgreich geladen und unterschied sich "
                 "von der öffentlichen Fassung. Ob der vollständige Bezahltext enthalten ist, lässt "
                 "sich technisch noch nicht sicher bestätigen. "
                 f"HTTP {result.get('status_code')}."
