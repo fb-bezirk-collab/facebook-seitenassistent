@@ -308,7 +308,7 @@
                 <form method="post" action="/settings/media-subscriptions/noen/test">
                     <label for="noen_test_url">NÖN-Artikel-URL</label>
                     <input id="noen_test_url" type="url" name="article_url" placeholder="https://www.noen.at/..." required>
-                    <button class="button primary" style="margin-top:12px" type="submit" {% if not noen_subscription_status.credentials_configured %}disabled{% endif %}>Automatischen Login + Abo-Zugriff testen</button>
+                    <button class="button primary" style="margin-top:12px" type="submit" {% if not noen_subscription_status.credentials_configured %}disabled{% endif %}>Gespeicherte Sitzung + Abo-Zugriff testen</button>
                 </form>
                 <div class="note" style="margin-top:16px">
                     <strong>Danach automatisch:</strong><br>
