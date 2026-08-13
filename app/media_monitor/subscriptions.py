@@ -529,6 +529,96 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
     }
 
 
+
+def _article_page_looks_logged_out(page) -> bool:
+    """Erkennt offensichtliche Login-/Anmeldezustände auf einer NÖN-Seite."""
+    try:
+        current = str(page.url or "").lower()
+    except Exception:
+        current = ""
+    if any(part in current for part in ("/login", "/signin", "/anmelden", "login.", "auth.")):
+        return True
+
+    # Wenn ein sichtbares Passwortfeld vorhanden ist, sind wir praktisch im Login.
+    if _login_form_frame(page) is not None:
+        return True
+
+    return False
+
+
+def fetch_noen_authenticated_html(url: str, *, allow_refresh: bool = True) -> dict[str, object]:
+    """
+    Lädt einen NÖN-Artikel direkt im persistenten, eingeloggten Playwright-Browser.
+
+    Damit bleiben neben Cookies auch Local-/Session-Storage, JavaScript-Status und
+    sonstige Browser-Sitzungsdaten erhalten. Das ist für Abo-/Paywall-Seiten
+    robuster als ein anschließender requests-Abruf mit kopierten Cookies.
+    """
+    target = (url or "").strip()
+    if not target or not is_noen_url(target):
+        raise SubscriptionError("Bitte eine vollständige noen.at-Artikel-URL eintragen.")
+
+    NOEN_PLAYWRIGHT_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _load_once() -> dict[str, object]:
+        try:
+            with sync_playwright() as playwright:
+                context = playwright.chromium.launch_persistent_context(
+                    user_data_dir=str(NOEN_PLAYWRIGHT_PROFILE_DIR),
+                    headless=True,
+                    viewport={"width": 1440, "height": 1100},
+                    args=["--disable-dev-shm-usage"],
+                )
+                try:
+                    page = context.pages[0] if context.pages else context.new_page()
+                    page.set_default_timeout(7_000)
+                    response = page.goto(
+                        target,
+                        wait_until="domcontentloaded",
+                        timeout=60_000,
+                    )
+                    # NÖN/Piano und der eigentliche Artikeltext werden teilweise
+                    # noch nach DOMContentLoaded per JavaScript ergänzt.
+                    page.wait_for_timeout(4_000)
+
+                    logged_out = _article_page_looks_logged_out(page)
+                    logged_in = _looks_logged_in(page)
+                    html_text = page.content()
+                    final_url = str(page.url or target)
+                    status_code = response.status if response is not None else 200
+                    cookies = context.cookies()
+                finally:
+                    context.close()
+        except PlaywrightTimeoutError as exc:
+            raise SubscriptionError(f"NÖN-Abo-Artikel hat zu lange zum Laden gebraucht: {exc}") from exc
+        except SubscriptionError:
+            raise
+        except Exception as exc:
+            raise SubscriptionError(f"NÖN-Abo-Artikel konnte im Browser nicht geladen werden: {exc}") from exc
+
+        return {
+            "html": html_text,
+            "final_url": final_url,
+            "status_code": status_code,
+            "logged_in": bool(logged_in),
+            "logged_out": bool(logged_out),
+            "cookie_count": len(cookies),
+        }
+
+    first = _load_once()
+
+    # Wenn das persistente Browserprofil offensichtlich nicht mehr angemeldet ist,
+    # erneuern wir genau einmal den Login und laden den Artikel erneut.
+    if (first.get("logged_out") or not first.get("logged_in")) and allow_refresh and noen_credentials_configured():
+        refresh_noen_login(force=True)
+        second = _load_once()
+        second["session_refreshed"] = True
+        return second
+
+    first["session_refreshed"] = False
+    return first
+
+
 def build_noen_session() -> requests.Session | None:
     # Primär: Railway-Zugangsdaten. Frische automatische Sitzung wiederverwenden,
     # ansonsten einmal neu anmelden. Fehler dürfen die Medienanalyse nicht stoppen.
@@ -564,70 +654,49 @@ def test_noen_subscription(url: str, *, force_login: bool = False) -> dict[str, 
     if not target or not is_noen_url(target):
         raise SubscriptionError("Bitte eine vollständige noen.at-Artikel-URL eintragen.")
 
-    # 3.1.3: Eine bereits gespeicherte, frische Sitzung hat immer Vorrang.
-    # Ein neuer Browser-Login wird nur aufgebaut, wenn keine verwendbare Sitzung
-    # vorhanden ist bzw. ausdrücklich erzwungen wurde UND keine frische Session existiert.
     login_result: dict[str, object] | None = None
-    reused_saved_session = bool(_automatic_cookies() and _automatic_session_is_fresh())
 
-    if noen_credentials_configured() and not reused_saved_session:
+    # Nur auf ausdrücklichen Wunsch vorab neu anmelden. Im Normalfall wird zuerst
+    # das bereits persistente Playwright-Profil verwendet.
+    if force_login and noen_credentials_configured():
         login_result = refresh_noen_login(force=True)
-    elif force_login and noen_credentials_configured() and not _automatic_cookies():
-        login_result = refresh_noen_login(force=True)
-
-    session = build_noen_session()
-    if session is None:
-        if noen_credentials_configured():
-            raise SubscriptionError("Der automatische NÖN-Login konnte keine verwendbare Sitzung erzeugen.")
-        raise SubscriptionError(
-            "Es sind weder NOEN_USERNAME/NOEN_PASSWORD in Railway noch eine ältere Cookie-Sitzung hinterlegt."
-        )
-
-    def fetch_with_session(active_session: requests.Session):
-        try:
-            response = active_session.get(target, timeout=30, allow_redirects=True)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as exc:
-            raise SubscriptionError(f"NÖN-Testabruf fehlgeschlagen: {exc}") from exc
 
     try:
-        public_response = requests.get(target, headers=HEADERS, timeout=30, allow_redirects=True)
+        public_response = requests.get(
+            target,
+            headers=HEADERS,
+            timeout=30,
+            allow_redirects=True,
+        )
+        public_page = response_text(public_response) if public_response.ok else ""
     except requests.RequestException as exc:
         raise SubscriptionError(f"Öffentlicher NÖN-Testabruf fehlgeschlagen: {exc}") from exc
 
-    auth_response = fetch_with_session(session)
-    public_page = response_text(public_response) if public_response.ok else ""
-    auth_page = response_text(auth_response)
-
-    # Wenn eine ältere gespeicherte Sitzung offensichtlich auf eine Login-Seite
-    # umleitet, versuchen wir genau einmal eine echte Erneuerung über Railway.
-    final_lower = str(auth_response.url or "").lower()
-    looks_like_login_redirect = any(part in final_lower for part in ("login", "signin", "anmelden"))
-    if looks_like_login_redirect and noen_credentials_configured():
-        login_result = refresh_noen_login(force=True)
-        session = build_noen_session()
-        if session is None:
-            raise SubscriptionError("Die NÖN-Sitzung konnte nach dem erneuten Login nicht aufgebaut werden.")
-        auth_response = fetch_with_session(session)
-        auth_page = response_text(auth_response)
-        reused_saved_session = False
+    browser_result = fetch_noen_authenticated_html(
+        target,
+        allow_refresh=not force_login,
+    )
+    auth_page = str(browser_result.get("html") or "")
 
     public_visible = _visible_text_size(public_page)
     auth_visible = _visible_text_size(auth_page)
     gain = max(0, auth_visible - public_visible)
 
     return {
-        "status_code": auth_response.status_code,
-        "final_url": auth_response.url,
+        "status_code": int(browser_result.get("status_code") or 200),
+        "final_url": str(browser_result.get("final_url") or target),
         "public_visible_chars": public_visible,
         "subscription_visible_chars": auth_visible,
         "visible_gain": gain,
         "content_changed": auth_page != public_page,
         "likely_more_content": gain >= 500,
-        "cookie_count": len(session.cookies),
+        "cookie_count": int(browser_result.get("cookie_count") or 0),
         "credentials_configured": noen_credentials_configured(),
-        "automatic_session": bool(_automatic_cookies()),
-        "reused_saved_session": reused_saved_session,
+        "automatic_session": True,
+        "reused_saved_session": not bool(browser_result.get("session_refreshed")) and login_result is None,
+        "session_refreshed": bool(browser_result.get("session_refreshed")),
+        "logged_in": bool(browser_result.get("logged_in")),
         "login_result": login_result,
+        "transport": "playwright",
     }
+

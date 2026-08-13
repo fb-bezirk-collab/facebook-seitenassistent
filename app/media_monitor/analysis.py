@@ -11,7 +11,7 @@ from typing import Any
 import requests
 
 from app.media_monitor.storage import load_items, save_items
-from app.media_monitor.subscriptions import build_noen_session, is_noen_url
+from app.media_monitor.subscriptions import SubscriptionError, fetch_noen_authenticated_html, is_noen_url
 from app.media_monitor.fetchers.generic import response_text
 
 API_URL = "https://api.openai.com/v1/responses"
@@ -129,28 +129,32 @@ def fetch_article_text(url: str, teaser: str = "") -> tuple[str, str]:
         fallback = _clean_text(teaser)
         return fallback, "teaser"
 
-    subscription_session = build_noen_session() if is_noen_url(url) else None
-    used_subscription = subscription_session is not None
-    try:
-        if subscription_session is not None:
-            response = subscription_session.get(
-                url,
-                timeout=30,
-                allow_redirects=True,
-            )
-        else:
+    used_subscription = False
+    page = ""
+
+    if is_noen_url(url):
+        try:
+            browser_result = fetch_noen_authenticated_html(url, allow_refresh=True)
+            page = str(browser_result.get("html") or "")
+            used_subscription = bool(browser_result.get("logged_in"))
+        except SubscriptionError:
+            # Abo-Abruf darf die Analyse nicht vollständig blockieren.
+            # Fallback auf die öffentlich erreichbare Artikelfassung.
+            page = ""
+
+    if not page:
+        try:
             response = requests.get(
                 url,
                 headers={"User-Agent": USER_AGENT, "Accept-Language": "de-AT,de;q=0.9,en;q=0.5"},
                 timeout=30,
                 allow_redirects=True,
             )
-        response.raise_for_status()
-    except requests.RequestException:
-        fallback = _clean_text(teaser)
-        return fallback, "teaser"
-
-    page = response_text(response) or ""
+            response.raise_for_status()
+        except requests.RequestException:
+            fallback = _clean_text(teaser)
+            return fallback, "teaser"
+        page = response_text(response) or ""
     parser = _ArticleTextParser()
     try:
         parser.feed(page)
