@@ -20,6 +20,8 @@
         .toolbar-copy h2 { margin: 0 0 6px; font-size: 28px; }
         .toolbar-copy p { margin: 0; color: #667085; }
         .fetch-button { min-height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #1877f2; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
+        .cancel-button { min-height: 44px; padding: 0 16px; border: 1px solid #f04438; border-radius: 10px; background: #fff; color: #b42318; font-size: 14px; font-weight: 800; cursor: pointer; }
+        .job-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
         .notice { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; border-radius: 10px; }
         .error-notice { border-color: #fecdca; background: #fef3f2; color: #b42318; }
         .warning-notice { border-color: #fedf89; background: #fffaeb; color: #b54708; }
@@ -88,6 +90,10 @@
 <div class="container">
     {% if job_running %}
         <div class="notice warning-notice"><strong>Medienabruf läuft.</strong> Die Quellen werden im Hintergrund eingelesen und anschließend von der KI bewertet. Diese Seite aktualisiert sich automatisch.</div>
+    {% elif job_cancelling %}
+        <div class="notice warning-notice"><strong>Abbruch angefordert.</strong> Der aktuelle sichere Schritt wird noch beendet; danach stoppt der Medienabruf automatisch.</div>
+    {% elif job_cancelled %}
+        <div class="notice warning-notice"><strong>Medienabruf beendet.</strong> {{ job_message or "Der Abruf wurde abgebrochen." }}</div>
     {% elif job_success %}
         <div class="notice">
             Medienabruf abgeschlossen{% if last_fetch_at %} ({{ last_fetch_at }}){% endif %}. Neu gespeichert: <strong>{{ new_count }}</strong>.
@@ -120,9 +126,20 @@
             <p>Sport, Kultur, Lifestyle und ähnliche Ressorts werden zuerst regelbasiert entfernt. Danach zeigt die Standardansicht nur KI-Bewertungen ab 6,5 Punkten.</p>
             <p style="margin-top:8px"><a class="view-link" href="/media-monitor{% if not show_all %}?show_all=1{% endif %}">{% if show_all %}Nur politisch brauchbare anzeigen{% else %}Alle gespeicherten Meldungen anzeigen ({{ all_count }}){% endif %}</a></p>
         </div>
-        <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
-            <button class="fetch-button" type="submit" {% if job_running %}disabled style="opacity:.6;cursor:not-allowed"{% endif %}>{% if job_running %}Abruf läuft …{% else %}Medien jetzt abrufen{% endif %}</button>
-        </form>
+        <div class="job-actions">
+            <form method="post" action="{{ url_for('medienmonitor_abrufen') }}">
+                <button class="fetch-button" type="submit" {% if job_running or job_cancelling %}disabled style="opacity:.6;cursor:not-allowed"{% endif %}>{% if job_running %}Abruf läuft …{% elif job_cancelling %}Abbruch läuft …{% else %}Medien jetzt abrufen{% endif %}</button>
+            </form>
+            {% if job_running %}
+                <form method="post" action="{{ url_for('medienmonitor_abbrechen') }}" onsubmit="return confirm('Medienabruf wirklich abbrechen? Bereits gespeicherte Meldungen bleiben erhalten.');">
+                    <button class="cancel-button" type="submit">Abruf abbrechen</button>
+                </form>
+            {% elif job_cancelling %}
+                <form method="post" action="{{ url_for('medienmonitor_status_zuruecksetzen') }}" onsubmit="return confirm('Nur den Jobstatus zurücksetzen? Ein externer Aufruf kann im Hintergrund noch bis zu seinem Timeout laufen.');">
+                    <button class="cancel-button" type="submit">Status zurücksetzen</button>
+                </form>
+            {% endif %}
+        </div>
     </section>
 
     <section class="filter-bar" aria-label="Filter">
@@ -345,7 +362,7 @@
     applyFilters();
 })();
 </script>
-{% if job_running %}
+{% if job_running or job_cancelling %}
 <script>
     window.setTimeout(function () { window.location.reload(); }, 5000);
 </script>
