@@ -386,27 +386,84 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
                         )
 
                     submitted = False
-                    for pattern in [r"Anmelden", r"Einloggen", r"Login", r"Weiter"]:
+
+                    # 1) Klassische Buttons nach sichtbarer Beschriftung.
+                    for pattern in [r"Anmelden", r"Einloggen", r"Login", r"Weiter", r"Fortfahren", r"Bestätigen"]:
                         try:
                             button = frame.get_by_role("button", name=re.compile(pattern, re.I)).first
-                            if button.count() and button.is_visible(timeout=600):
+                            if button.count() and button.is_visible(timeout=700):
                                 button.click(timeout=5_000)
                                 submitted = True
                                 break
                         except Exception:
                             continue
+
+                    # 2) Normale Submit-Controls, auch wenn sie keine passende Beschriftung haben.
                     if not submitted:
-                        for selector in ["button[type='submit']", "input[type='submit']"]:
+                        for selector in [
+                            "button[type='submit']",
+                            "input[type='submit']",
+                            "button[name*='login' i]",
+                            "button[id*='login' i]",
+                            "button[class*='login' i]",
+                            "a[role='button'][href*='login' i]",
+                        ]:
                             try:
                                 button = frame.locator(selector).first
-                                if button.count() and button.is_visible(timeout=600):
+                                if button.count() and button.is_visible(timeout=700):
                                     button.click(timeout=5_000)
                                     submitted = True
                                     break
                             except Exception:
                                 continue
+
+                    # 3) Viele moderne Login-Komponenten senden per Enter ab und besitzen
+                    #    keinen klassischen submit-Button im DOM.
                     if not submitted:
-                        raise SubscriptionError("Der NÖN-Login konnte nicht abgesendet werden.")
+                        for selector in [
+                            "input[type='password']",
+                            "input[name*='password' i]",
+                            "input[id*='password' i]",
+                            "input[autocomplete='current-password']",
+                        ]:
+                            try:
+                                password_field = frame.locator(selector).first
+                                if password_field.count() and password_field.is_visible(timeout=700):
+                                    password_field.press("Enter", timeout=5_000)
+                                    submitted = True
+                                    break
+                            except Exception:
+                                continue
+
+                    # 4) Letzter sauberer Fallback: das Formular des Passwortfeldes über
+                    #    requestSubmit() absenden. Dadurch werden normale submit-Handler
+                    #    und Browser-Validierung ausgelöst, statt das Formular blind zu posten.
+                    if not submitted:
+                        try:
+                            result = frame.evaluate(
+                                """
+                                () => {
+                                  const pw = document.querySelector(
+                                    'input[type="password"], input[name*="password" i], input[id*="password" i], input[autocomplete="current-password"]'
+                                  );
+                                  if (!pw) return false;
+                                  const form = pw.closest('form');
+                                  if (!form) return false;
+                                  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                                  else form.submit();
+                                  return true;
+                                }
+                                """
+                            )
+                            submitted = bool(result)
+                        except Exception:
+                            submitted = False
+
+                    if not submitted:
+                        raise SubscriptionError(
+                            "Der NÖN-Login konnte trotz befüllter Zugangsdaten nicht abgesendet werden. "
+                            "NÖN verwendet offenbar einen ungewöhnlichen Login-Ablauf."
+                        )
 
                     page.wait_for_timeout(6_000)
                     try:
