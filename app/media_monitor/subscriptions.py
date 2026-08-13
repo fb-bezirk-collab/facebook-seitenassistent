@@ -231,6 +231,77 @@ def _session_from_legacy_cookie() -> requests.Session | None:
     return session
 
 
+
+
+def _accept_cookie_consent(page) -> dict[str, object]:
+    """Akzeptiert den NÖN/Cookiebot-Consent, bevor der Login initialisiert wird.
+
+    Liefert nur Diagnoseinfos zurück; ein fehlender Banner ist kein Fehler.
+    """
+    selectors = [
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "#CybotCookiebotDialogBodyButtonAccept",
+        "button#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "button[data-cookieconsent='allow-all']",
+        "button[id*='AllowAll' i]",
+        "button[id*='Accept' i]",
+    ]
+    text_patterns = [
+        re.compile(r"^\s*Alle\s+Cookies(?:\s+zulassen|\s+akzeptieren)?\s*$", re.I),
+        re.compile(r"^\s*Cookies\s+zulassen\s*$", re.I),
+        re.compile(r"^\s*Alle\s+zulassen\s*$", re.I),
+        re.compile(r"^\s*Akzeptieren\s*$", re.I),
+        re.compile(r"^\s*Accept\s+all\s*$", re.I),
+    ]
+
+    # Cookiebot liegt normalerweise im Hauptdokument, wir prüfen dennoch alle Frames.
+    for frame in page.frames:
+        for selector in selectors:
+            try:
+                button = frame.locator(selector).first
+                if button.count() and button.is_visible(timeout=700):
+                    button.click(timeout=5_000)
+                    page.wait_for_timeout(2_000)
+                    return {"found": True, "clicked": True, "via": selector}
+            except Exception:
+                continue
+
+        for pattern in text_patterns:
+            try:
+                button = frame.get_by_text(pattern).first
+                if button.count() and button.is_visible(timeout=700):
+                    button.click(timeout=5_000)
+                    page.wait_for_timeout(2_000)
+                    return {"found": True, "clicked": True, "via": pattern.pattern}
+            except Exception:
+                continue
+
+    return {"found": False, "clicked": False, "via": ""}
+
+
+def _noen_confirms_logged_in(page) -> bool:
+    """Strenge Erfolgserkennung: NÖN selbst muss den Login bestätigen.
+
+    Der DOM-Marker ``user-logged-in`` wurde im echten eingeloggten NÖN-Browser
+    beobachtet. Allgemeine Links wie "Mein Konto" reichen ausdrücklich nicht.
+    """
+    try:
+        body_class = page.locator("body").get_attribute("class") or ""
+        if "user-logged-in" in body_class.lower():
+            return True
+    except Exception:
+        pass
+
+    # Ein sichtbarer Logout-Link ist ebenfalls ein eindeutiges positives Signal.
+    for pattern in [r"^\s*Abmelden\s*$", r"^\s*Logout\s*$"]:
+        try:
+            locator = page.get_by_text(re.compile(pattern, re.I)).first
+            if locator.count() and locator.is_visible(timeout=600):
+                return True
+        except Exception:
+            continue
+    return False
+
 def _locator_fill_first(frame, selectors: list[str], value: str) -> bool:
     for selector in selectors:
         try:
@@ -343,9 +414,14 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
                 page.goto(login_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(2_000)
 
-                if not _looks_logged_in(page):
+                # NÖN initialisiert Login/Piano teilweise erst nach einer
+                # Consent-Entscheidung. Daher Cookiebot immer VOR dem Login behandeln.
+                _accept_cookie_consent(page)
+
+                if not _noen_confirms_logged_in(page):
                     _click_login_trigger(page)
                     page.wait_for_timeout(2_000)
+                    _accept_cookie_consent(page)
 
                     # Manche Login-Buttons öffnen ein neues Fenster / eine neue Seite.
                     if context.pages:
@@ -361,9 +437,10 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
                         try:
                             page.goto(NOEN_DEFAULT_URL, wait_until="domcontentloaded", timeout=60_000)
                             page.wait_for_timeout(2_000)
+                            _accept_cookie_consent(page)
                         except Exception:
                             pass
-                        if _looks_logged_in(page):
+                        if _noen_confirms_logged_in(page):
                             frame = None
                         else:
                             raise SubscriptionError(
@@ -481,16 +558,18 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
                             )
 
                     page.wait_for_timeout(6_000)
+                    _accept_cookie_consent(page)
                     try:
                         page.goto(NOEN_DEFAULT_URL, wait_until="domcontentloaded", timeout=60_000)
                         page.wait_for_timeout(2_000)
+                        _accept_cookie_consent(page)
                     except Exception:
                         pass
 
-                if not _looks_logged_in(page):
+                if not _noen_confirms_logged_in(page):
                     raise SubscriptionError(
-                        "NÖN hat den automatischen Login nicht als angemeldet bestätigt. "
-                        "Bitte Zugangsdaten prüfen; falls Captcha/2FA erscheint, ist ein rein automatischer Login nicht möglich."
+                        "Der NÖN-Login wurde abgesendet, aber NÖN bestätigt die Sitzung nicht als angemeldet "
+                        "(DOM-Marker 'user-logged-in' fehlt). Die Sitzung wird deshalb nicht als erfolgreich gespeichert."
                     )
 
                 cookies = context.cookies()
