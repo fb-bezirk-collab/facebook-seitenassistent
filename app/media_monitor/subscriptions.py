@@ -353,63 +353,59 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
 
                     frame = _login_form_frame(page)
                     if frame is None:
-                        raise SubscriptionError(
-                            "Der NÖN-Login wurde geöffnet, aber es konnte kein Passwortfeld gefunden werden. "
-                            "Falls NÖN den Login geändert hat, kann optional NOEN_LOGIN_URL in Railway auf die konkrete Login-Seite gesetzt werden."
-                        )
-
-                    email_ok = _locator_fill_first(
-                        frame,
-                        [
-                            "input[type='email']",
-                            "input[name*='email' i]",
-                            "input[id*='email' i]",
-                            "input[name*='user' i]",
-                            "input[id*='user' i]",
-                            "input[autocomplete='username']",
-                        ],
-                        username,
-                    )
-                    password_ok = _locator_fill_first(
-                        frame,
-                        [
-                            "input[type='password']",
-                            "input[name*='password' i]",
-                            "input[id*='password' i]",
-                            "input[autocomplete='current-password']",
-                        ],
-                        password,
-                    )
-                    if not email_ok or not password_ok:
-                        raise SubscriptionError(
-                            "Das NÖN-Loginformular wurde gefunden, aber Benutzername oder Passwortfeld konnten nicht automatisch befüllt werden."
-                        )
-
-                    submitted = False
-
-                    # 1) Klassische Buttons nach sichtbarer Beschriftung.
-                    for pattern in [r"Anmelden", r"Einloggen", r"Login", r"Weiter", r"Fortfahren", r"Bestätigen"]:
+                        # Bei bereits angemeldetem persistentem Browserprofil kann die
+                        # konfigurierte Login-URL direkt weiterleiten oder nur eine
+                        # Konto-Seite ohne Passwortfeld zeigen. Das ist kein Fehler.
+                        # Wir prüfen deshalb zuerst die NÖN-Startseite auf den bereits
+                        # in der Website verwendeten Login-Indikator user-logged-in.
                         try:
-                            button = frame.get_by_role("button", name=re.compile(pattern, re.I)).first
-                            if button.count() and button.is_visible(timeout=700):
-                                button.click(timeout=5_000)
-                                submitted = True
-                                break
+                            page.goto(NOEN_DEFAULT_URL, wait_until="domcontentloaded", timeout=60_000)
+                            page.wait_for_timeout(2_000)
                         except Exception:
-                            continue
+                            pass
+                        if _looks_logged_in(page):
+                            frame = None
+                        else:
+                            raise SubscriptionError(
+                                "Der NÖN-Login wurde geöffnet, aber es konnte kein Passwortfeld gefunden werden. "
+                                "Die gespeicherte Browser-Sitzung wurde auf der NÖN-Startseite ebenfalls nicht als angemeldet erkannt."
+                            )
 
-                    # 2) Normale Submit-Controls, auch wenn sie keine passende Beschriftung haben.
-                    if not submitted:
-                        for selector in [
-                            "button[type='submit']",
-                            "input[type='submit']",
-                            "button[name*='login' i]",
-                            "button[id*='login' i]",
-                            "button[class*='login' i]",
-                            "a[role='button'][href*='login' i]",
-                        ]:
+                    if frame is not None:
+
+                        email_ok = _locator_fill_first(
+                            frame,
+                            [
+                                "input[type='email']",
+                                "input[name*='email' i]",
+                                "input[id*='email' i]",
+                                "input[name*='user' i]",
+                                "input[id*='user' i]",
+                                "input[autocomplete='username']",
+                            ],
+                            username,
+                        )
+                        password_ok = _locator_fill_first(
+                            frame,
+                            [
+                                "input[type='password']",
+                                "input[name*='password' i]",
+                                "input[id*='password' i]",
+                                "input[autocomplete='current-password']",
+                            ],
+                            password,
+                        )
+                        if not email_ok or not password_ok:
+                            raise SubscriptionError(
+                                "Das NÖN-Loginformular wurde gefunden, aber Benutzername oder Passwortfeld konnten nicht automatisch befüllt werden."
+                            )
+
+                        submitted = False
+
+                        # 1) Klassische Buttons nach sichtbarer Beschriftung.
+                        for pattern in [r"Anmelden", r"Einloggen", r"Login", r"Weiter", r"Fortfahren", r"Bestätigen"]:
                             try:
-                                button = frame.locator(selector).first
+                                button = frame.get_by_role("button", name=re.compile(pattern, re.I)).first
                                 if button.count() and button.is_visible(timeout=700):
                                     button.click(timeout=5_000)
                                     submitted = True
@@ -417,53 +413,72 @@ def refresh_noen_login(*, force: bool = True) -> dict[str, object]:
                             except Exception:
                                 continue
 
-                    # 3) Viele moderne Login-Komponenten senden per Enter ab und besitzen
-                    #    keinen klassischen submit-Button im DOM.
-                    if not submitted:
-                        for selector in [
-                            "input[type='password']",
-                            "input[name*='password' i]",
-                            "input[id*='password' i]",
-                            "input[autocomplete='current-password']",
-                        ]:
+                        # 2) Normale Submit-Controls, auch wenn sie keine passende Beschriftung haben.
+                        if not submitted:
+                            for selector in [
+                                "button[type='submit']",
+                                "input[type='submit']",
+                                "button[name*='login' i]",
+                                "button[id*='login' i]",
+                                "button[class*='login' i]",
+                                "a[role='button'][href*='login' i]",
+                            ]:
+                                try:
+                                    button = frame.locator(selector).first
+                                    if button.count() and button.is_visible(timeout=700):
+                                        button.click(timeout=5_000)
+                                        submitted = True
+                                        break
+                                except Exception:
+                                    continue
+
+                        # 3) Viele moderne Login-Komponenten senden per Enter ab und besitzen
+                        #    keinen klassischen submit-Button im DOM.
+                        if not submitted:
+                            for selector in [
+                                "input[type='password']",
+                                "input[name*='password' i]",
+                                "input[id*='password' i]",
+                                "input[autocomplete='current-password']",
+                            ]:
+                                try:
+                                    password_field = frame.locator(selector).first
+                                    if password_field.count() and password_field.is_visible(timeout=700):
+                                        password_field.press("Enter", timeout=5_000)
+                                        submitted = True
+                                        break
+                                except Exception:
+                                    continue
+
+                        # 4) Letzter sauberer Fallback: das Formular des Passwortfeldes über
+                        #    requestSubmit() absenden. Dadurch werden normale submit-Handler
+                        #    und Browser-Validierung ausgelöst, statt das Formular blind zu posten.
+                        if not submitted:
                             try:
-                                password_field = frame.locator(selector).first
-                                if password_field.count() and password_field.is_visible(timeout=700):
-                                    password_field.press("Enter", timeout=5_000)
-                                    submitted = True
-                                    break
+                                result = frame.evaluate(
+                                    """
+                                    () => {
+                                      const pw = document.querySelector(
+                                        'input[type="password"], input[name*="password" i], input[id*="password" i], input[autocomplete="current-password"]'
+                                      );
+                                      if (!pw) return false;
+                                      const form = pw.closest('form');
+                                      if (!form) return false;
+                                      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                                      else form.submit();
+                                      return true;
+                                    }
+                                    """
+                                )
+                                submitted = bool(result)
                             except Exception:
-                                continue
+                                submitted = False
 
-                    # 4) Letzter sauberer Fallback: das Formular des Passwortfeldes über
-                    #    requestSubmit() absenden. Dadurch werden normale submit-Handler
-                    #    und Browser-Validierung ausgelöst, statt das Formular blind zu posten.
-                    if not submitted:
-                        try:
-                            result = frame.evaluate(
-                                """
-                                () => {
-                                  const pw = document.querySelector(
-                                    'input[type="password"], input[name*="password" i], input[id*="password" i], input[autocomplete="current-password"]'
-                                  );
-                                  if (!pw) return false;
-                                  const form = pw.closest('form');
-                                  if (!form) return false;
-                                  if (typeof form.requestSubmit === 'function') form.requestSubmit();
-                                  else form.submit();
-                                  return true;
-                                }
-                                """
+                        if not submitted:
+                            raise SubscriptionError(
+                                "Der NÖN-Login konnte trotz befüllter Zugangsdaten nicht abgesendet werden. "
+                                "NÖN verwendet offenbar einen ungewöhnlichen Login-Ablauf."
                             )
-                            submitted = bool(result)
-                        except Exception:
-                            submitted = False
-
-                    if not submitted:
-                        raise SubscriptionError(
-                            "Der NÖN-Login konnte trotz befüllter Zugangsdaten nicht abgesendet werden. "
-                            "NÖN verwendet offenbar einen ungewöhnlichen Login-Ablauf."
-                        )
 
                     page.wait_for_timeout(6_000)
                     try:
@@ -609,7 +624,10 @@ def fetch_noen_authenticated_html(url: str, *, allow_refresh: bool = True) -> di
 
     # Wenn das persistente Browserprofil offensichtlich nicht mehr angemeldet ist,
     # erneuern wir genau einmal den Login und laden den Artikel erneut.
-    if (first.get("logged_out") or not first.get("logged_in")) and allow_refresh and noen_credentials_configured():
+    # Nur ein *eindeutig* erkannter Login-/Anmeldezustand darf einen erneuten
+    # Login auslösen. Das bloße Fehlen eines positiven Login-Indikators ist bei
+    # NÖN kein zuverlässiger Beweis für eine abgelaufene Abo-Sitzung.
+    if first.get("logged_out") and allow_refresh and noen_credentials_configured():
         refresh_noen_login(force=True)
         second = _load_once()
         second["session_refreshed"] = True
