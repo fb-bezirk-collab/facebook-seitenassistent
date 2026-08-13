@@ -27,6 +27,13 @@ from app.services.social_account_service import (
 from app.services.instagram_account_service import InstagramAccountService
 from app.services.instagram_api import InstagramApiError, InstagramApiService
 from app.services.instagram_config_service import load_instagram_config
+from app.media_monitor.subscriptions import (
+    SubscriptionError,
+    delete_noen_cookie,
+    get_noen_status,
+    save_noen_cookie,
+    test_noen_subscription,
+)
 from app.media_monitor.social_profile import (
     load_social_media_profile,
     load_default_social_media_profile,
@@ -59,6 +66,10 @@ def einstellungen(
     social_profile_saved: int = 0,
     social_profile_reset: int = 0,
     social_profile_error: str | None = None,
+    noen_subscription_saved: int = 0,
+    noen_subscription_deleted: int = 0,
+    noen_subscription_error: str | None = None,
+    noen_test_result: str | None = None,
 ):
     meta_config = meta_config_service.load()
     facebook_pages = settings_service.load_pages()
@@ -124,6 +135,11 @@ def einstellungen(
             "social_profile_saved": bool(social_profile_saved),
             "social_profile_reset": bool(social_profile_reset),
             "social_profile_error": social_profile_error,
+            "noen_subscription_status": get_noen_status(),
+            "noen_subscription_saved": bool(noen_subscription_saved),
+            "noen_subscription_deleted": bool(noen_subscription_deleted),
+            "noen_subscription_error": noen_subscription_error,
+            "noen_test_result": noen_test_result,
         },
     )
 
@@ -150,6 +166,64 @@ def fpoe_social_media_profil_zuruecksetzen():
             status_code=303,
         )
     return RedirectResponse(url="/settings?social_profile_reset=1", status_code=303)
+
+
+@router.post("/settings/media-subscriptions/noen")
+def noen_abo_sitzung_speichern(cookie_header: str = Form(...)):
+    try:
+        save_noen_cookie(cookie_header)
+    except SubscriptionError as exc:
+        return RedirectResponse(
+            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
+            status_code=303,
+        )
+    return RedirectResponse(
+        url="/settings?noen_subscription_saved=1#medien-abos",
+        status_code=303,
+    )
+
+
+@router.post("/settings/media-subscriptions/noen/delete")
+def noen_abo_sitzung_loeschen():
+    delete_noen_cookie()
+    return RedirectResponse(
+        url="/settings?noen_subscription_deleted=1#medien-abos",
+        status_code=303,
+    )
+
+
+@router.post("/settings/media-subscriptions/noen/test")
+def noen_abo_sitzung_testen(article_url: str = Form(...)):
+    try:
+        result = test_noen_subscription(article_url)
+        if result.get("likely_more_content"):
+            message = (
+                "Test erfolgreich: Die hinterlegte Sitzung lieferte deutlich mehr sichtbaren Inhalt "
+                f"(+{result.get('visible_gain', 0)} Zeichen). HTTP {result.get('status_code')}."
+            )
+        elif result.get("content_changed"):
+            message = (
+                "Die NÖN-Seite wurde mit der Abo-Sitzung erfolgreich geladen und unterschied sich "
+                "von der öffentlichen Fassung. Ob der vollständige Bezahltext enthalten ist, lässt "
+                "sich technisch noch nicht sicher bestätigen. "
+                f"HTTP {result.get('status_code')}."
+            )
+        else:
+            message = (
+                "Die NÖN-Seite wurde geladen, aber gegenüber dem öffentlichen Abruf war kein "
+                "zusätzlicher Inhalt erkennbar. Möglicherweise ist die Sitzung abgelaufen oder "
+                "der Testartikel frei zugänglich. "
+                f"HTTP {result.get('status_code')}."
+            )
+        return RedirectResponse(
+            url="/settings?noen_test_result=" + quote(message) + "#medien-abos",
+            status_code=303,
+        )
+    except SubscriptionError as exc:
+        return RedirectResponse(
+            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
+            status_code=303,
+        )
 
 
 @router.get("/facebook/connect")
