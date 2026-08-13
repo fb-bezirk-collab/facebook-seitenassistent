@@ -47,6 +47,15 @@ SOURCE_FETCHERS = (
 )
 
 
+class MediaFetchCancelled(RuntimeError):
+    """Interner Kontrollfluss für einen vom Benutzer abgebrochenen Medienabruf."""
+
+
+def _check_cancel(should_cancel) -> None:
+    if should_cancel is not None and should_cancel():
+        raise MediaFetchCancelled("Medienabruf wurde abgebrochen.")
+
+
 def _apply_prefilter(items: list[dict]) -> tuple[int, list[dict]]:
     excluded_count = 0
     candidates: list[dict] = []
@@ -70,13 +79,14 @@ def _apply_prefilter(items: list[dict]) -> tuple[int, list[dict]]:
     return excluded_count, candidates
 
 
-def _apply_ratings(items: list[dict], candidates: list[dict]) -> tuple[int, int, str]:
+def _apply_ratings(items: list[dict], candidates: list[dict], should_cancel=None) -> tuple[int, int, str]:
     rated_count = 0
     visible_count = 0
     error_message = ""
     by_id = {str(item.get("id")): item for item in items}
 
     for start in range(0, len(candidates), AI_BATCH_SIZE):
+        _check_cancel(should_cancel)
         batch = candidates[start:start + AI_BATCH_SIZE]
         try:
             ratings = rate_items(batch)
@@ -108,15 +118,17 @@ def _apply_ratings(items: list[dict], candidates: list[dict]) -> tuple[int, int,
     return rated_count, visible_count, error_message
 
 
-def fetch_current_media() -> dict:
+def fetch_current_media(should_cancel=None) -> dict:
     source_results: list[dict] = []
     total_new = 0
     successful_sources = 0
 
     # Jede Quelle läuft unabhängig. Ein Fehler bei einer Seite blockiert die anderen nicht.
     for source_name, fetcher in SOURCE_FETCHERS:
+        _check_cancel(should_cancel)
         try:
             fetched = fetcher()
+            _check_cancel(should_cancel)
             _, new_count = merge_fetched_items(fetched)
             total_new += new_count
             successful_sources += 1
@@ -140,9 +152,12 @@ def fetch_current_media() -> dict:
         details = "; ".join(f"{entry['source']}: {entry['error']}" for entry in source_results)
         raise RuntimeError("Keine Medienquelle konnte abgerufen werden. " + details)
 
+    _check_cancel(should_cancel)
     items = load_items()
     excluded_count, candidates = _apply_prefilter(items)
-    rated_count, visible_count, rating_error = _apply_ratings(items, candidates)
+    _check_cancel(should_cancel)
+    rated_count, visible_count, rating_error = _apply_ratings(items, candidates, should_cancel)
+    _check_cancel(should_cancel)
     trend_count, trend_error = apply_trending(items)
     save_items(items)
 
