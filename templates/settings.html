@@ -61,6 +61,8 @@
         }
             .profile-editor { width: 100%; min-height: 520px; resize: vertical; padding: 14px; border: 1px solid #d0d5dd; border-radius: 10px; font-family: Consolas, "Courier New", monospace; font-size: 14px; line-height: 1.45; }
         .profile-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+        .secret-textarea { width:100%; min-height:110px; resize:vertical; padding:12px; border:1px solid #d0d5dd; border-radius:9px; font-family:Consolas, "Courier New", monospace; font-size:13px; }
+        .subscription-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,.8fr); gap:20px; }
         .primary { background:#175cd3 !important; color:#fff !important; border-color:#175cd3 !important; }
     </style>
 </head>
@@ -244,6 +246,74 @@
         </div>
     </section>
 
+
+    <section class="card" id="medien-abos">
+        <h2>Medien-Abos</h2>
+        <p class="muted">
+            Pilot für NÖN: Die App speichert kein NÖN-Passwort. Stattdessen kannst du die aktive
+            Sitzung deines bereits eingeloggten Browsers als Cookie-Header hinterlegen. Die
+            Sitzungsdaten werden verschlüsselt im persistenten Railway-Datenordner gespeichert
+            und ausschließlich für noen.at verwendet.
+        </p>
+
+        {% if noen_subscription_saved %}<div class="message success">NÖN-Abo-Sitzung gespeichert. Neue NÖN-KI-Analysen verwenden diese Sitzung automatisch.</div>{% endif %}
+        {% if noen_subscription_deleted %}<div class="message success">NÖN-Abo-Sitzung wurde entfernt.</div>{% endif %}
+        {% if noen_subscription_error %}<div class="message error">{{ noen_subscription_error }}</div>{% endif %}
+        {% if noen_test_result %}<div class="message success">{{ noen_test_result }}</div>{% endif %}
+
+        <div class="subscription-grid">
+            <div>
+                <h3>NÖN</h3>
+                {% if noen_subscription_status.configured %}
+                    <div class="status status-connected">
+                        <strong>✓ Abo-Sitzung hinterlegt</strong><br>
+                        {{ noen_subscription_status.cookie_count }} Cookie{% if noen_subscription_status.cookie_count != 1 %}s{% endif %} gespeichert.
+                        {% if noen_subscription_status.saved_at %}<br><span class="muted">Gespeichert: {{ noen_subscription_status.saved_at }}</span>{% endif %}
+                    </div>
+                {% else %}
+                    <div class="status status-warning">
+                        <strong>Noch keine NÖN-Abo-Sitzung hinterlegt.</strong><br>
+                        Öffentliche NÖN-Artikel funktionieren weiterhin wie bisher.
+                    </div>
+                {% endif %}
+
+                <form method="post" action="/settings/media-subscriptions/noen">
+                    <label for="noen_cookie">NÖN Cookie-Header</label>
+                    <textarea id="noen_cookie" class="secret-textarea" name="cookie_header" autocomplete="off" spellcheck="false" placeholder="cookie1=wert; cookie2=wert; ..." required></textarea>
+                    <p class="muted">
+                        Im Browser bei NÖN einloggen, einen NÖN-Artikel öffnen, F12 → Netzwerk/Network,
+                        den Dokument-Aufruf des Artikels wählen und unter Request Headers den Wert
+                        hinter <strong>Cookie:</strong> kopieren. Nicht Benutzername oder Passwort eintragen.
+                    </p>
+                    <button class="button primary" type="submit">NÖN-Abo-Sitzung speichern</button>
+                </form>
+                {% if noen_subscription_status.configured %}
+                    <form method="post" action="/settings/media-subscriptions/noen/delete" style="margin-top:10px" onsubmit="return confirm('NÖN-Abo-Sitzung wirklich entfernen?')">
+                        <button class="button" type="submit">NÖN-Abo trennen</button>
+                    </form>
+                {% endif %}
+            </div>
+
+            <div>
+                <h3>Abo-Zugriff testen</h3>
+                <p class="muted">
+                    Trage einen NÖN-Artikel ein, den du mit deinem Abo vollständig lesen kannst.
+                    Die App vergleicht den öffentlichen Abruf mit dem Abruf über die hinterlegte Sitzung.
+                </p>
+                <form method="post" action="/settings/media-subscriptions/noen/test">
+                    <label for="noen_test_url">NÖN-Artikel-URL</label>
+                    <input id="noen_test_url" type="url" name="article_url" placeholder="https://www.noen.at/..." required>
+                    <button class="button primary" style="margin-top:12px" type="submit">NÖN-Abo-Zugriff testen</button>
+                </form>
+                <div class="note" style="margin-top:16px">
+                    <strong>So arbeitet die KI danach:</strong><br>
+                    Bei NÖN-Artikeln verwendet die Analyse automatisch die hinterlegte Sitzung.
+                    Auf der Analyse-Seite wird angezeigt, dass die NÖN-Abo-Sitzung verwendet wurde.
+                    Für alle anderen Medien bleibt der Abruf unverändert.
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section class="card" id="fpoe-social-media-profil">
         <h2>FPÖ-Social-Media-Profil</h2>

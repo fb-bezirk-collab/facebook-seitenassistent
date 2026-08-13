@@ -112,7 +112,7 @@
             <div class="panel">
                 <h2>Kurzfassung</h2>
                 <p>{{ a.summary or 'Keine Kurzfassung vorhanden.' }}</p>
-                <div class="source-note">Verlässlichkeit: <span class="confidence">{{ a.confidence or '–' }}</span>. {% if item.analysis_content_mode == 'teaser' %}Der vollständige Artikeltext war technisch nicht lesbar; die Analyse basiert auf Anreißer und Metadaten.{% else %}Öffentlich lesbarer Artikeltext wurde herangezogen.{% endif %}</div>
+                <div class="source-note">Verlässlichkeit: <span class="confidence">{{ a.confidence or '–' }}</span>. {% if item.analysis_content_mode == 'teaser' %}Der vollständige Artikeltext war technisch nicht lesbar; die Analyse basiert auf Anreißer und Metadaten.{% elif item.analysis_content_mode == 'subscription' %}Für diesen NÖN-Artikel wurde die hinterlegte Abo-Sitzung beim Abruf verwendet.{% else %}Öffentlich lesbarer Artikeltext wurde herangezogen.{% endif %}</div>
             </div>
             <div class="panel">
                 <h2>Politische Brisanz</h2>
