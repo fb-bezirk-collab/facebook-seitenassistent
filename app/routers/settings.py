@@ -3,7 +3,7 @@ import secrets
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
@@ -34,6 +34,12 @@ from app.media_monitor.subscriptions import (
     noen_credentials_configured,
     refresh_noen_login,
     test_noen_subscription,
+)
+from app.media_monitor.noen_debug_job import (
+    SCREENSHOT_FILE as NOEN_DEBUG_SCREENSHOT_FILE,
+    get_noen_debug_job,
+    screenshot_available as noen_debug_screenshot_available,
+    start_noen_debug,
 )
 from app.media_monitor.social_profile import (
     load_social_media_profile,
@@ -141,6 +147,8 @@ def einstellungen(
             "noen_subscription_deleted": bool(noen_subscription_deleted),
             "noen_subscription_error": noen_subscription_error,
             "noen_test_result": noen_test_result,
+            "noen_debug_job": get_noen_debug_job(),
+            "noen_debug_screenshot_available": noen_debug_screenshot_available(),
         },
     )
 
@@ -236,6 +244,33 @@ def noen_abo_sitzung_testen(article_url: str = Form(...)):
             url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
             status_code=303,
         )
+
+
+@router.post("/settings/media-subscriptions/noen/debug")
+def noen_abo_debug_starten(article_url: str = Form(...)):
+    try:
+        result = start_noen_debug(article_url)
+        message = quote(str(result.get("message") or "NÖN-Diagnose gestartet."))
+        return RedirectResponse(
+            url="/settings?noen_test_result=" + message + "#noen-debug",
+            status_code=303,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#noen-debug",
+            status_code=303,
+        )
+
+
+@router.get("/settings/media-subscriptions/noen/debug/screenshot")
+def noen_abo_debug_screenshot():
+    if not NOEN_DEBUG_SCREENSHOT_FILE.exists():
+        return RedirectResponse(url="/settings#noen-debug", status_code=303)
+    return FileResponse(
+        path=str(NOEN_DEBUG_SCREENSHOT_FILE),
+        media_type="image/png",
+        filename="noen-debug.png",
+    )
 
 
 @router.get("/facebook/connect")
