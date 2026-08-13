@@ -32,6 +32,7 @@ COMMENT_JOB_FILE = DATA_DIR / "facebook_comment_job.json"
 COMMENT_AI_JOB_FILE = DATA_DIR / "facebook_comment_ai_job.json"
 COMMENT_REFRESH_JOB_FILE = DATA_DIR / "facebook_comment_refresh_job.json"
 COMMENT_USERS_FILE = DATA_DIR / "facebook_comment_users.json"
+MEDIA_SUBSCRIPTIONS_FILE = DATA_DIR / "media_subscriptions.enc"
 
 
 def create_required_directories() -> None:
