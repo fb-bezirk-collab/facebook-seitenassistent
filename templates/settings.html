@@ -371,6 +371,50 @@
                 </div>
             {% endif %}
 
+            {% if noen_debug_job.steps %}
+                {% set last_step = noen_debug_job.steps[-1] %}
+                {% if last_step.largest_text_blocks %}
+                <details style="margin-top:16px" open>
+                    <summary><strong>DOM-Analyse: größte Textblöcke nach {{ last_step.after_seconds }} Sekunden</strong></summary>
+                    <p class="muted">Diese Liste hilft uns zu erkennen, in welchen HTML-Bereich NÖN/Piano den Premiumtext nach dem Login einfügt.</p>
+                    <div style="overflow-x:auto">
+                    <table style="width:100%; border-collapse:collapse">
+                        <thead><tr><th>Zeichen</th><th>Element</th><th>ID / Klasse</th><th>Textanfang</th></tr></thead>
+                        <tbody>
+                        {% for item in last_step.largest_text_blocks %}
+                            <tr>
+                                <td>{{ item.chars }}</td>
+                                <td>&lt;{{ item.tag }}&gt;</td>
+                                <td>{% if item.id %}#{{ item.id }}{% endif %}{% if item.class %}<br>.{{ item.class }}{% endif %}</td>
+                                <td>{{ item.snippet }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    </div>
+                </details>
+                {% endif %}
+                {% if last_step.largest_paragraphs %}
+                <details style="margin-top:12px">
+                    <summary><strong>DOM-Analyse: längste Absätze anzeigen</strong></summary>
+                    <div style="overflow-x:auto">
+                    <table style="width:100%; border-collapse:collapse">
+                        <thead><tr><th>Zeichen</th><th>Elternelement</th><th>Textanfang</th></tr></thead>
+                        <tbody>
+                        {% for item in last_step.largest_paragraphs %}
+                            <tr>
+                                <td>{{ item.chars }}</td>
+                                <td>&lt;{{ item.parent_tag }}&gt;{% if item.parent_id %} #{{ item.parent_id }}{% endif %}{% if item.parent_class %}<br>.{{ item.parent_class }}{% endif %}</td>
+                                <td>{{ item.text }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    </div>
+                </details>
+                {% endif %}
+            {% endif %}
+
             {% if noen_debug_job.http_errors %}
                 <details style="margin-top:16px"><summary><strong>HTTP-Fehler anzeigen ({{ noen_debug_job.http_errors|length }})</strong></summary>
                     <ul>{% for item in noen_debug_job.http_errors %}<li>{{ item.status }} – {{ item.url }}</li>{% endfor %}</ul>
