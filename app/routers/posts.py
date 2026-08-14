@@ -189,6 +189,15 @@ def entwurf_bearbeiten(
             "media_created": bool(media_created),
             "media_existing": bool(media_existing),
             "publications": publication_service.list_publications(post_id),
+            "planning_coverage": [
+                {
+                    "account_id": publication.account_id,
+                    "publish_at": publication.publish_at,
+                    "status": publication.status,
+                }
+                for publication in publication_service.list_publications()
+                if publication.status in {"planned", "ready", "published"}
+            ],
             "social_accounts": account_service.list_accounts(
                 include_inactive=False
             ),
