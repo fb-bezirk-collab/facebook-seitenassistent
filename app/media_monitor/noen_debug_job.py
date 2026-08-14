@@ -116,12 +116,100 @@ def _body_info(page) -> dict:
         except Exception:
             continue
 
+    # Größte texttragende DOM-Blöcke ermitteln. Das ist bewusst Diagnose-
+    # information: Wir speichern nur kurze Textanfänge und Selektorhinweise,
+    # keine Cookies, Tokens oder Zugangsdaten. So lässt sich erkennen, wohin
+    # Piano/NÖN den Premiumtext nach erfolgreichem Login tatsächlich einhängt.
+    text_blocks: list[dict] = []
+    try:
+        raw_blocks = page.evaluate(
+            r"""
+            () => {
+              const skip = new Set(['HTML','BODY','SCRIPT','STYLE','NOSCRIPT','SVG','NAV','HEADER','FOOTER']);
+              const out = [];
+              for (const el of document.querySelectorAll('main *')) {
+                if (skip.has(el.tagName)) continue;
+                const style = getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') continue;
+                const text = (el.innerText || '').replace(/\s+/g, ' ').trim();
+                if (text.length < 180 || text.length > 12000) continue;
+                let childMax = 0;
+                for (const child of el.children) {
+                  const ct = (child.innerText || '').replace(/\s+/g, ' ').trim().length;
+                  if (ct > childMax) childMax = ct;
+                }
+                // Bevorzuge Blöcke, die selbst Text tragen statt nur einen
+                // einzigen großen Kindcontainer zu umschließen.
+                const ownish = text.length - childMax;
+                if (ownish < 60 && childMax > text.length * 0.88) continue;
+                out.push({
+                  tag: el.tagName.toLowerCase(),
+                  id: (el.id || '').slice(0, 100),
+                  cls: (typeof el.className === 'string' ? el.className : '').slice(0, 180),
+                  chars: text.length,
+                  snippet: text.slice(0, 260)
+                });
+              }
+              out.sort((a,b) => b.chars - a.chars);
+              return out.slice(0, 18);
+            }
+            """
+        )
+        if isinstance(raw_blocks, list):
+            for item in raw_blocks:
+                if not isinstance(item, dict):
+                    continue
+                text_blocks.append({
+                    "tag": str(item.get("tag") or "")[:30],
+                    "id": str(item.get("id") or "")[:100],
+                    "class": str(item.get("cls") or "")[:180],
+                    "chars": int(item.get("chars") or 0),
+                    "snippet": _redact(str(item.get("snippet") or ""))[:260],
+                })
+    except Exception:
+        pass
+
+    paragraphs: list[dict] = []
+    try:
+        raw_paragraphs = page.evaluate(
+            r"""
+            () => Array.from(document.querySelectorAll('main p'))
+              .map((p, i) => ({
+                index: i,
+                chars: (p.innerText || '').replace(/\s+/g, ' ').trim().length,
+                text: (p.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 320),
+                parentTag: p.parentElement ? p.parentElement.tagName.toLowerCase() : '',
+                parentId: p.parentElement ? (p.parentElement.id || '').slice(0,100) : '',
+                parentClass: p.parentElement && typeof p.parentElement.className === 'string'
+                  ? p.parentElement.className.slice(0,180) : ''
+              }))
+              .filter(x => x.chars >= 35)
+              .sort((a,b) => b.chars - a.chars)
+              .slice(0, 25)
+            """
+        )
+        if isinstance(raw_paragraphs, list):
+            for item in raw_paragraphs:
+                if isinstance(item, dict):
+                    paragraphs.append({
+                        "index": int(item.get("index") or 0),
+                        "chars": int(item.get("chars") or 0),
+                        "text": _redact(str(item.get("text") or ""))[:320],
+                        "parent_tag": str(item.get("parentTag") or "")[:30],
+                        "parent_id": str(item.get("parentId") or "")[:100],
+                        "parent_class": str(item.get("parentClass") or "")[:180],
+                    })
+    except Exception:
+        pass
+
     return {
         "visible_chars": len(body_text.strip()),
         "body_user_logged_in_class": "user-logged-in" in body_class.lower(),
         "password_field_visible": password_visible,
         "paywall_markers": paywall_hits[:12],
         "article_selector_chars": selector_sizes,
+        "largest_text_blocks": text_blocks,
+        "largest_paragraphs": paragraphs,
     }
 
 
