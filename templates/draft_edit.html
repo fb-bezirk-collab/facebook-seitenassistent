@@ -69,6 +69,28 @@
         .publication-form .wide { grid-column: 1 / -1; }
         .variant-label { display: inline-block; margin-top: 4px; padding: 4px 8px; border-radius: 999px; background: #f3f5f8; font-size: 12px; font-weight: 700; }
         .hint { padding: 14px; background: #fffaeb; border: 1px solid #fedf89; border-radius: 10px; color: #93370d; }
+
+        .smart-planning-box { margin: 0 0 14px; padding: 16px; border: 1px solid #b8c7e0; border-radius: 12px; background: #f5f8ff; }
+        .smart-planning-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+        .smart-action { min-height: 38px; padding: 0 12px; border: 1px solid #9bb0cf; background: #fff; color: #24415f; border-radius: 9px; }
+        .smart-action:disabled { opacity: .55; cursor: default; }
+        .percentage-row { display: grid; grid-template-columns: auto 88px auto minmax(170px, 1fr) auto; gap: 8px; align-items: center; margin: 10px 0 12px; }
+        .percentage-row label { margin: 0; }
+        .percentage-row input[type=number] { width: 88px; padding: 10px 12px; border: 1px solid #cfd6df; border-radius: 9px; font-size: 15px; }
+        .percentage-row select { padding: 10px 12px; font-size: 15px; }
+        .smart-toggle { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; font-weight: 600; line-height: 1.35; }
+        .smart-toggle input { margin-top: 3px; }
+        .smart-note { line-height: 1.45; }
+        .account-row.smart-uncovered { border-color: #98a2b3; }
+        .account-row.smart-covered { opacity: .9; }
+        .account-row.smart-selected { box-shadow: inset 3px 0 0 #1877f2; }
+        .selection-preview { margin-top: 12px; padding: 12px; border: 1px dashed #cfd6df; border-radius: 10px; background: #fff; }
+        .selection-preview ul { margin: 8px 0 0 18px; padding: 0; max-height: 160px; overflow: auto; }
+        @media (max-width: 850px) {
+            .percentage-row { grid-template-columns: 1fr 90px; }
+            .percentage-row span { display: none; }
+            .percentage-row select, .percentage-row .smart-action { grid-column: 1 / -1; width: 100%; }
+        }
         [hidden] { display: none !important; }
         @media (max-width: 850px) {
             .grid, .planning-grid, .publication-form, .account-row { grid-template-columns: 1fr; }
@@ -224,6 +246,39 @@
             >
             <div>
                 <label>Facebook-Seiten und Textvarianten</label>
+                <div class="smart-planning-box">
+                    <div class="smart-planning-head">
+                        <div>
+                            <strong>Intelligente Seitenverteilung</strong>
+                            <div class="small" id="coverage-summary">Planungsabdeckung wird geprüft …</div>
+                        </div>
+                        <button type="button" class="smart-action" id="select-uncovered-button" onclick="selectUncoveredAccounts()">
+                            Noch nicht verplante Seiten auswählen
+                        </button>
+                    </div>
+
+                    <div class="percentage-row">
+                        <label for="random-percentage">Zufällige Auswahl</label>
+                        <input type="number" id="random-percentage" min="1" max="100" value="50">
+                        <span>% von</span>
+                        <select id="random-percentage-scope">
+                            <option value="all">allen Seiten</option>
+                            <option value="uncovered">noch nicht verplanten Seiten</option>
+                        </select>
+                        <button type="button" class="smart-action" onclick="selectRandomPercentage()">Zufällig auswählen</button>
+                    </div>
+
+                    <label class="smart-toggle">
+                        <input type="checkbox" id="randomize_variants_on_submit">
+                        Varianten beim Planen/Veröffentlichen automatisch zufällig verteilen
+                    </label>
+
+                    <div class="small smart-note">
+                        Die Restseiten beziehen sich auf den gewählten Planungstag bzw. Zeitraum. Ohne gewählten Termin wird heute verwendet.
+                        Die automatische Vorauswahl ist nur ein Vorschlag – du kannst jedes Häkchen jederzeit manuell ändern.
+                    </div>
+                </div>
+
                 <div class="bulk-actions">
                     <span class="small" id="selection-count">0 Seiten ausgewählt</span>
                     <div>
@@ -231,15 +286,15 @@
                         ·
                         <button type="button" class="link-button" onclick="setAllAccounts(false)">Auswahl aufheben</button>
                         ·
-                        <button type="button" class="link-button" onclick="distributeVariants()">Varianten automatisch verteilen</button>
+                        <button type="button" class="link-button" onclick="distributeVariants()">Varianten jetzt zufällig verteilen</button>
                     </div>
                 </div>
 
                 <div class="account-list">
                     {% for account in social_accounts %}
                     {% if draft.source_type != 'media_monitor_share' or account.platform == 'facebook' %}
-                    <div class="account-row" data-platform="{{ account.platform }}">
-                        <input type="checkbox" name="account_ids" value="{{ account.id }}" onchange="updateSelectionCount()">
+                    <div class="account-row" data-platform="{{ account.platform }}" data-account-id="{{ account.id }}" data-account-name="{{ account.name|e }}">
+                        <input type="checkbox" name="account_ids" value="{{ account.id }}" onchange="onAccountCheckboxChanged()">
                         <span class="account-meta">
                             <strong>{{ account.name }}</strong>
                             <span class="small">{{ account.platform|capitalize }}</span>
@@ -592,20 +647,217 @@
         }
     });
 
+    const planningCoverage = {{ planning_coverage | tojson }};
+    let manualSelectionTouched = false;
+
+    function allAccountCheckboxes() {
+        return Array.from(document.querySelectorAll('input[name="account_ids"]'));
+    }
+
     function selectedAccountCheckboxes() {
-        return Array.from(document.querySelectorAll('input[name="account_ids"]:checked'));
+        return allAccountCheckboxes().filter((checkbox) => checkbox.checked);
+    }
+
+    function localTodayString() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function currentCoverageWindow() {
+        const distributed = document.getElementById('distribute_times')?.checked;
+        const startValue = document.getElementById('distribution_start')?.value || '';
+        const endValue = document.getElementById('distribution_end')?.value || '';
+        const singleValue = document.getElementById('publish_at')?.value || '';
+
+        if (distributed && startValue && endValue) {
+            return {
+                start: startValue.slice(0, 10),
+                end: endValue.slice(0, 10),
+                label: startValue.slice(0, 10) === endValue.slice(0, 10)
+                    ? `am ${startValue.slice(8, 10)}.${startValue.slice(5, 7)}.${startValue.slice(0, 4)}`
+                    : `im Zeitraum ${startValue.slice(8, 10)}.${startValue.slice(5, 7)}. bis ${endValue.slice(8, 10)}.${endValue.slice(5, 7)}.${endValue.slice(0, 4)}`
+            };
+        }
+
+        const date = singleValue ? singleValue.slice(0, 10) : localTodayString();
+        return {
+            start: date,
+            end: date,
+            label: singleValue
+                ? `am ${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
+                : 'heute'
+        };
+    }
+
+    function coveredAccountIds() {
+        const windowValue = currentCoverageWindow();
+        const covered = new Set();
+
+        planningCoverage.forEach((entry) => {
+            const publishDate = String(entry.publish_at || '').slice(0, 10);
+            if (
+                publishDate
+                && publishDate >= windowValue.start
+                && publishDate <= windowValue.end
+            ) {
+                covered.add(String(entry.account_id || ''));
+            }
+        });
+
+        return covered;
+    }
+
+    function uncoveredAccountCheckboxes() {
+        const covered = coveredAccountIds();
+        return allAccountCheckboxes().filter(
+            (checkbox) => !covered.has(String(checkbox.value))
+        );
+    }
+
+    function updateAccountCoverageClasses() {
+        const covered = coveredAccountIds();
+        allAccountCheckboxes().forEach((checkbox) => {
+            const row = checkbox.closest('.account-row');
+            if (!row) return;
+            row.classList.toggle('smart-covered', covered.has(String(checkbox.value)));
+            row.classList.toggle('smart-uncovered', !covered.has(String(checkbox.value)));
+            row.classList.toggle('smart-selected', checkbox.checked);
+        });
+    }
+
+    function updateCoverageSummary() {
+        const all = allAccountCheckboxes();
+        const uncovered = uncoveredAccountCheckboxes();
+        const coveredCount = all.length - uncovered.length;
+        const summary = document.getElementById('coverage-summary');
+        const button = document.getElementById('select-uncovered-button');
+        const windowValue = currentCoverageWindow();
+
+        if (!summary) return;
+
+        if (!all.length) {
+            summary.textContent = 'Keine Seiten verfügbar.';
+        } else if (coveredCount === 0) {
+            summary.textContent = `Für ${windowValue.label} hat noch keine der ${all.length} Seiten eine Planung. Du kannst frei alle oder einen Prozentsatz auswählen.`;
+        } else if (uncovered.length === 0) {
+            summary.textContent = `Alle ${all.length} Seiten haben ${windowValue.label} bereits mindestens eine Planung. Die Auswahl ist wieder vollständig frei.`;
+        } else {
+            summary.textContent = `${uncovered.length} von ${all.length} Seiten haben ${windowValue.label} noch keine Planung. Diese Restseiten werden bevorzugt vorgeschlagen.`;
+        }
+
+        if (button) {
+            button.disabled = uncovered.length === 0;
+            button.textContent = uncovered.length
+                ? `Restseiten auswählen (${uncovered.length})`
+                : 'Alle Seiten bereits abgedeckt';
+        }
+
+        updateAccountCoverageClasses();
     }
 
     function updateSelectionCount() {
         const count = selectedAccountCheckboxes().length;
         document.getElementById('selection-count').textContent =
             count + (count === 1 ? ' Seite ausgewählt' : ' Seiten ausgewählt');
+        updateAccountCoverageClasses();
+    }
+
+    function onAccountCheckboxChanged() {
+        manualSelectionTouched = true;
+        updateSelectionCount();
     }
 
     function setAllAccounts(checked) {
-        document.querySelectorAll('input[name="account_ids"]').forEach((element) => {
+        manualSelectionTouched = true;
+        allAccountCheckboxes().forEach((element) => {
             element.checked = checked;
         });
+        updateSelectionCount();
+    }
+
+    function selectUncoveredAccounts() {
+        manualSelectionTouched = true;
+        const uncovered = new Set(
+            uncoveredAccountCheckboxes().map((checkbox) => checkbox.value)
+        );
+
+        allAccountCheckboxes().forEach((checkbox) => {
+            checkbox.checked = uncovered.has(checkbox.value);
+        });
+
+        updateSelectionCount();
+    }
+
+    function selectRandomPercentage() {
+        const percentageInput = document.getElementById('random-percentage');
+        const scope = document.getElementById('random-percentage-scope')?.value || 'all';
+        let percentage = Number(percentageInput?.value || 0);
+
+        if (!Number.isFinite(percentage)) percentage = 0;
+        percentage = Math.min(100, Math.max(1, Math.round(percentage)));
+        if (percentageInput) percentageInput.value = String(percentage);
+
+        const pool = scope === 'uncovered'
+            ? uncoveredAccountCheckboxes()
+            : allAccountCheckboxes();
+
+        if (!pool.length) {
+            alert(
+                scope === 'uncovered'
+                    ? 'Im gewählten Zeitraum gibt es keine noch unverplanten Seiten.'
+                    : 'Es sind keine Seiten verfügbar.'
+            );
+            return;
+        }
+
+        const wanted = Math.max(
+            1,
+            Math.min(pool.length, Math.round(pool.length * percentage / 100))
+        );
+        const chosen = new Set(
+            shuffleArray(pool)
+                .slice(0, wanted)
+                .map((checkbox) => checkbox.value)
+        );
+
+        allAccountCheckboxes().forEach((checkbox) => {
+            checkbox.checked = chosen.has(checkbox.value);
+        });
+
+        manualSelectionTouched = true;
+        updateSelectionCount();
+    }
+
+    function applySmartRecommendation() {
+        updateCoverageSummary();
+
+        if (manualSelectionTouched) {
+            return;
+        }
+
+        const all = allAccountCheckboxes();
+        const uncovered = uncoveredAccountCheckboxes();
+        const coveredCount = all.length - uncovered.length;
+
+        // Nur bei teilweiser Abdeckung automatisch die Restseiten vorschlagen.
+        // Beim ersten Artikel (0 abgedeckt) sowie nach vollständiger Abdeckung
+        // bleibt die Auswahl bewusst leer und damit vollständig frei.
+        if (coveredCount > 0 && uncovered.length > 0) {
+            const uncoveredIds = new Set(
+                uncovered.map((checkbox) => checkbox.value)
+            );
+            all.forEach((checkbox) => {
+                checkbox.checked = uncoveredIds.has(checkbox.value);
+            });
+        } else {
+            all.forEach((checkbox) => {
+                checkbox.checked = false;
+            });
+        }
+
         updateSelectionCount();
     }
 
@@ -702,6 +954,8 @@
         if (end) {
             end.required = Boolean(enabled);
         }
+
+        applySmartRecommendation();
     }
 
     document.getElementById('multi-plan-form')?.addEventListener('submit', (event) => {
@@ -709,6 +963,10 @@
             event.preventDefault();
             alert('Bitte mindestens ein Konto auswählen.');
             return;
+        }
+
+        if (document.getElementById('randomize_variants_on_submit')?.checked) {
+            distributeVariants();
         }
 
         const action = event.submitter?.value || 'plan';
@@ -738,8 +996,14 @@
         }
     });
 
+    ['publish_at', 'distribution_start', 'distribution_end'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            applySmartRecommendation();
+        });
+    });
+
     toggleTimeDistribution();
-    updateSelectionCount();
+    applySmartRecommendation();
 </script>
 </body>
 </html>
