@@ -117,6 +117,8 @@ def mark_started() -> str | None:
             "started_at": _now_iso(),
             "finished_at": None,
             "message": "Medien werden abgerufen und anschließend von der KI bewertet.",
+            "progress_percent": 0,
+            "progress_stage": "Medienabruf wird gestartet",
         })
         return job_id
 
@@ -190,8 +192,20 @@ def run_fetch_job(job_id: str) -> None:
     current = _read_status_raw()
     started_at = current.get("started_at") or _now_iso()
 
+    def update_progress(percent: int, stage: str) -> None:
+        latest = _read_status_raw()
+        if str(latest.get("job_id") or "") != str(job_id):
+            return
+        if str(latest.get("state") or "") not in {"running", "cancel_requested"}:
+            return
+        _write_status({
+            **latest,
+            "progress_percent": max(0, min(99, int(percent))),
+            "progress_stage": str(stage or "Medienabruf läuft"),
+        })
+
     try:
-        result = fetch_current_media(lambda: _is_cancel_requested(job_id))
+        result = fetch_current_media(lambda: _is_cancel_requested(job_id), update_progress)
 
         # Falls zwischenzeitlich abgebrochen/resetet oder ein neuer Job gestartet
         # wurde, darf dieser alte Worker den Status nicht überschreiben.
@@ -219,6 +233,8 @@ def run_fetch_job(job_id: str) -> None:
             "trend_count": int(result.get("trend_count", 0)),
             "warning": str(result.get("rating_error", "") or ""),
             "source_results": result.get("source_results", []),
+            "progress_percent": 100,
+            "progress_stage": "Medienabruf abgeschlossen",
         })
     except MediaFetchCancelled:
         latest = _read_status_raw()
