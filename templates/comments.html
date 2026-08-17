@@ -49,13 +49,24 @@
         </div>
         <div class="top-actions">
             <form method="post" action="{{ url_for('kommentare_abrufen') }}"><button class="primary" type="submit" {% if job_running or refresh_job_running %}disabled{% endif %}>{% if job_running %}Kommentare werden abgerufen …{% else %}Kommentare jetzt abrufen{% endif %}</button></form>
+            {% if job_running or job_cancelling %}<form method="post" action="{{ url_for('kommentare_abruf_abbrechen') }}"><button class="button delete" type="submit">{% if job_cancelling %}Abbruch angefordert …{% else %}Kommentarabruf abbrechen{% endif %}</button></form>{% endif %}
             <form method="post" action="{{ url_for('kommentare_bestehende_aktualisieren') }}"><button class="secondary" type="submit" {% if job_running or refresh_job_running %}disabled{% endif %}>{% if refresh_job_running %}Bestehende werden aktualisiert …{% else %}Bestehende Kommentare aktualisieren{% endif %}</button></form>
             <form method="post" action="{{ url_for('kommentare_analysieren') }}"><button class="secondary" type="submit" {% if ai_job_running or counts.unanalyzed == 0 %}disabled{% endif %}>{% if ai_job_running %}KI analysiert …{% else %}Alle Kommentare bewerten ({{ counts.unanalyzed }}){% endif %}</button></form>
             {% if counts.ai_errors %}<form method="post" action="{{ url_for('kommentare_analysefehler_wiederholen') }}"><button class="secondary" type="submit" {% if ai_job_running %}disabled{% endif %}>Fehler erneut bewerten ({{ counts.ai_errors }})</button></form>{% endif %}
         </div>
     </section>
 
-    {% if job_running %}<div class="notice info"><strong>Kommentarabruf läuft.</strong> Alle eingebundenen Facebook-Seiten werden im Hintergrund geprüft. Diese Seite aktualisiert sich automatisch.</div>{% endif %}
+    {% if job_running or job_cancelling %}
+    {% set ctotal = job.page_count or 0 %}{% set cdone = job.page_index or 0 %}{% set cpct = ((cdone * 100 / ctotal) if ctotal else 0) | round(0) | int %}
+    <div class="progress-wrap">
+        <strong>{% if job_cancelling %}Kommentarabruf wird abgebrochen …{% else %}Kommentarabruf läuft …{% endif %}</strong>
+        <div style="margin:6px 0 10px;color:#667085">
+            {% if ctotal %}Seite {{ cdone }} von {{ ctotal }}{% endif %}{% if job.page_name %} · {{ job.page_name }}{% endif %}{% if job.stage %}<br>{{ job.stage }}{% endif %}
+            {% if job.seen_count or job.new_count %}<br>Geprüft: {{ job.seen_count or 0 }} Kommentar(e) · {{ job.new_count or 0 }} neu{% endif %}
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:{{ cpct }}%"></div></div>
+    </div>
+    {% endif %}
     {% if ai_job_running %}
     {% set total = ai_job.total or 0 %}{% set processed = ai_job.processed or 0 %}{% set failed = ai_job.failed or 0 %}{% set done = processed + failed %}
     {% set pct = ((done * 100 / total) if total else 0) | round(0) | int %}
@@ -73,9 +84,10 @@
     {% if job_success %}<div class="notice success"><strong>Kommentarabruf abgeschlossen.</strong> Neu: {{ job.new_count or 0 }} · geprüft: {{ job.seen_count or 0 }} Kommentar(e){% if job.error_count %} · {{ job.error_count }} Seite(n) mit Fehler{% endif %}.</div>{% endif %}
     {% if job_success and job.error_count and first_page_error %}<div class="notice error"><strong>Erster Facebook-Fehler:</strong> {{ first_page_error }}<br><span style="font-size:13px">Die vollständigen Fehler aller Seiten stehen direkt darunter.</span></div>{% endif %}
     {% if job_error %}<div class="notice error"><strong>Kommentarabruf fehlgeschlagen:</strong> {{ job.error }}</div>{% endif %}
+    {% if job_cancelled %}<div class="notice warning"><strong>Kommentarabruf abgebrochen.</strong> Bereits geladene Kommentare bleiben gespeichert. Du kannst den Abruf jederzeit neu starten.</div>{% endif %}
     {% if ai_job_error %}<div class="notice error"><strong>KI-Bewertung fehlgeschlagen:</strong> {{ ai_job.error }}</div>{% endif %}
     {% if already_running %}<div class="notice warning">Ein Kommentarabruf läuft bereits.</div>{% endif %}
-    {% if action == 'hidden' %}<div class="notice success">Der Kommentar wurde auf Facebook ausgeblendet.</div>{% elif action == 'unhidden' %}<div class="notice success">Der Kommentar wurde wieder eingeblendet.</div>{% elif action == 'deleted' %}<div class="notice success">Der Kommentar wurde auf Facebook gelöscht.</div>{% elif action == 'handled' %}<div class="notice success">Der Kommentar wurde als erledigt markiert.</div>{% elif action == 'reopened' %}<div class="notice success">Der Kommentar wurde wieder geöffnet.</div>{% elif action == 'ai_started' %}<div class="notice info">Die KI-Bewertung aller offenen Kommentare wurde gestartet.</div>{% elif action == 'ai_errors_started' %}<div class="notice info">Die erneute Bewertung der KI-Fehler wurde gestartet.</div>{% elif action == 'reply_started' %}<div class="notice info">Der Antwortvorschlag wird erstellt.</div>{% elif action == 'refresh_started' %}<div class="notice info">Die Aktualisierung aller bereits gespeicherten Kommentare wurde gestartet.</div>{% endif %}
+    {% if action == 'hidden' %}<div class="notice success">Der Kommentar wurde auf Facebook ausgeblendet.</div>{% elif action == 'unhidden' %}<div class="notice success">Der Kommentar wurde wieder eingeblendet.</div>{% elif action == 'deleted' %}<div class="notice success">Der Kommentar wurde auf Facebook gelöscht.</div>{% elif action == 'handled' %}<div class="notice success">Der Kommentar wurde als erledigt markiert.</div>{% elif action == 'reopened' %}<div class="notice success">Der Kommentar wurde wieder geöffnet.</div>{% elif action == 'ai_started' %}<div class="notice info">Die KI-Bewertung aller offenen Kommentare wurde gestartet.</div>{% elif action == 'ai_errors_started' %}<div class="notice info">Die erneute Bewertung der KI-Fehler wurde gestartet.</div>{% elif action == 'reply_started' %}<div class="notice info">Der Antwortvorschlag wird erstellt.</div>{% elif action == 'refresh_started' %}<div class="notice info">Die Aktualisierung aller bereits gespeicherten Kommentare wurde gestartet.</div>{% elif action == 'fetch_cancel_requested' %}<div class="notice warning">Der Abbruch des Kommentarabrufs wurde angefordert.</div>{% elif action == 'fetch_reset' %}<div class="notice info">Der Kommentarabruf-Status wurde zurückgesetzt.</div>{% endif %}
     {% if action_error %}<div class="notice error"><strong>Facebook-Aktion fehlgeschlagen:</strong> {{ action_error }}</div>{% endif %}
 
     {% if job.pages %}
@@ -240,7 +252,7 @@
     }));
     apply();
     document.querySelectorAll('[data-copy-target]').forEach(btn=>btn.addEventListener('click',async()=>{const el=document.getElementById(btn.dataset.copyTarget);if(!el)return;try{await navigator.clipboard.writeText(el.textContent||'');const old=btn.textContent;btn.textContent='Kopiert';setTimeout(()=>btn.textContent=old,1200);}catch(e){}}));
-    {% if job_running or refresh_job_running or ai_job_running or any_reply_running %}setTimeout(()=>window.location.reload(),5000);{% endif %}
+    {% if job_running or job_cancelling or refresh_job_running or ai_job_running or any_reply_running %}setTimeout(()=>window.location.reload(),5000);{% endif %}
 })();
 </script>
 </body>
