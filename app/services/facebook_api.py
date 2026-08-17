@@ -327,6 +327,7 @@ class FacebookApiService:
         page_id: str,
         page_access_token: str,
         limit: int = 25,
+        request_timeout: float = 30,
     ) -> list[dict]:
         url = GRAPH_API_BASE_URL + f"/{page_id}/published_posts"
         params = {
@@ -334,13 +335,14 @@ class FacebookApiService:
             "fields": "id,message,created_time,permalink_url",
             "limit": max(1, min(int(limit), 100)),
         }
-        return self._read_edge(url=url, params=params, max_items=max(1, min(int(limit), 100)))
+        return self._read_edge(url=url, params=params, max_items=max(1, min(int(limit), 100)), request_timeout=request_timeout)
 
     def get_post_comments(
         self,
         post_id: str,
         page_access_token: str,
         limit: int = 100,
+        request_timeout: float = 30,
     ) -> list[dict]:
         url = GRAPH_API_BASE_URL + f"/{post_id}/comments"
         params = {
@@ -357,7 +359,7 @@ class FacebookApiService:
             "limit": min(max(1, int(limit)), 100),
         }
         try:
-            return self._read_edge(url=url, params=params, max_items=max(1, int(limit)))
+            return self._read_edge(url=url, params=params, max_items=max(1, int(limit)), request_timeout=request_timeout)
         except FacebookApiError:
             # Falls Meta bei einer API-Änderung Attachment-Unterfelder nicht akzeptiert,
             # dürfen Kommentare trotzdem weiter geladen werden.
@@ -368,18 +370,19 @@ class FacebookApiService:
                 "attachment{media{image},type,url,target}"
             )
             try:
-                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)))
+                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)), request_timeout=request_timeout)
             except FacebookApiError:
                 fallback["fields"] = (
                     "id,message,created_time,from{id,name},permalink_url,"
                     "is_hidden,can_hide,can_remove,parent{id}"
                 )
-                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)))
+                return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)), request_timeout=request_timeout)
 
     def get_comment_details(
         self,
         comment_id: str,
         page_access_token: str,
+        request_timeout: float = 30,
     ) -> dict:
         """Liest ein einzelnes Kommentarobjekt direkt bei Meta.
 
@@ -398,7 +401,7 @@ class FacebookApiService:
             ),
         }
         try:
-            data = self._request_json(method="GET", url=url, params=params)
+            data = self._request_json(method="GET", url=url, params=params, timeout=request_timeout)
         except FacebookApiError:
             fallback = dict(params)
             fallback["fields"] = (
@@ -407,13 +410,13 @@ class FacebookApiService:
                 "attachment{media{image},type,url,target}"
             )
             try:
-                data = self._request_json(method="GET", url=url, params=fallback)
+                data = self._request_json(method="GET", url=url, params=fallback, timeout=request_timeout)
             except FacebookApiError:
                 fallback["fields"] = (
                     "id,message,created_time,from{id,name},permalink_url,"
                     "is_hidden,can_hide,can_remove,parent{id}"
                 )
-                data = self._request_json(method="GET", url=url, params=fallback)
+                data = self._request_json(method="GET", url=url, params=fallback, timeout=request_timeout)
         return data if isinstance(data, dict) else {}
 
     def set_comment_hidden(
@@ -477,6 +480,7 @@ class FacebookApiService:
         url: str,
         params: dict | None,
         max_items: int,
+        request_timeout: float = 30,
     ) -> list[dict]:
         items: list[dict] = []
         next_url: str | None = url
@@ -487,6 +491,7 @@ class FacebookApiService:
                 method="GET",
                 url=next_url,
                 params=next_params,
+                timeout=request_timeout,
             )
             for item in data.get("data", []):
                 if isinstance(item, dict):
@@ -510,13 +515,14 @@ class FacebookApiService:
         method: str,
         url: str,
         params: dict | None = None,
+        timeout: float = 30,
     ) -> dict:
         try:
             response = requests.request(
                 method=method,
                 url=url,
                 params=params,
-                timeout=30,
+                timeout=max(3, float(timeout)),
             )
 
         except requests.RequestException as error:
