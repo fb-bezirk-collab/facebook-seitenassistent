@@ -56,6 +56,18 @@
         .ai-result { padding: 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; }
         .ai-result-text { white-space: pre-wrap; line-height: 1.5; color: #344054; max-height: 260px; overflow: auto; }
         .ai-result button { margin-top: 12px; color: #fff; background: #1877f2; }
+
+        .ai-image-panel { margin-top: 20px; padding: 18px; border: 1px solid #b8c7e0; border-radius: 12px; background: #f5f8ff; }
+        .ai-image-panel textarea { min-height: 150px; }
+        .ai-image-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+        .ai-image-actions button { color:#fff; background:#1877f2; }
+        .ai-image-actions .secondary { color:#24415f; background:#fff; border:1px solid #9bb0cf; }
+        .ai-image-status { margin-top:10px; min-height:20px; font-size:14px; color:#475467; }
+        .ai-image-status.error-text { color:#b42318; }
+        .style-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+        .style-option { display:flex; gap:8px; align-items:center; padding:10px; border:1px solid #d0d5dd; border-radius:9px; background:#fff; font-weight:600; }
+        .style-option input { margin:0; }
+
         .planning-grid { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(240px,.5fr); gap: 18px; }
         .account-list { display: grid; gap: 10px; max-height: 560px; overflow: auto; padding: 12px; border: 1px solid #d0d5dd; border-radius: 12px; background: #f9fafb; }
         .account-row { display: grid; grid-template-columns: 24px minmax(180px, 1fr) minmax(220px, 1.2fr); gap: 12px; align-items: center; padding: 12px; border: 1px solid #e4e7ec; border-radius: 10px; background: #fff; }
@@ -210,6 +222,29 @@
                 {% if not image_urls and not draft.videos and not draft.video_url %}
                     <div class="no-image">Dieser Entwurf enthält keine Bilder oder Videos.</div>
                 {% endif %}
+
+                <div class="ai-image-panel" id="ai-image-panel">
+                    <h3>KI-Bild für diesen Beitrag</h3>
+                    <p class="small">Aus dem Beitrag und – falls vorhanden – der Medienanalyse kann ein Bildprompt vorgeschlagen werden. Du kannst ihn vor der Bilderstellung vollständig ändern.</p>
+                    <label for="ai-image-prompt">Bildprompt</label>
+                    <textarea id="ai-image-prompt" placeholder="Bildidee eingeben oder zuerst einen KI-Prompt-Vorschlag erstellen">{% if draft.source_meta and draft.source_meta.graphic and draft.source_meta.graphic.idea %}{{ draft.source_meta.graphic.idea }}{% endif %}</textarea>
+                    <label style="margin-top:12px">Bildstil</label>
+                    <div class="style-options">
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="fotorealistisch" checked> Fotorealistisch</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="pressefoto"> Pressefoto-Stil</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="illustration"> Politische Illustration</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="cartoon"> Cartoon / Karikatur</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="aquarell"> Aquarell</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="cinematic"> Dramatisch / cineastisch</label>
+                        <label class="style-option"><input type="radio" name="ai_image_style" value="symbolbild"> Symbolbild</label>
+                    </div>
+                    <div class="ai-image-actions">
+                        <button type="button" class="secondary" id="ai-image-suggest">Prompt-Vorschlag mit KI erstellen</button>
+                        <button type="button" id="ai-image-generate">KI-Bild erstellen</button>
+                    </div>
+                    <div class="ai-image-status" id="ai-image-status"></div>
+                    <p class="small">Jedes hier erzeugte Bild erhält automatisch unten rechts den Hinweis <strong>„Erstellt mit KI“</strong>. Die App wählt dafür je nach Bildhintergrund automatisch helle oder dunkle Schrift.</p>
+                </div>
             </section>
         </div>
 
@@ -484,6 +519,69 @@
 </main>
 
 <script>
+    const aiImagePrompt = document.getElementById('ai-image-prompt');
+    const aiImageStatus = document.getElementById('ai-image-status');
+    const aiImageSuggest = document.getElementById('ai-image-suggest');
+    const aiImageGenerate = document.getElementById('ai-image-generate');
+
+    function setAiImageStatus(message, isError = false) {
+        if (!aiImageStatus) return;
+        aiImageStatus.textContent = message || '';
+        aiImageStatus.classList.toggle('error-text', Boolean(isError));
+    }
+
+    async function parseJsonResponse(response) {
+        const raw = await response.text();
+        try { return JSON.parse(raw); } catch (_) {
+            throw new Error(`Serverantwort war kein JSON (HTTP ${response.status}). ${raw.slice(0, 160)}`);
+        }
+    }
+
+    aiImageSuggest?.addEventListener('click', async () => {
+        aiImageSuggest.disabled = true;
+        setAiImageStatus('Bildprompt wird vorgeschlagen …');
+        try {
+            const response = await fetch('/drafts/{{ draft.id }}/ai-image/prompt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: document.getElementById('title')?.value || {{ draft.title | tojson }},
+                    text: document.getElementById('text')?.value || {{ draft.text | tojson }}
+                })
+            });
+            const payload = await parseJsonResponse(response);
+            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Prompt konnte nicht erstellt werden.');
+            aiImagePrompt.value = payload.prompt || '';
+            setAiImageStatus('Prompt-Vorschlag erstellt. Du kannst ihn jetzt noch ändern.');
+        } catch (error) {
+            setAiImageStatus(error.message || String(error), true);
+        } finally { aiImageSuggest.disabled = false; }
+    });
+
+    aiImageGenerate?.addEventListener('click', async () => {
+        const prompt = aiImagePrompt?.value?.trim() || '';
+        if (!prompt) { setAiImageStatus('Bitte zuerst einen Bildprompt eingeben oder vorschlagen lassen.', true); return; }
+        const style = document.querySelector('input[name="ai_image_style"]:checked')?.value || 'fotorealistisch';
+        aiImageGenerate.disabled = true;
+        aiImageSuggest.disabled = true;
+        setAiImageStatus('KI-Bild wird erstellt. Das kann etwas dauern …');
+        try {
+            const response = await fetch('/drafts/{{ draft.id }}/ai-image/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({prompt, style})
+            });
+            const payload = await parseJsonResponse(response);
+            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Bild konnte nicht erstellt werden.');
+            setAiImageStatus('KI-Bild erstellt und dem Entwurf hinzugefügt. Seite wird aktualisiert …');
+            window.location.reload();
+        } catch (error) {
+            setAiImageStatus(error.message || String(error), true);
+            aiImageGenerate.disabled = false;
+            aiImageSuggest.disabled = false;
+        }
+    });
+
     const textarea = document.getElementById('text');
     const aiButton = document.getElementById('ai-button-draft');
     const instructions = document.getElementById('ai-instructions-draft');
