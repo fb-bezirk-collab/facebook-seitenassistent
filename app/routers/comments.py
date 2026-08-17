@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.comment_monitor.job import mark_started, run_fetch_job
+from app.comment_monitor.job import load_status as load_comment_job_status, mark_started, request_cancel as request_comment_cancel, reset_status as reset_comment_job_status, run_fetch_job
 from app.comment_monitor.refresh_job import mark_refresh_started, run_refresh_job
 from app.comment_monitor.ai import AI_CLASSIFICATION_VERSION
 from app.comment_monitor.ai_job import mark_ai_started, run_ai_job
@@ -75,7 +75,7 @@ def kommentar_monitor(
             row["attachment_label"] = ""
         rows.append(row)
 
-    job = storage.load_job()
+    job = load_comment_job_status()
     state = str(job.get("state", "idle"))
     ai_job = storage.load_ai_job()
     ai_state = str(ai_job.get("state", "idle"))
@@ -119,6 +119,8 @@ def kommentar_monitor(
             "job_running": state == "running",
             "job_success": state == "success",
             "job_error": state == "error",
+            "job_cancelling": state == "cancel_requested",
+            "job_cancelled": state == "cancelled",
             "started": bool(started),
             "already_running": bool(already_running),
             "job": job,
@@ -143,10 +145,23 @@ def kommentar_monitor(
 
 @router.post("/comments/fetch", name="kommentare_abrufen")
 def kommentare_abrufen(background_tasks: BackgroundTasks):
-    if not mark_started():
+    job_id = mark_started()
+    if not job_id:
         return RedirectResponse(url="/comments?already_running=1", status_code=303)
-    background_tasks.add_task(run_fetch_job)
+    background_tasks.add_task(run_fetch_job, job_id)
     return RedirectResponse(url="/comments?started=1", status_code=303)
+
+
+@router.post("/comments/fetch/cancel", name="kommentare_abruf_abbrechen")
+def kommentare_abruf_abbrechen():
+    request_comment_cancel()
+    return RedirectResponse(url="/comments?action=fetch_cancel_requested", status_code=303)
+
+
+@router.post("/comments/fetch/reset", name="kommentare_abruf_status_reset")
+def kommentare_abruf_status_reset():
+    reset_comment_job_status()
+    return RedirectResponse(url="/comments?action=fetch_reset", status_code=303)
 
 
 @router.post("/comments/refresh-existing", name="kommentare_bestehende_aktualisieren")
