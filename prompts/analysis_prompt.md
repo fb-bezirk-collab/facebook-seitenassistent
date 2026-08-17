@@ -77,7 +77,7 @@ Keine erfundenen Zitate, keine unbelegten Vorwürfe, keine Tatsachenbehauptung, 
 Erstelle exakt vier eigenständige Social-Media-Arbeitsentwürfe:
 - `sachlich`: faktenorientiert und politisch eingeordnet.
 - `pointiert`: klar zugespitzt anhand des aktiven Kommunikationsprofils.
-- `emotional`: stärker auf konkrete Auswirkungen und Betroffenheit fokussiert.
+- `emotional`: stärkere Dringlichkeit und Betroffenheit **innerhalb desselben politischen Frames**; niemals wegen emotionaler Personengruppen oder Nebenaspekte das Sachgebiet bzw. die politische Perspektive wechseln.
 - `kampagne`: die stärkste politische Variante; sehr direkter Einstieg, klare Kernbotschaft und zugespitzte politische Bewertung auf Basis der belegten Fakten.
 
 Regeln für alle Varianten:
@@ -101,9 +101,9 @@ Regeln für alle Varianten:
 ## graphic
 Die Grafik ist Teil derselben politischen Kommunikationslogik wie der Text. Bestimme zuerst die politische Kernbotschaft und übersetze diese visuell. **Textspin und Bildspin dürfen nicht auseinanderlaufen.** Bei einer primären Migrations-/Asyl-/Sicherheitsmeldung darf eine bloße Erwähnung Minderjähriger nicht zu einer Kinderschutz-Grafik führen. Visualisiere stattdessen – soweit durch den Sachverhalt getragen – etwa Kontrolle/Kontrollverlust, Sicherheitsfrage, Behördenverantwortung, Größenordnung, Österreichbezug oder die passende politische Systemfrage.
 
-Die `idea` soll eine konkrete visuelle Komposition beschreiben (zentrale Bildelemente, Symbolik, Stimmung, Schwerpunkt) und nicht bloß den Artikeltext umformulieren. Keine unbelegten Gefahren, Täterrollen oder Ereignisse visualisieren.
+Die `idea` soll eine konkrete visuelle Komposition beschreiben (zentrale Bildelemente, Symbolik, Stimmung, Schwerpunkt) und nicht bloß den Artikeltext umformulieren. **Sie ist keine Artikelzusammenfassung und kein automatischer Daten-Dump.** Wähle eine einzige politische Kernbotschaft und übersetze sie in ein starkes Hauptmotiv. Karten, Zahlenkacheln, Tabellen, Balkendiagramme oder komplexe Infografiken nur dann empfehlen, wenn genau die geografische Verteilung, der Vergleich oder die Zahlen selbst die politische Hauptaussage sind. Andernfalls ein klares Symbolbild bzw. eine politische Illustration bevorzugen. Keine unbelegten Gefahren, Täterrollen oder Ereignisse visualisieren.
 
-Empfehle genau einen geeigneten Grafiktyp, z. B. `Symbolbild`, `Zahlenkachel`, `Infografik`, `Zitatgrafik`, `Vergleich`, `Karte`. Beschreibe in `idea`, was sichtbar sein soll, und in `reason`, warum dieser Typ für die konkrete Meldung geeignet ist. Keine Bildbehauptung erfinden.
+Empfehle genau einen geeigneten Grafiktyp, z. B. `Symbolbild`, `politische Illustration`, `Zahlenkachel`, `Infografik`, `Zitatgrafik`, `Vergleich`, `Karte`. **Symbolbild/politische Illustration bevorzugen, wenn eine politische Kernbotschaft stärker ist als eine Datenvisualisierung.** Beschreibe in `idea`, was sichtbar sein soll, und in `reason`, warum dieser Typ für die konkrete Meldung geeignet ist. Keine Bildbehauptung erfinden.
 
 ## facts_confirmed
 Liste ausschließlich belastbare Fakten, die aus Artikel, Metadaten oder Parallelquellen eindeutig hervorgehen.
