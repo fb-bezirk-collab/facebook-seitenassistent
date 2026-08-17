@@ -2,11 +2,12 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR, UPLOADS_DIR
 from app.services.post_service import PostService
+from app.services.ai_image_service import AiImageError, AiImageService
 from app.services.publication_service import PublicationService
 from app.services.social_account_service import SocialAccountService
 
@@ -243,6 +244,52 @@ def entwurf_aktualisieren(
         ),
         status_code=303,
     )
+
+
+@router.post("/drafts/{post_id}/ai-image/prompt", name="entwurf_ki_bild_prompt")
+async def entwurf_ki_bild_prompt(request: Request, post_id: str):
+    draft = post_service.get_post(post_id)
+    if not draft or draft.status != "draft":
+        return JSONResponse({"ok": False, "error": "Entwurf nicht gefunden."}, status_code=404)
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    title = str(payload.get("title") or draft.title)
+    text = str(payload.get("text") or draft.text)
+    graphic = draft.source_meta.get("graphic") if isinstance(draft.source_meta, dict) else None
+    source_hint = ""
+    if isinstance(graphic, dict):
+        source_hint = " ".join(str(graphic.get(key) or "").strip() for key in ("type", "idea", "reason")).strip()
+    try:
+        prompt = AiImageService().suggest_prompt(
+            title=title, text=text, source_url=draft.source_url, source_hint=source_hint
+        )
+    except AiImageError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    return JSONResponse({"ok": True, "prompt": prompt})
+
+
+@router.post("/drafts/{post_id}/ai-image/generate", name="entwurf_ki_bild_erzeugen")
+async def entwurf_ki_bild_erzeugen(request: Request, post_id: str):
+    draft = post_service.get_post(post_id)
+    if not draft or draft.status != "draft":
+        return JSONResponse({"ok": False, "error": "Entwurf nicht gefunden."}, status_code=404)
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    prompt = str(payload.get("prompt") or "").strip()
+    style = str(payload.get("style") or "fotorealistisch").strip().lower()
+    try:
+        image_path = AiImageService().generate_image(prompt=prompt, style=style)
+        updated = post_service.add_image_to_draft(post_id, image_path)
+        if not updated:
+            raise AiImageError("Das Bild konnte dem Entwurf nicht zugeordnet werden.")
+    except AiImageError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    image_url = _image_path_to_url(image_path) or ""
+    return JSONResponse({"ok": True, "image_url": image_url, "image_path": image_path})
 
 
 @router.post("/drafts/{post_id}/delete")
