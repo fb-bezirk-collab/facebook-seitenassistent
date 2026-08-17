@@ -198,10 +198,31 @@ def run_fetch_job(job_id: str) -> None:
             return
         if str(latest.get("state") or "") not in {"running", "cancel_requested"}:
             return
+        stage_text = str(stage or "Medienabruf läuft")
+        progress_phase = "other"
+        progress_current = 0
+        progress_total = 0
+        progress_name = ""
+        import re
+        source_match = re.match(r"Quelle\s+(\d+)\s+von\s+(\d+):\s*(.+)", stage_text)
+        ai_match = re.match(r"KI-Bewertung:\s*Paket\s+(\d+)\s+von\s+(\d+)", stage_text)
+        if source_match:
+            progress_phase = "sources"
+            progress_current = int(source_match.group(1))
+            progress_total = int(source_match.group(2))
+            progress_name = source_match.group(3).strip()
+        elif ai_match:
+            progress_phase = "ai"
+            progress_current = int(ai_match.group(1))
+            progress_total = int(ai_match.group(2))
         _write_status({
             **latest,
             "progress_percent": max(0, min(99, int(percent))),
-            "progress_stage": str(stage or "Medienabruf läuft"),
+            "progress_stage": stage_text,
+            "progress_phase": progress_phase,
+            "progress_current": progress_current,
+            "progress_total": progress_total,
+            "progress_name": progress_name,
         })
 
     try:

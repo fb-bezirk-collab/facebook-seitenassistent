@@ -150,6 +150,8 @@ def fetch_current_media(should_cancel=None, progress_callback=None) -> dict:
                 "new_count": new_count,
                 "error": "",
             })
+        except MediaFetchCancelled:
+            raise
         except Exception as exc:
             message = str(exc).strip() or "Unbekannter Abruffehler."
             print(f"Fehler beim Abruf von {source_name}: {exc}", flush=True)
