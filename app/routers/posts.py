@@ -257,13 +257,35 @@ async def entwurf_ki_bild_prompt(request: Request, post_id: str):
         payload = {}
     title = str(payload.get("title") or draft.title)
     text = str(payload.get("text") or draft.text)
+    image_brief = str(payload.get("image_brief") or "").strip()
     graphic = draft.source_meta.get("graphic") if isinstance(draft.source_meta, dict) else None
     source_hint = ""
     if isinstance(graphic, dict):
         source_hint = " ".join(str(graphic.get(key) or "").strip() for key in ("type", "idea", "reason")).strip()
     try:
         prompt = AiImageService().suggest_prompt(
-            title=title, text=text, source_url=draft.source_url, source_hint=source_hint
+            title=title, text=text, source_url=draft.source_url, source_hint=source_hint, image_brief=image_brief
+        )
+    except AiImageError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    return JSONResponse({"ok": True, "prompt": prompt})
+
+
+@router.post("/drafts/{post_id}/ai-image/refine", name="entwurf_ki_bild_prompt_ueberarbeiten")
+async def entwurf_ki_bild_prompt_ueberarbeiten(request: Request, post_id: str):
+    draft = post_service.get_post(post_id)
+    if not draft or draft.status != "draft":
+        return JSONResponse({"ok": False, "error": "Entwurf nicht gefunden."}, status_code=404)
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    try:
+        prompt = AiImageService().refine_prompt(
+            current_prompt=str(payload.get("prompt") or ""),
+            change_request=str(payload.get("change_request") or ""),
+            title=str(payload.get("title") or draft.title),
+            text=str(payload.get("text") or draft.text),
         )
     except AiImageError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)

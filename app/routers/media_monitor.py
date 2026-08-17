@@ -66,6 +66,12 @@ def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already
             "error": str(job.get("error", "") or ""),
             "source_results": job.get("source_results", []) if isinstance(job.get("source_results"), list) else [],
             "last_fetch_at": finished_at,
+            "progress_percent": max(0, min(100, int(job.get("progress_percent", 0) or 0))),
+            "progress_stage": str(job.get("progress_stage", "") or ""),
+            "progress_phase": str(job.get("progress_phase", "") or ""),
+            "progress_current": max(0, int(job.get("progress_current", 0) or 0)),
+            "progress_total": max(0, int(job.get("progress_total", 0) or 0)),
+            "progress_name": str(job.get("progress_name", "") or ""),
         },
     )
 
