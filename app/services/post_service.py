@@ -107,6 +107,21 @@ class PostService:
 
         return None
 
+    def add_image_to_draft(self, post_id: str, image_path: str) -> ManagedPost | None:
+        posts = self._load_all()
+        clean_path = str(image_path).strip()
+        if not clean_path:
+            return None
+        for post in posts:
+            if post.id != post_id or post.status != "draft":
+                continue
+            if clean_path not in post.images:
+                post.images.append(clean_path)
+            post.updated_at = utc_now_iso()
+            self._save_all(posts)
+            return post
+        return None
+
     def mark_published(self, post_id: str) -> ManagedPost | None:
         posts = self._load_all()
 
