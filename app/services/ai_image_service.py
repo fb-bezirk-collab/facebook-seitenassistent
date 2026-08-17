@@ -25,7 +25,7 @@ class AiImageService:
         self.image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2").strip()
         self.storage = MediaStorage()
 
-    def suggest_prompt(self, *, title: str, text: str, source_url: str = "", source_hint: str = "") -> str:
+    def suggest_prompt(self, *, title: str, text: str, source_url: str = "", source_hint: str = "", image_brief: str = "") -> str:
         if not self.api_key:
             raise AiImageError("OPENAI_API_KEY ist nicht konfiguriert.")
         content = (text or "").strip()
@@ -40,6 +40,8 @@ class AiImageService:
             "Antworte ausschließlich mit dem fertigen deutschsprachigen Bildprompt, ohne Einleitung."
         )
         user = f"Titel: {title.strip()}\n\nBeitrag:\n{content[:7000]}"
+        if image_brief.strip():
+            user += f"\n\nVorgabe des Benutzers für das Bild (besonders wichtig):\n{image_brief.strip()[:3000]}"
         if source_hint.strip():
             user += f"\n\nVorhandene Bildidee aus der Medienanalyse: {source_hint.strip()[:1500]}"
         if source_url.strip():
@@ -70,6 +72,44 @@ class AiImageService:
         result = self._extract_output_text(data).strip().strip('"')
         if not result:
             raise AiImageError("Es konnte kein Bildprompt erzeugt werden.")
+        return result
+
+    def refine_prompt(self, *, current_prompt: str, change_request: str, title: str = "", text: str = "") -> str:
+        if not self.api_key:
+            raise AiImageError("OPENAI_API_KEY ist nicht konfiguriert.")
+        current = (current_prompt or "").strip()
+        change = (change_request or "").strip()
+        if not current:
+            raise AiImageError("Es gibt noch keinen Bildprompt zum Überarbeiten.")
+        if not change:
+            raise AiImageError("Bitte einen Änderungswunsch eingeben.")
+        developer = (
+            "Du überarbeitest einen bestehenden deutschsprachigen Bildprompt für einen politischen Social-Media-Beitrag in Österreich. "
+            "Setze den Änderungswunsch gezielt um und erhalte alle sinnvollen Teile des bisherigen Prompts. "
+            "Erfinde keine Personen, Zitate, Zahlen, Logos oder Tatsachen. Keine Schrift, Schlagzeilen, Logos oder Wasserzeichen im Motiv. "
+            "Antworte ausschließlich mit dem vollständig überarbeiteten Bildprompt, ohne Erklärung."
+        )
+        user = f"Bisheriger Bildprompt:\n{current[:5000]}\n\nÄnderungswunsch:\n{change[:2500]}"
+        if title.strip() or text.strip():
+            user += f"\n\nKontext des Beitrags:\nTitel: {title.strip()}\n{text.strip()[:3500]}"
+        payload = {
+            "model": self.text_model,
+            "input": [{"role": "developer", "content": developer}, {"role": "user", "content": user}],
+            "max_output_tokens": 900,
+        }
+        try:
+            response = requests.post(self.responses_url, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, json=payload, timeout=90)
+        except requests.RequestException as exc:
+            raise AiImageError(f"OpenAI ist derzeit nicht erreichbar: {exc}") from exc
+        if response.status_code >= 400:
+            raise AiImageError(self._error_message(response))
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise AiImageError("OpenAI hat keine gültige Antwort geliefert.") from exc
+        result = self._extract_output_text(data).strip().strip('"')
+        if not result:
+            raise AiImageError("Der Bildprompt konnte nicht überarbeitet werden.")
         return result
 
     def generate_image(self, *, prompt: str, style: str = "fotorealistisch") -> str:
