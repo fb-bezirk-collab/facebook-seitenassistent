@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import time
 
 from app.models.facebook_comment import FacebookComment
+from app.config import COMMENT_PAGE_TIMEOUT_SECONDS, COMMENT_REQUEST_TIMEOUT_SECONDS
 from app.services.facebook_api import FacebookApiError, FacebookApiService
 from app.services.meta_config_service import MetaConfigService
 from app.services.settings_service import SettingsService
@@ -10,6 +12,10 @@ from app.comment_monitor.storage import CommentStorage
 from app.comment_monitor.link_preview import (
     fetch_link_preview, first_http_url, is_facebook_media_permalink, is_facebook_url,
 )
+
+
+class CommentFetchCancelled(RuntimeError):
+    """Interner Kontrollfluss für einen bewusst abgebrochenen Kommentarabruf."""
 
 
 class CommentMonitorService:
@@ -175,6 +181,7 @@ class CommentMonitorService:
         raw: dict,
         comment_id: str,
         page_access_token: str,
+        request_timeout: float = 30,
     ) -> tuple[dict, str, str, dict]:
         """Ermittelt den Autor eines neu gefundenen Kommentars.
 
@@ -198,6 +205,7 @@ class CommentMonitorService:
             direct = api.get_comment_details(
                 comment_id=comment_id,
                 page_access_token=page_access_token,
+                request_timeout=request_timeout,
             )
         except FacebookApiError as error:
             return (
@@ -234,7 +242,15 @@ class CommentMonitorService:
             direct,
         )
 
-    def fetch_all(self, post_limit: int = 25, comment_limit: int = 100) -> dict:
+    def fetch_all(
+        self,
+        post_limit: int = 25,
+        comment_limit: int = 100,
+        should_cancel=None,
+        progress_callback=None,
+        page_timeout_seconds: int = COMMENT_PAGE_TIMEOUT_SECONDS,
+        request_timeout_seconds: int = COMMENT_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict:
         pages = [page for page in self.settings_service.load_pages() if page.is_active]
         existing = {comment.comment_id: comment for comment in self.storage.load()}
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -250,7 +266,28 @@ class CommentMonitorService:
         config = self.meta_config_service.load()
         api = FacebookApiService(config=config)
 
-        for page in pages:
+        def check_cancel() -> None:
+            if should_cancel is not None and should_cancel():
+                raise CommentFetchCancelled("Kommentarabruf wurde abgebrochen.")
+
+        def update_progress(page_index: int, page_name: str, stage: str = "") -> None:
+            if progress_callback is not None:
+                progress_callback({
+                    "page_index": page_index,
+                    "page_count": len(pages),
+                    "page_name": page_name,
+                    "stage": stage,
+                    "new_count": result["new_count"],
+                    "seen_count": result["seen_count"],
+                    "error_count": result["error_count"],
+                    "pages": result["pages"],
+                })
+
+        for page_index, page in enumerate(pages, start=1):
+            check_cancel()
+            page_started = time.monotonic()
+            page_deadline = page_started + max(30, int(page_timeout_seconds))
+            update_progress(page_index, page.name, "Seite wird geöffnet")
             page_result = {
                 "page_id": page.page_id,
                 "page_name": page.name,
@@ -260,21 +297,33 @@ class CommentMonitorService:
                 "error": "",
             }
             result["pages"].append(page_result)
+            author_direct_unavailable = False
 
             if not page.access_token:
                 page_result["error"] = "Für diese Seite ist kein Seitenzugriffstoken gespeichert."
                 result["error_count"] += 1
+                update_progress(page_index, page.name, "Übersprungen: kein Zugriffstoken")
                 continue
 
             try:
+                check_cancel()
                 posts = api.get_page_published_posts(
                     page_id=page.page_id,
                     page_access_token=page.access_token,
                     limit=post_limit,
+                    request_timeout=request_timeout_seconds,
                 )
                 page_result["posts"] = len(posts)
 
-                for post in posts:
+                update_progress(page_index, page.name, f"{len(posts)} Beiträge gefunden")
+
+                for post_number, post in enumerate(posts, start=1):
+                    check_cancel()
+                    if time.monotonic() >= page_deadline:
+                        raise TimeoutError(
+                            f"Zeitlimit von {page_timeout_seconds} Sekunden für diese Seite erreicht. "
+                            "Die Seite wurde übersprungen, der Abruf läuft mit der nächsten Seite weiter."
+                        )
                     post_id = str(post.get("id", "")).strip()
                     if not post_id:
                         continue
@@ -283,11 +332,20 @@ class CommentMonitorService:
                         post_id=post_id,
                         page_access_token=page.access_token,
                         limit=comment_limit,
+                        request_timeout=min(request_timeout_seconds, max(5, int(page_deadline - time.monotonic()))),
                     )
                     page_result["comments"] += len(comments)
                     result["seen_count"] += len(comments)
 
+                    update_progress(page_index, page.name, f"Beitrag {post_number}/{len(posts)} · {page_result['comments']} Kommentare")
+
                     for raw in comments:
+                        check_cancel()
+                        if time.monotonic() >= page_deadline:
+                            raise TimeoutError(
+                                f"Zeitlimit von {page_timeout_seconds} Sekunden für diese Seite erreicht. "
+                                "Die Seite wurde übersprungen, der Abruf läuft mit der nächsten Seite weiter."
+                            )
                         comment_id = str(raw.get("id", "")).strip()
                         if not comment_id:
                             continue
@@ -308,12 +366,29 @@ class CommentMonitorService:
                         direct_raw: dict = {}
 
                         if current is None:
-                            author, author_source, author_diagnostic, direct_raw = self._resolve_author_for_new_comment(
-                                api=api,
-                                raw=raw,
-                                comment_id=comment_id,
-                                page_access_token=page.access_token,
-                            )
+                            if (edge_author.get("id") or edge_author.get("name")) or not author_direct_unavailable:
+                                author, author_source, author_diagnostic, direct_raw = self._resolve_author_for_new_comment(
+                                    api=api,
+                                    raw=raw,
+                                    comment_id=comment_id,
+                                    page_access_token=page.access_token,
+                                    request_timeout=min(request_timeout_seconds, max(5, int(page_deadline - time.monotonic()))),
+                                )
+                                # Liefert Meta bei der ersten erfolgreichen Direktabfrage dieser
+                                # Seite ebenfalls kein from-Feld, sparen wir uns dieselbe erfolglose
+                                # Diagnose für alle weiteren neuen Kommentare dieser Seite.
+                                if (not edge_author.get("id") and not edge_author.get("name")
+                                        and author_source == "not_available" and direct_raw):
+                                    author_direct_unavailable = True
+                            else:
+                                author = {}
+                                author_source = "not_available"
+                                author_diagnostic = (
+                                    "Meta hat auf dieser Seite bei einer vorherigen Direktabfrage kein "
+                                    "from{id,name} geliefert; weitere redundante Autorabfragen wurden "
+                                    "für diesen Abruf übersprungen."
+                                )
+                                direct_raw = {}
                             if not (attachment_type or attachment_url or attachment_image_url):
                                 (
                                     direct_type, direct_url, direct_image, direct_title, direct_diag
@@ -400,26 +475,10 @@ class CommentMonitorService:
                             current.permalink_url = str(raw.get("permalink_url", "") or current.permalink_url)
                             current.parent_id = str(parent.get("id", "") or current.parent_id)
 
-                            # Bestehende Kommentare aus 2.8.2 werden beim nächsten Abruf
-                            # nachträglich um Link-/Medienvorschauen ergänzt.
-                            if not (attachment_type or attachment_url or attachment_image_url) and not current.attachment_image_url:
-                                try:
-                                    direct_media = api.get_comment_details(
-                                        comment_id=comment_id,
-                                        page_access_token=page.access_token,
-                                    )
-                                except FacebookApiError:
-                                    direct_media = {}
-                                (
-                                    direct_type, direct_url, direct_image, direct_title, direct_diag
-                                ) = self._attachment_info(direct_media)
-                                attachment_type = direct_type or attachment_type
-                                attachment_url = direct_url or attachment_url
-                                attachment_image_url = direct_image or attachment_image_url
-                                attachment_title = direct_title or attachment_title
-                                attachment_diagnostic = direct_diag or attachment_diagnostic
-                                if direct_type or direct_url or direct_image:
-                                    attachment_source = "meta_direct"
+                            # Bereits bekannte Kommentare werden im normalen Abruf nicht mehr
+                            # einzeln über /{comment_id} nachgeladen. Das verursachte bei vielen
+                            # Textkommentaren hunderte zusätzliche Meta-Aufrufe. Für gezieltes
+                            # Nachladen alter Medieninfos gibt es den separaten Refresh-Job.
 
                             message_for_preview = str(raw.get("message", "") or current.message or "")
                             (
@@ -470,9 +529,15 @@ class CommentMonitorService:
                                 elif current.status != "handled":
                                     current.status = "new"
 
-            except FacebookApiError as error:
+            except (FacebookApiError, TimeoutError) as error:
                 page_result["error"] = str(error)
                 result["error_count"] += 1
+            finally:
+                # Zwischenspeichern pro Seite: bei Abbruch/Restart geht die bisherige Arbeit nicht verloren.
+                comments_snapshot = list(existing.values())
+                comments_snapshot.sort(key=lambda item: item.created_time or item.fetched_at, reverse=True)
+                self.storage.save(comments_snapshot)
+                update_progress(page_index, page.name, "Seite abgeschlossen")
 
         comments = list(existing.values())
         comments.sort(key=lambda item: item.created_time or item.fetched_at, reverse=True)

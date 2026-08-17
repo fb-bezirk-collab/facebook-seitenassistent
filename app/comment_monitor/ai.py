@@ -37,7 +37,7 @@ RECOMMENDATIONS = (
     "Löschen prüfen",
 )
 
-AI_CLASSIFICATION_VERSION = "2.8.2"
+AI_CLASSIFICATION_VERSION = "3.3.0"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -231,6 +231,17 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
             "in der regierung nicht brauchen", "gehört abgewählt",
             "gehört weg", "muss weg", "nicht mehr wählen", "unwählbar",
         )
+        hostile_provocation_markers = (
+            "mundwerk halten", "halt dein mundwerk", "halt die klappe", "klappe halten",
+            "blaue hetze", "hetze ist", "niveaulos", "primitiv", "peinlicher auftritt",
+            "lächerlich", "laecherlich", "armselig", "erbärmlich", "erbaermlich",
+            "dumme propaganda", "billige propaganda", "nur hetze", "hetzer",
+        )
+        personal_demeaning_markers = (
+            "lächerliche figur", "laecherliche figur", "peinliche figur",
+            "soll den mund halten", "soll schweigen", "halt dein mundwerk",
+            "halt die klappe", "klappe halten",
+        )
         strong_abuse_markers = (
             "arschloch", "arschlöcher", "hurensohn", "hurensöhne", "volltrottel",
             "trottel", "idiot", "idioten", "gsindl", "gesindel", "dreckspack",
@@ -244,6 +255,8 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
             "sollte man erschießen", "sollte man erschiessen", "an die wand stellen",
         )
         has_political_demand = any(marker in comment_text for marker in political_demand_markers)
+        has_hostile_provocation = any(marker in comment_text for marker in hostile_provocation_markers)
+        has_personal_demeaning = any(marker in comment_text for marker in personal_demeaning_markers)
         has_strong_abuse = any(marker in comment_text for marker in strong_abuse_markers)
         has_threat = any(marker in comment_text for marker in threat_markers)
 
@@ -255,6 +268,14 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
             priority = "hoch"
             recommendation = "Löschen prüfen"
             reason = "Der Kommentar enthält eine erkennbare Drohungs- oder Gewaltformulierung."
+        elif (has_hostile_provocation or has_personal_demeaning) and not has_strong_abuse:
+            category = "Provokation"
+            priority = "mittel"
+            recommendation = "Ausblenden prüfen" if has_personal_demeaning else "Antwort optional"
+            reason = (
+                "Feindseliger, verhöhnender oder persönlich herabsetzender Kommentar ohne starke Beschimpfung; "
+                "erhöhter Prüfbedarf, aber keine Priorität hoch."
+            )
         elif category == "Beleidigung" and not has_strong_abuse:
             category = "Meinung/Kritik"
             priority = "niedrig"
@@ -293,8 +314,10 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
                 recommendation = "Ignorieren"
         elif category == "Frage" and priority == "hoch":
             priority = "mittel"
-        elif category == "Provokation" and priority == "hoch":
+        elif category == "Provokation":
             priority = "mittel"
+            if recommendation == "Ignorieren" and (has_hostile_provocation or has_personal_demeaning):
+                recommendation = "Ausblenden prüfen" if has_personal_demeaning else "Antwort optional"
 
         result[comment_id] = {
             "category": category,
