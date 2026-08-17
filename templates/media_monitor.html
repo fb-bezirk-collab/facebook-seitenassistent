@@ -25,6 +25,10 @@
         .notice { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #a6f4c5; background: #ecfdf3; color: #067647; border-radius: 10px; }
         .error-notice { border-color: #fecdca; background: #fef3f2; color: #b42318; }
         .warning-notice { border-color: #fedf89; background: #fffaeb; color: #b54708; }
+        .progress-wrap { margin-top:12px; }
+        .progress-meta { display:flex; justify-content:space-between; gap:12px; margin-bottom:7px; font-size:13px; font-weight:700; }
+        .progress-track { width:100%; height:14px; border-radius:999px; background:#f2f4f7; overflow:hidden; border:1px solid #e4e7ec; }
+        .progress-fill { height:100%; border-radius:999px; background:#1877f2; transition:width .35s ease; }
         .score { display:inline-flex; align-items:center; justify-content:center; min-width:56px; padding:7px 10px; border-radius:999px; background:#ecfdf3; color:#067647; font-weight:900; }
         .summary { margin:7px 0 0; color:#475467; line-height:1.45; }
         .view-link { color:#1877f2; font-weight:800; text-decoration:none; }
@@ -89,9 +93,16 @@
 <main>
 <div class="container">
     {% if job_running %}
-        <div class="notice warning-notice"><strong>Medienabruf läuft.</strong> Die Quellen werden im Hintergrund eingelesen und anschließend von der KI bewertet. Diese Seite aktualisiert sich automatisch.</div>
+        <div class="notice warning-notice"><strong>Medienabruf läuft.</strong> Die Quellen werden im Hintergrund eingelesen und anschließend von der KI bewertet. Diese Seite aktualisiert sich automatisch.
+            <div class="progress-wrap">
+                <div class="progress-meta"><span>{{ progress_stage or "Medienabruf läuft" }}</span><span>{{ progress_percent }} %</span></div>
+                <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}"><div class="progress-fill" style="width: {{ progress_percent }}%"></div></div>
+            </div>
+        </div>
     {% elif job_cancelling %}
-        <div class="notice warning-notice"><strong>Abbruch angefordert.</strong> Der aktuelle sichere Schritt wird noch beendet; danach stoppt der Medienabruf automatisch.</div>
+        <div class="notice warning-notice"><strong>Abbruch angefordert.</strong> Der aktuelle sichere Schritt wird noch beendet; danach stoppt der Medienabruf automatisch.
+            <div class="progress-wrap"><div class="progress-meta"><span>{{ progress_stage or "Aktueller Schritt wird beendet" }}</span><span>{{ progress_percent }} %</span></div><div class="progress-track"><div class="progress-fill" style="width: {{ progress_percent }}%"></div></div></div>
+        </div>
     {% elif job_cancelled %}
         <div class="notice warning-notice"><strong>Medienabruf beendet.</strong> {{ job_message or "Der Abruf wurde abgebrochen." }}</div>
     {% elif job_success %}
