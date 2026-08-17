@@ -172,7 +172,8 @@ ARTICLE_TYPES = {"article", "newsarticle", "reportagenewsarticle", "analysisnews
 
 
 MOJIBAKE_MARKERS = (
-    "Ã", "Â", "â€", "â€“", "â€”", "â„¢", "â€¦", "â€ž", "â€œ", "â€˜", "â€™", "ðŸ", "ï¿½"
+    "Ã", "Â", "â€", "â€“", "â€”", "â„¢", "â€¦", "â€ž", "â€œ", "â€˜", "â€™",
+    "ðŸ", "ï¿½", "Ãƒ", "Â€", "Â©", "Â·", "â‚¬", "Â "
 )
 
 
@@ -192,7 +193,7 @@ def repair_mojibake(value: str | None) -> str:
         return text
 
     current = text
-    for _ in range(2):
+    for _ in range(5):
         candidates: list[str] = []
         for encoding in ("cp1252", "latin1"):
             try:
@@ -205,6 +206,19 @@ def repair_mojibake(value: str | None) -> str:
         if _mojibake_score(best) >= _mojibake_score(current):
             break
         current = best
+    replacements = {
+        "Â ": " ",
+        "â€“": "–",
+        "â€”": "—",
+        "â€ž": "„",
+        "â€œ": "“",
+        "â€™": "’",
+        "â€˜": "‘",
+        "â€¦": "…",
+        "â‚¬": "€",
+    }
+    for broken, fixed in replacements.items():
+        current = current.replace(broken, fixed)
     return current
 
 

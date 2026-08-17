@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import DATA_DIR
-from app.media_monitor.fetchers.common import repair_mojibake
+from app.media_monitor.fetchers.common import clean_text, repair_mojibake
 
 
 MEDIA_MONITOR_FILE = DATA_DIR / "media_monitor.json"
@@ -109,7 +109,15 @@ def load_items() -> list[dict[str, Any]]:
         return []
     if not isinstance(content, list):
         return []
-    return [_ensure_editorial_structure(_repair_saved_text(item)) for item in content if isinstance(item, dict)]
+    repaired = [_ensure_editorial_structure(_repair_saved_text(item)) for item in content if isinstance(item, dict)]
+    # Reparaturen dauerhaft speichern, damit alte Mojibake-Werte nicht bei jedem
+    # Seitenaufruf erneut aus dem Volume gelesen werden.
+    if repaired != content:
+        try:
+            save_items(repaired)
+        except OSError:
+            pass
+    return repaired
 
 
 def save_items(items: list[dict[str, Any]]) -> None:
@@ -137,9 +145,10 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
     }
 
     for raw_item in fetched_items:
-        raw_source = str(raw_item.get("source", ""))
-        raw_url = str(raw_item.get("url", ""))
-        raw_title = str(raw_item.get("title", ""))
+        raw_source = clean_text(str(raw_item.get("source", "")))
+        raw_url = str(raw_item.get("url", "")).strip()
+        raw_title = clean_text(str(raw_item.get("title", "")))
+        raw_teaser = clean_text(str(raw_item.get("teaser", "")))
         fingerprint = _fingerprint(raw_source, raw_url, raw_title)
         canonical_url = raw_url.split("#", 1)[0].split("?", 1)[0]
         existing_item = by_fingerprint.get(fingerprint) or by_source_url.get((raw_source.strip().lower(), canonical_url))
@@ -149,8 +158,8 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             # denselben Artikel wegen des geänderten Titels doppelt anzulegen.
             if raw_title and raw_title != str(existing_item.get("title", "")):
                 existing_item["title"] = raw_title
-            if raw_item.get("teaser") and raw_item.get("teaser") != existing_item.get("teaser"):
-                existing_item["teaser"] = raw_item.get("teaser")
+            if raw_teaser and raw_teaser != existing_item.get("teaser"):
+                existing_item["teaser"] = raw_teaser
             if raw_item.get("image_url") and not existing_item.get("image_url"):
                 existing_item["image_url"] = raw_item.get("image_url")
             if raw_item.get("source_category"):
@@ -160,8 +169,8 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             continue
         item = {
             "id": fingerprint[:16], "fingerprint": fingerprint,
-            "source": str(raw_item.get("source", "")), "title": str(raw_item.get("title", "")),
-            "teaser": str(raw_item.get("teaser", "")), "url": str(raw_item.get("url", "")),
+            "source": raw_source, "title": raw_title,
+            "teaser": raw_teaser, "url": raw_url,
             "image_url": str(raw_item.get("image_url", "")), "published_at": raw_item.get("published_at"),
             "fetched_at": fetched_at, "source_category": str(raw_item.get("source_category", "")),
             "prefilter_status": "pending", "prefilter_reason": "",

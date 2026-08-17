@@ -37,6 +37,10 @@ MEDIA_SUBSCRIPTIONS_FILE = DATA_DIR / "media_subscriptions.enc"
 NOEN_DEBUG_JOB_FILE = DATA_DIR / "noen_debug_job.json"
 NOEN_DEBUG_SCREENSHOT_FILE = DATA_DIR / "noen_debug_latest.png"
 
+# Kommentar-Monitor: robuste Standardgrenzen. Optional über Railway überschreibbar.
+COMMENT_PAGE_TIMEOUT_SECONDS = max(30, int(os.getenv("COMMENT_PAGE_TIMEOUT_SECONDS", "75") or 75))
+COMMENT_REQUEST_TIMEOUT_SECONDS = max(5, int(os.getenv("COMMENT_REQUEST_TIMEOUT_SECONDS", "12") or 12))
+
 
 def create_required_directories() -> None:
     directories = (
