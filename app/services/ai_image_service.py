@@ -52,7 +52,9 @@ class AiImageService:
                 {"role": "developer", "content": developer},
                 {"role": "user", "content": user},
             ],
-            "max_output_tokens": 900,
+            "reasoning": {"effort": "minimal"},
+            "text": {"verbosity": "low"},
+            "max_output_tokens": 2200,
         }
         try:
             response = requests.post(
@@ -95,7 +97,9 @@ class AiImageService:
         payload = {
             "model": self.text_model,
             "input": [{"role": "developer", "content": developer}, {"role": "user", "content": user}],
-            "max_output_tokens": 900,
+            "reasoning": {"effort": "minimal"},
+            "text": {"verbosity": "low"},
+            "max_output_tokens": 2200,
         }
         try:
             response = requests.post(self.responses_url, headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}, json=payload, timeout=90)
