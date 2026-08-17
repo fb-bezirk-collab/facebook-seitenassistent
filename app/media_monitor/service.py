@@ -79,14 +79,20 @@ def _apply_prefilter(items: list[dict]) -> tuple[int, list[dict]]:
     return excluded_count, candidates
 
 
-def _apply_ratings(items: list[dict], candidates: list[dict], should_cancel=None) -> tuple[int, int, str]:
+def _apply_ratings(items: list[dict], candidates: list[dict], should_cancel=None, progress_callback=None) -> tuple[int, int, str]:
     rated_count = 0
     visible_count = 0
     error_message = ""
     by_id = {str(item.get("id")): item for item in items}
 
-    for start in range(0, len(candidates), AI_BATCH_SIZE):
+    total_batches = max(1, (len(candidates) + AI_BATCH_SIZE - 1) // AI_BATCH_SIZE)
+    for batch_index, start in enumerate(range(0, len(candidates), AI_BATCH_SIZE), start=1):
         _check_cancel(should_cancel)
+        if progress_callback:
+            progress_callback(
+                62 + int(((batch_index - 1) / total_batches) * 32),
+                f"KI-Bewertung: Paket {batch_index} von {total_batches}",
+            )
         batch = candidates[start:start + AI_BATCH_SIZE]
         try:
             ratings = rate_items(batch)
@@ -118,13 +124,19 @@ def _apply_ratings(items: list[dict], candidates: list[dict], should_cancel=None
     return rated_count, visible_count, error_message
 
 
-def fetch_current_media(should_cancel=None) -> dict:
+def fetch_current_media(should_cancel=None, progress_callback=None) -> dict:
     source_results: list[dict] = []
     total_new = 0
     successful_sources = 0
 
+    total_sources = len(SOURCE_FETCHERS)
+    if progress_callback:
+        progress_callback(2, f"Quellenabruf wird gestartet (0 von {total_sources})")
+
     # Jede Quelle läuft unabhängig. Ein Fehler bei einer Seite blockiert die anderen nicht.
-    for source_name, fetcher in SOURCE_FETCHERS:
+    for source_index, (source_name, fetcher) in enumerate(SOURCE_FETCHERS, start=1):
+        if progress_callback:
+            progress_callback(2 + int(((source_index - 1) / total_sources) * 53), f"Quelle {source_index} von {total_sources}: {source_name}")
         _check_cancel(should_cancel)
         try:
             fetched = fetcher()
@@ -153,12 +165,20 @@ def fetch_current_media(should_cancel=None) -> dict:
         raise RuntimeError("Keine Medienquelle konnte abgerufen werden. " + details)
 
     _check_cancel(should_cancel)
+    if progress_callback:
+        progress_callback(58, "Quellen abgeschlossen · Regel-Filter wird angewendet")
     items = load_items()
     excluded_count, candidates = _apply_prefilter(items)
     _check_cancel(should_cancel)
-    rated_count, visible_count, rating_error = _apply_ratings(items, candidates, should_cancel)
+    if progress_callback:
+        progress_callback(62, f"KI-Bewertung wird gestartet ({len(candidates)} Meldungen)")
+    rated_count, visible_count, rating_error = _apply_ratings(items, candidates, should_cancel, progress_callback)
     _check_cancel(should_cancel)
+    if progress_callback:
+        progress_callback(96, "Medienübergreifende Themen werden erkannt")
     trend_count, trend_error = apply_trending(items)
+    if progress_callback:
+        progress_callback(99, "Ergebnisse werden gespeichert")
     save_items(items)
 
     source_errors = [entry for entry in source_results if entry["error"]]
