@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import DATA_DIR
+from app.media_monitor.fetchers.common import repair_mojibake
 
 
 MEDIA_MONITOR_FILE = DATA_DIR / "media_monitor.json"
@@ -84,6 +85,21 @@ def _fingerprint(source: str, url: str, title: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def _repair_saved_text(value: Any) -> Any:
+    """Repariert auch bereits gespeicherte Mojibake-Texte rekursiv.
+
+    Damit werden nicht nur neue Fetcher-Texte, sondern auch ältere Titel,
+    KI-Kurzfassungen, Begründungen und Redaktionsfelder korrekt angezeigt.
+    """
+    if isinstance(value, str):
+        return repair_mojibake(value)
+    if isinstance(value, list):
+        return [_repair_saved_text(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _repair_saved_text(item) for key, item in value.items()}
+    return value
+
+
 def load_items() -> list[dict[str, Any]]:
     if not MEDIA_MONITOR_FILE.exists():
         return []
@@ -93,7 +109,7 @@ def load_items() -> list[dict[str, Any]]:
         return []
     if not isinstance(content, list):
         return []
-    return [_ensure_editorial_structure(item) for item in content if isinstance(item, dict)]
+    return [_ensure_editorial_structure(_repair_saved_text(item)) for item in content if isinstance(item, dict)]
 
 
 def save_items(items: list[dict[str, Any]]) -> None:
