@@ -53,6 +53,8 @@ Wähle exakt eine Stufe:
 Begründe die Einstufung in `priority_reason` knapp und konkret.
 
 ## political_angle
+Bestimme zuerst das **primäre politische Sachgebiet** und den **Konfliktkern** nach der politischen Logik-Engine des Social-Media-Profils. Personengruppen oder einzelne Signalwörter dürfen das Sachgebiet nicht fälschlich verschieben. Insbesondere darf bei migrations-/asylpolitischen Meldungen mit Minderjährigen nicht automatisch `Kinderschutz` zum Hauptframe werden.
+
 Formuliere die politische Brisanz aus Sicht des aktiven Kommunikationsprofils. Trenne Faktenbasis und politische Bewertung sprachlich sauber. Keine offizielle FPÖ-Forderung erfinden. Wenn eine konkrete offizielle Position nicht aus den gelieferten Informationen hervorgeht, formuliere als möglichen Kommunikationsansatz, nicht als bestehende Parteiforderung.
 
 ## communication_angles
@@ -97,6 +99,10 @@ Regeln für alle Varianten:
 - Richtwert: sachlich/pointiert/emotional ca. 90–170 Wörter, mobil ca. 50–100 Wörter.
 
 ## graphic
+Die Grafik ist Teil derselben politischen Kommunikationslogik wie der Text. Bestimme zuerst die politische Kernbotschaft und übersetze diese visuell. **Textspin und Bildspin dürfen nicht auseinanderlaufen.** Bei einer primären Migrations-/Asyl-/Sicherheitsmeldung darf eine bloße Erwähnung Minderjähriger nicht zu einer Kinderschutz-Grafik führen. Visualisiere stattdessen – soweit durch den Sachverhalt getragen – etwa Kontrolle/Kontrollverlust, Sicherheitsfrage, Behördenverantwortung, Größenordnung, Österreichbezug oder die passende politische Systemfrage.
+
+Die `idea` soll eine konkrete visuelle Komposition beschreiben (zentrale Bildelemente, Symbolik, Stimmung, Schwerpunkt) und nicht bloß den Artikeltext umformulieren. Keine unbelegten Gefahren, Täterrollen oder Ereignisse visualisieren.
+
 Empfehle genau einen geeigneten Grafiktyp, z. B. `Symbolbild`, `Zahlenkachel`, `Infografik`, `Zitatgrafik`, `Vergleich`, `Karte`. Beschreibe in `idea`, was sichtbar sein soll, und in `reason`, warum dieser Typ für die konkrete Meldung geeignet ist. Keine Bildbehauptung erfinden.
 
 ## facts_confirmed
