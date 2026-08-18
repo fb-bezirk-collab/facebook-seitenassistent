@@ -305,6 +305,12 @@
 
     const normalize = (value) => (value || '').toLocaleLowerCase('de-AT').trim();
 
+    // Der Server entscheidet, welche Ansicht geladen wurde. Diesen Wert nach
+    // jedem Reload auch im Dropdown anzeigen (inkl. der drei Archivansichten).
+    if (selectedStatus && Array.from(statusFilter.options).some(option => option.value === selectedStatus)) {
+        statusFilter.value = selectedStatus;
+    }
+
     const sources = new Map();
     const topics = new Map();
     rows.forEach((row) => {
@@ -397,6 +403,10 @@
         applyFilters();
     });
     resetButton.addEventListener('click', function () {
+        if (archiveMode) {
+            window.location.href = '/media-monitor?view_status=open';
+            return;
+        }
         search.value = '';
         sourceFilter.value = '';
         topicFilter.value = '';
