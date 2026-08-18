@@ -116,6 +116,54 @@ class AiImageService:
             raise AiImageError("Der Bildprompt konnte nicht überarbeitet werden.")
         return result
 
+
+    def refine_brief(self, *, current_brief: str, change_request: str, title: str = "", text: str = "") -> str:
+        """Überarbeitet die für den Menschen sichtbare Bildidee, nicht den technischen Bildprompt."""
+        if not self.api_key:
+            raise AiImageError("OPENAI_API_KEY ist nicht konfiguriert.")
+        current = (current_brief or "").strip()
+        change = (change_request or "").strip()
+        if not current:
+            raise AiImageError("Es gibt noch keine Bildidee zum Überarbeiten.")
+        if not change:
+            raise AiImageError("Bitte einen Änderungswunsch eingeben.")
+        developer = (
+            "Du überarbeitest eine kurze politische Bildidee/Kernaussage für einen Social-Media-Beitrag. "
+            "Setze den Änderungswunsch gezielt um. Bleibe bei der politischen Kernaussage und beschreibe verständlich, "
+            "was das spätere Bild vermitteln bzw. zeigen soll. Erfinde keine Fakten, Zahlen, Personen oder Ereignisse. "
+            "Schreibe keinen technischen Prompt für ein Bildmodell und keine Erklärung. "
+            "Antworte ausschließlich mit der vollständig überarbeiteten deutschsprachigen Bildidee."
+        )
+        user = f"Bisherige Bildidee:\n{current[:4000]}\n\nÄnderungswunsch:\n{change[:2500]}"
+        if title.strip() or text.strip():
+            user += f"\n\nKontext des Beitrags:\nTitel: {title.strip()}\n{text.strip()[:3500]}"
+        payload = {
+            "model": self.text_model,
+            "input": [{"role": "developer", "content": developer}, {"role": "user", "content": user}],
+            "reasoning": {"effort": "minimal"},
+            "text": {"verbosity": "low"},
+            "max_output_tokens": 1800,
+        }
+        try:
+            response = requests.post(
+                self.responses_url,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=90,
+            )
+        except requests.RequestException as exc:
+            raise AiImageError(f"OpenAI ist derzeit nicht erreichbar: {exc}") from exc
+        if response.status_code >= 400:
+            raise AiImageError(self._error_message(response))
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise AiImageError("OpenAI hat keine gültige Antwort geliefert.") from exc
+        result = self._extract_output_text(data).strip().strip('"')
+        if not result:
+            raise AiImageError("Die Bildidee konnte nicht überarbeitet werden.")
+        return result
+
     def generate_image(self, *, prompt: str, style: str = "fotorealistisch") -> str:
         if not self.api_key:
             raise AiImageError("OPENAI_API_KEY ist nicht konfiguriert.")
