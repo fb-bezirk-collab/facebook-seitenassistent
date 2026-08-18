@@ -32,8 +32,12 @@ Ordne 1 bis 3 passende Kategorien zu. Mögliche Kategorien:
 Migration, Asyl, Sicherheit, Kriminalität, Wirtschaft, Teuerung, Energie, EU, Gemeinden,
 Niederösterreich, Bildung, Gesundheit, Pflege, Landwirtschaft, Umwelt, Verkehr, Justiz,
 Steuern, Bürokratie, Transparenz, Soziales, Wohnen, Sonstiges.
-Bestimme die Region als Österreich, Niederösterreich, Wien, Burgenland, Steiermark,
-Oberösterreich, Salzburg, Tirol, Vorarlberg, Kärnten, Bezirk Gänserndorf oder Unklar.
+Bestimme die Region nach dem tatsächlichen Ereignisort der Meldung, nicht nach dem Sitz des Mediums.
+- Liegt der konkrete Vorgang in Österreich, nenne Österreich bzw. das erkennbare Bundesland/den Bezirk.
+- Liegt er im EU-Ausland, nenne Land und – wenn klar erkennbar – Ort/Region, z. B. `Deutschland – Berlin (EU-Ausland)`, `Spanien – Ceuta (EU-Ausland)`.
+- Liegt er außerhalb der EU, nenne Land/Ort mit dem Zusatz `(Ausland)`.
+- Ist der Ort nicht zuverlässig erkennbar, verwende `Unklar`.
+WICHTIG: Ein Ereignis im EU-Ausland kann für Österreich politisch sehr relevant sein und darf deshalb beim Relevanzscore nicht automatisch abgewertet werden. Ereignisort und Österreich-Relevanz sind getrennte Fragen.
 summary: höchstens zwei kurze Sätze.
 reason: ein kurzer Satz, warum die Meldung politisch brauchbar oder wenig brauchbar ist.
 show: true nur bei total >= 6.5 und wenn es keine reine Sport-, Kultur-, Lifestyle-, Society-,
