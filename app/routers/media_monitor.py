@@ -31,9 +31,36 @@ def _format_datetime(value: str | None) -> str:
 
 
 @router.get("/media-monitor", name="medienmonitor")
-def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already_running: int = 0):
+def medienmonitor(
+    request: Request,
+    show_all: int = 0,
+    started: int = 0,
+    already_running: int = 0,
+    archive: str = "",
+    view_status: str = "open",
+):
     all_items = load_items()
-    items = all_items if show_all else [item for item in all_items if item.get("visibility") == "visible"]
+    archive_mode = str(archive or "").strip().lower()
+    if archive_mode not in {"all", "analysis", "used"}:
+        archive_mode = ""
+
+    archived_items = [item for item in all_items if item.get("archived")]
+    current_items = [item for item in all_items if not item.get("archived")]
+
+    if archive_mode == "analysis":
+        items = [item for item in archived_items if item.get("archive_has_analysis")]
+    elif archive_mode == "used":
+        items = [item for item in archived_items if item.get("archive_was_used")]
+    elif archive_mode == "all":
+        items = archived_items
+    else:
+        items = current_items if show_all else [
+            item for item in current_items if item.get("visibility") == "visible"
+        ]
+
+    valid_view_status = {"open", "saved", "approved", "rejected", "trend:trending", "trend:breaking", "all"}
+    if view_status not in valid_view_status:
+        view_status = "open"
     for item in items:
         item["published_display"] = _format_datetime(item.get("published_at"))
         item["fetched_display"] = _format_datetime(item.get("fetched_at"))
@@ -48,6 +75,17 @@ def medienmonitor(request: Request, show_all: int = 0, started: int = 0, already
         context={
             "items": items,
             "all_count": len(all_items),
+            "current_count": len(current_items),
+            "archive_count": len(archived_items),
+            "archive_analysis_count": sum(1 for item in archived_items if item.get("archive_has_analysis")),
+            "archive_used_count": sum(1 for item in archived_items if item.get("archive_was_used")),
+            "archive_mode": archive_mode,
+            "selected_status": (
+                "archive:analysis" if archive_mode == "analysis"
+                else "archive:used" if archive_mode == "used"
+                else "archive:all" if archive_mode == "all"
+                else view_status
+            ),
             "show_all": bool(show_all),
             "job_running": state == "running",
             "job_cancelling": state == "cancel_requested",
