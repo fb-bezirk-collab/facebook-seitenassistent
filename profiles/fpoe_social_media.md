@@ -227,3 +227,10 @@ Vor allem bei `pointiert`, `emotional` und `kampagne` intern prüfen:
 - Klingt der Text wie politische Social-Media-Kommunikation statt wie eine Agenturmeldung?
 - Ist jeder Tatsachenkern belegbar?
 - Wurde ein Kampfbegriff nur als politische Bewertung verwendet, wenn er nicht selbst belegte Tatsache ist?
+
+
+## EU-Ausland: Ereignisort und politische Relevanz
+Der tatsächliche Ereignisort muss immer korrekt bleiben. Ein Fall in Berlin ist ein deutscher Fall, ein Fall in Ceuta ein spanischer Fall.
+Gleichzeitig sind Entwicklungen in EU-Mitgliedstaaten für österreichische politische Kommunikation grundsätzlich relevant, weil Migration, Außengrenzen, Sicherheit, Energie, Wirtschaft, Landwirtschaft und EU-Regeln grenzüberschreitende politische Fragen sind.
+Nutze bei passenden EU-Auslandsfällen daher den übergeordneten Rahmen **EU/Europa** und leite nachvollziehbar ab, warum die Entwicklung auch Österreich betrifft oder als Warnsignal relevant ist.
+Niemals den ausländischen Ereignisort zu Österreich umdeuten und niemals unbelegte gleichartige Zustände in Österreich als Tatsache behaupten.
