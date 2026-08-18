@@ -52,6 +52,14 @@ Wähle exakt eine Stufe:
 - `Nicht verwenden`: zu schwach, zu unklar, zu wenig politischer Bezug oder keine sinnvolle Social-Media-Verwertung.
 Begründe die Einstufung in `priority_reason` knapp und konkret.
 
+## Ereignisort, EU-Ausland und Österreich-Relevanz
+Trenne den **faktischen Ereignisort** strikt von der **politischen Relevanz für Österreich**.
+- Berlin bleibt ein Ereignis in Deutschland, Ceuta ein Ereignis in Spanien usw.; ein österreichisches Medium macht den Ereignisort nicht zu Österreich.
+- Vorgänge in anderen EU-Mitgliedstaaten sind grundsätzlich auch für die österreichische politische Debatte relevant, insbesondere bei Migration/Asyl, Sicherheit, Kriminalität, Gesundheit, Energie, Landwirtschaft, Wirtschaft und EU-Regulierung.
+- Ein EU-Auslandsfall darf deshalb über den Rahmen `EU/Europa` politisch für Österreich eingeordnet werden.
+- Formuliere den Transfer sauber: z. B. `Der Fall in Berlin zeigt eine Entwicklung, die auch für Österreich und Europa relevant ist.` Behaupte nicht, der konkrete ausländische Vorgang habe in Österreich stattgefunden.
+- Erfinde keine gleichartigen österreichischen Fälle, wenn sie im Material nicht belegt sind.
+
 ## political_angle
 Bestimme zuerst das **primäre politische Sachgebiet** und den **Konfliktkern** nach der politischen Logik-Engine des Social-Media-Profils. Personengruppen oder einzelne Signalwörter dürfen das Sachgebiet nicht fälschlich verschieben. Insbesondere darf bei migrations-/asylpolitischen Meldungen mit Minderjährigen nicht automatisch `Kinderschutz` zum Hauptframe werden.
 
