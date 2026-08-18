@@ -170,6 +170,10 @@
             <option value="trend:trending">🔥 Trending</option>
             <option value="trend:breaking">🚨 Breaking</option>
             <option value="all">Alle Status</option>
+            <option disabled>──────────</option>
+            <option value="archive:all">Archiviert</option>
+            <option value="archive:analysis">Archiviert mit Analyse</option>
+            <option value="archive:used">Archiviert mit Nutzung</option>
         </select>
     </section>
     <div class="filter-summary" aria-live="polite">
@@ -177,6 +181,9 @@
         <span class="filter-pill"><strong id="source-count">0</strong> Quellen</span>
         <span class="filter-pill"><strong id="trending-count">0</strong> Trending</span>
         <span class="filter-pill"><strong id="breaking-count">0</strong> Breaking</span>
+        <span class="filter-pill"><strong>{{ archive_count }}</strong> Archiv</span>
+        <span class="filter-pill"><strong>{{ archive_analysis_count }}</strong> analysiert</span>
+        <span class="filter-pill"><strong>{{ archive_used_count }}</strong> genutzt</span>
         <button id="reset-filters" class="reset-filter" type="button">Filter zurücksetzen</button>
     </div>
 
@@ -198,6 +205,9 @@
                         <tr class="media-row"
                             data-source="{{ item.source|e }}"
                             data-status="{{ item.status or 'new' }}"
+                            data-archived="{{ '1' if item.archived else '0' }}"
+                            data-archive-analysis="{{ '1' if item.archive_has_analysis else '0' }}"
+                            data-archive-used="{{ '1' if item.archive_was_used else '0' }}"
                             data-trend="{{ item.trend_level or '' }}"
                             data-topics="{{ ((item.categories or []) + [item.category or '', item.source_category or ''])|join('||')|e }}"
                             data-search="{{ (item.title ~ ' ' ~ (item.ai_summary or '') ~ ' ' ~ (item.teaser or '') ~ ' ' ~ (item.ai_reason or '') ~ ' ' ~ (item.region or '') ~ ' ' ~ (item.source or '') ~ ' ' ~ ((item.categories or [])|join(' ')) ~ ' ' ~ (item.category or '') ~ ' ' ~ (item.source_category or ''))|e }}">
@@ -284,6 +294,8 @@
     const sourceFilter = document.getElementById('source-filter');
     const topicFilter = document.getElementById('topic-filter');
     const statusFilter = document.getElementById('status-filter');
+    const archiveMode = {{ archive_mode | tojson }};
+    const selectedStatus = {{ selected_status | tojson }};
     const resetButton = document.getElementById('reset-filters');
     const noResults = document.getElementById('no-filter-results');
     const resultCount = document.getElementById('result-count');
@@ -321,6 +333,9 @@
         if (wanted === 'all') return true;
         if (wanted.startsWith('trend:')) return row.dataset.trend === wanted.split(':')[1];
         const status = (row.dataset.status || 'new').toLowerCase();
+        if (wanted === 'archive:all') return row.dataset.archived === '1';
+        if (wanted === 'archive:analysis') return row.dataset.archiveAnalysis === '1';
+        if (wanted === 'archive:used') return row.dataset.archiveUsed === '1';
         if (wanted === 'open') return status === 'new' || status === 'open' || status === 'pending';
         return status === wanted;
     }
@@ -361,7 +376,26 @@
     search.addEventListener('input', applyFilters);
     sourceFilter.addEventListener('change', applyFilters);
     topicFilter.addEventListener('change', applyFilters);
-    statusFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', () => {
+        const wanted = statusFilter.value;
+        if (wanted === 'archive:all') {
+            window.location.href = '/media-monitor?archive=all';
+            return;
+        }
+        if (wanted === 'archive:analysis') {
+            window.location.href = '/media-monitor?archive=analysis';
+            return;
+        }
+        if (wanted === 'archive:used') {
+            window.location.href = '/media-monitor?archive=used';
+            return;
+        }
+        if (archiveMode) {
+            window.location.href = `/media-monitor?view_status=${encodeURIComponent(wanted)}`;
+            return;
+        }
+        applyFilters();
+    });
     resetButton.addEventListener('click', function () {
         search.value = '';
         sourceFilter.value = '';
