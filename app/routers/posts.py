@@ -281,8 +281,8 @@ async def entwurf_ki_bild_prompt_ueberarbeiten(request: Request, post_id: str):
     except ValueError:
         payload = {}
     try:
-        prompt = AiImageService().refine_prompt(
-            current_prompt=str(payload.get("prompt") or ""),
+        prompt = AiImageService().refine_brief(
+            current_brief=str(payload.get("image_brief") or ""),
             change_request=str(payload.get("change_request") or ""),
             title=str(payload.get("title") or draft.title),
             text=str(payload.get("text") or draft.text),
@@ -301,10 +301,26 @@ async def entwurf_ki_bild_erzeugen(request: Request, post_id: str):
         payload = await request.json()
     except ValueError:
         payload = {}
-    prompt = str(payload.get("prompt") or "").strip()
+    image_brief = str(payload.get("image_brief") or "").strip()
     style = str(payload.get("style") or "fotorealistisch").strip().lower()
+    if not image_brief:
+        return JSONResponse({"ok": False, "error": "Bitte zuerst eine Bildidee / Kernaussage eingeben."}, status_code=400)
+    title = str(payload.get("title") or draft.title)
+    text = str(payload.get("text") or draft.text)
+    graphic = draft.source_meta.get("graphic") if isinstance(draft.source_meta, dict) else None
+    source_hint = ""
+    if isinstance(graphic, dict):
+        source_hint = " ".join(str(graphic.get(key) or "").strip() for key in ("type", "idea", "reason")).strip()
     try:
-        image_path = AiImageService().generate_image(prompt=prompt, style=style)
+        service = AiImageService()
+        technical_prompt = service.suggest_prompt(
+            title=title,
+            text=text,
+            source_url=draft.source_url,
+            source_hint=source_hint,
+            image_brief=image_brief,
+        )
+        image_path = service.generate_image(prompt=technical_prompt, style=style)
         updated = post_service.add_image_to_draft(post_id, image_path)
         if not updated:
             raise AiImageError("Das Bild konnte dem Entwurf nicht zugeordnet werden.")
