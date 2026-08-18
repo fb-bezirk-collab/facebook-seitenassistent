@@ -225,18 +225,13 @@
 
                 <div class="ai-image-panel" id="ai-image-panel">
                     <h3>KI-Bild für diesen Beitrag</h3>
-                    <p class="small">Beschreibe zuerst in einfachen Worten, was die Grafik aussagen soll. Die KI macht daraus einen fertigen Bildprompt. Danach kannst du den Prompt direkt ändern oder der KI weitere Änderungswünsche geben.</p>
+                    <p class="small">Die Bildidee / Kernaussage ist die Grundlage für das KI-Bild. Wenn sie dir gefällt, kannst du das Bild direkt erstellen. Wenn du etwas ändern möchtest, schreibe deinen Wunsch darunter und lass die Bildidee überarbeiten.</p>
                     <label for="ai-image-brief">Deine Bildidee / Kernaussage</label>
-                    <textarea id="ai-image-brief" placeholder="Zum Beispiel: Zahlen und Kernaussage des Beitrags, gewünschte Wirkung, was unbedingt im Bild vorkommen soll …">{% if draft.source_meta and draft.source_meta.graphic and draft.source_meta.graphic.idea %}{{ draft.source_meta.graphic.idea }}{% endif %}</textarea>
-                    <div class="ai-image-actions">
-                        <button type="button" class="secondary" id="ai-image-suggest">Prompt-Vorschlag mit KI erstellen</button>
-                    </div>
-                    <label for="ai-image-prompt" style="margin-top:14px">Generierter Bildprompt</label>
-                    <textarea id="ai-image-prompt" placeholder="Hier erscheint der KI-Prompt. Du kannst ihn auch direkt selbst bearbeiten."></textarea>
-                    <label for="ai-image-change" style="margin-top:12px">Änderungswunsch an die KI</label>
+                    <textarea id="ai-image-brief" placeholder="Was soll das Bild politisch aussagen und welche Wirkung soll es haben?">{% if draft.source_meta and draft.source_meta.graphic and draft.source_meta.graphic.idea %}{{ draft.source_meta.graphic.idea }}{% endif %}</textarea>
+                    <label for="ai-image-change" style="margin-top:12px">Änderungswunsch an die KI <span class="small">(optional)</span></label>
                     <textarea id="ai-image-change" placeholder="Zum Beispiel: Gute Idee, aber Österreich stärker hervorheben, keine Personen zeigen und die Stimmung dramatischer machen."></textarea>
                     <div class="ai-image-actions">
-                        <button type="button" class="secondary" id="ai-image-refine">Prompt überarbeiten</button>
+                        <button type="button" class="secondary" id="ai-image-refine">Bildidee überarbeiten</button>
                     </div>
                     <label style="margin-top:12px">Bildstil</label>
                     <div class="style-options">
@@ -529,10 +524,8 @@
 
 <script>
     const aiImageBrief = document.getElementById('ai-image-brief');
-    const aiImagePrompt = document.getElementById('ai-image-prompt');
     const aiImageChange = document.getElementById('ai-image-change');
     const aiImageStatus = document.getElementById('ai-image-status');
-    const aiImageSuggest = document.getElementById('ai-image-suggest');
     const aiImageGenerate = document.getElementById('ai-image-generate');
     const aiImageRefine = document.getElementById('ai-image-refine');
 
@@ -549,42 +542,17 @@
         }
     }
 
-    aiImageSuggest?.addEventListener('click', async () => {
-        aiImageSuggest.disabled = true;
-        setAiImageStatus('Bildprompt wird vorgeschlagen …');
-        try {
-            const response = await fetch('/drafts/{{ draft.id }}/ai-image/prompt', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    title: document.getElementById('title')?.value || {{ draft.title | tojson }},
-                    text: document.getElementById('text')?.value || {{ draft.text | tojson }},
-                    image_brief: aiImageBrief?.value || ''
-                })
-            });
-            const payload = await parseJsonResponse(response);
-            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Prompt konnte nicht erstellt werden.');
-            aiImagePrompt.value = payload.prompt || '';
-            setAiImageStatus('Prompt-Vorschlag erstellt. Du kannst ihn jetzt noch ändern.');
-        } catch (error) {
-            setAiImageStatus(error.message || String(error), true);
-        } finally { aiImageSuggest.disabled = false; }
-    });
-
     aiImageRefine?.addEventListener('click', async () => {
-        const prompt = aiImagePrompt?.value?.trim() || '';
         const changeRequest = aiImageChange?.value?.trim() || '';
-        if (!prompt) { setAiImageStatus('Bitte zuerst einen Bildprompt erstellen oder eingeben.', true); return; }
         if (!changeRequest) { setAiImageStatus('Bitte zuerst deinen Änderungswunsch eingeben.', true); return; }
         aiImageRefine.disabled = true;
-        aiImageSuggest.disabled = true;
-        setAiImageStatus('Bildprompt wird nach deinem Wunsch überarbeitet …');
+        setAiImageStatus('Bildidee wird nach deinem Wunsch überarbeitet …');
         try {
             const response = await fetch('/drafts/{{ draft.id }}/ai-image/refine', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    prompt,
+                    image_brief: aiImageBrief?.value?.trim() || '',
                     change_request: changeRequest,
                     title: document.getElementById('title')?.value || {{ draft.title | tojson }},
                     text: document.getElementById('text')?.value || {{ draft.text | tojson }}
@@ -592,27 +560,25 @@
             });
             const payload = await parseJsonResponse(response);
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Prompt konnte nicht überarbeitet werden.');
-            aiImagePrompt.value = payload.prompt || '';
+            aiImageBrief.value = payload.prompt || aiImageBrief.value;
             aiImageChange.value = '';
-            setAiImageStatus('Prompt überarbeitet. Du kannst weitere Änderungen wünschen oder jetzt das KI-Bild erstellen.');
+            setAiImageStatus('Bildidee überarbeitet. Du kannst jetzt das KI-Bild erstellen oder weitere Änderungen wünschen.');
         } catch (error) {
             setAiImageStatus(error.message || String(error), true);
-        } finally { aiImageRefine.disabled = false; aiImageSuggest.disabled = false; }
+        } finally { aiImageRefine.disabled = false; }
     });
 
     aiImageGenerate?.addEventListener('click', async () => {
-        const prompt = aiImagePrompt?.value?.trim() || '';
         if (!prompt) { setAiImageStatus('Bitte zuerst einen Bildprompt eingeben oder vorschlagen lassen.', true); return; }
         const style = document.querySelector('input[name="ai_image_style"]:checked')?.value || 'fotorealistisch';
         aiImageGenerate.disabled = true;
-        aiImageSuggest.disabled = true;
         if (aiImageRefine) aiImageRefine.disabled = true;
         setAiImageStatus('KI-Bild wird erstellt. Das kann etwas dauern …');
         try {
             const response = await fetch('/drafts/{{ draft.id }}/ai-image/generate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({prompt, style})
+                body: JSON.stringify({image_brief: imageBrief, style, title: document.getElementById('title')?.value || {{ draft.title | tojson }}, text: document.getElementById('text')?.value || {{ draft.text | tojson }}})
             });
             const payload = await parseJsonResponse(response);
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Bild konnte nicht erstellt werden.');
@@ -621,7 +587,6 @@
         } catch (error) {
             setAiImageStatus(error.message || String(error), true);
             aiImageGenerate.disabled = false;
-            aiImageSuggest.disabled = false;
             if (aiImageRefine) aiImageRefine.disabled = false;
         }
     });
