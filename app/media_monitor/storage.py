@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +11,69 @@ from app.media_monitor.fetchers.common import clean_text, repair_mojibake
 
 
 MEDIA_MONITOR_FILE = DATA_DIR / "media_monitor.json"
+
+
+
+ARCHIVE_AFTER_DAYS = 7
+
+
+def _parse_item_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _archive_reference_time(item: dict[str, Any]) -> datetime | None:
+    """Veröffentlichungsdatum hat Vorrang; Fetched-at ist nur Fallback."""
+    return _parse_item_datetime(item.get("published_at")) or _parse_item_datetime(item.get("fetched_at"))
+
+
+def _has_analysis(item: dict[str, Any]) -> bool:
+    if str(item.get("analysis_status") or "").lower() == "done":
+        return True
+    analysis = item.get("analysis")
+    if isinstance(analysis, dict) and any(bool(v) for v in analysis.values()):
+        return True
+    editorial = item.get("editorial")
+    if isinstance(editorial, dict):
+        return bool(
+            editorial.get("political_angle")
+            or editorial.get("priority_reason")
+            or editorial.get("facts_confirmed")
+        )
+    return False
+
+
+def _was_used(item: dict[str, Any]) -> bool:
+    return bool(
+        item.get("created_post")
+        or str(item.get("draft_id") or "").strip()
+        or str(item.get("share_draft_id") or "").strip()
+        or item.get("draft_created_at")
+        or item.get("share_draft_created_at")
+        or str(item.get("workflow_status") or "") in {"draft_created", "share_draft_created", "published"}
+    )
+
+
+def _apply_archive_metadata(item: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    reference = _archive_reference_time(item)
+    should_archive = bool(reference and reference < now - timedelta(days=ARCHIVE_AFTER_DAYS))
+    was_archived = bool(item.get("archived"))
+    item["archived"] = should_archive
+    item["archive_has_analysis"] = _has_analysis(item)
+    item["archive_was_used"] = _was_used(item)
+    if should_archive and not was_archived:
+        item["archived_at"] = now.isoformat()
+    elif not should_archive:
+        item["archived_at"] = None
+    return item
 
 
 def _editorial_defaults() -> dict[str, Any]:
@@ -109,8 +172,12 @@ def load_items() -> list[dict[str, Any]]:
         return []
     if not isinstance(content, list):
         return []
-    repaired = [_ensure_editorial_structure(_repair_saved_text(item)) for item in content if isinstance(item, dict)]
-    # Reparaturen dauerhaft speichern, damit alte Mojibake-Werte nicht bei jedem
+    now = datetime.now(timezone.utc)
+    repaired = [
+        _apply_archive_metadata(_ensure_editorial_structure(_repair_saved_text(item)), now=now)
+        for item in content if isinstance(item, dict)
+    ]
+    # Reparaturen und Archiv-Metadaten dauerhaft speichern, damit alte Werte nicht bei jedem
     # Seitenaufruf erneut aus dem Volume gelesen werden.
     if repaired != content:
         try:
@@ -182,6 +249,7 @@ def merge_fetched_items(fetched_items: list[dict[str, Any]]) -> tuple[list[dict[
             "notes": "", "created_post": False, "draft_id": "", "draft_created_at": None, "workflow_status": "analysis_pending",
             "analysis_status": "", "analysis_error": "", "analysis_updated_at": None,
             "analysis_content_mode": "", "analysis_article_chars": 0, "analysis": {},
+            "archived": False, "archived_at": None, "archive_has_analysis": False, "archive_was_used": False,
             "editorial": _editorial_defaults(),
         }
         existing.append(item)
