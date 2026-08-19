@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from app.media_monitor.fetchers.generic import fetch_homepage_source
 
 SOURCE_NAME="Die Presse"
+PRESSE_DEBUG_TARGET=os.getenv("PRESSE_DEBUG_TARGET","41178205").strip()
 DEFAULT_URL="https://www.diepresse.com/"
 DEFAULT_INTERIOR_URL="https://www.diepresse.com/innenpolitik"
 DEFAULT_FOREIGN_URL="https://www.diepresse.com/ausland"
@@ -26,6 +27,10 @@ def _sort_value(item:dict[str,Any])->datetime:
         return value.astimezone(timezone.utc)
     except ValueError: return datetime.min.replace(tzinfo=timezone.utc)
 
+def _debug_target_in_items(items:list[dict[str,Any]],target:str=PRESSE_DEBUG_TARGET)->bool:
+    if not target: return False
+    return any(target in str(item.get("url") or "") for item in items)
+
 def fetch_presse(limit:int=40)->list[dict[str,Any]]:
     wanted=max(1,min(limit,100)); per_channel=max(40,wanted)
     specs=[
@@ -39,6 +44,11 @@ def fetch_presse(limit:int=40)->list[dict[str,Any]]:
     for label,source_url in specs:
         try:
             items=fetch_homepage_source(source_name=SOURCE_NAME,source_url=source_url,base_url="https://www.diepresse.com/",article_url_predicate=_is_article_url,limit=per_channel,enrich_dates=True)
+            print(
+                f"PRESSE DEBUG | Kanal={label} | erkannt={len(items)} | "
+                f"Target {PRESSE_DEBUG_TARGET} gefunden={_debug_target_in_items(items)}",
+                flush=True,
+            )
         except Exception as exc:
             errors.append(f"{label}: {exc}"); print(f"Die Presse – {label} fehlgeschlagen: {exc}",flush=True); continue
         for item in items:
@@ -49,5 +59,23 @@ def fetch_presse(limit:int=40)->list[dict[str,Any]]:
             else:
                 for key in ("title","teaser","image_url","published_at","source_category"):
                     if not by_url[url].get(key) and item.get(key): by_url[url][key]=item[key]
+    print(
+        f"PRESSE DEBUG | nach Deduplizierung={len(by_url)} | "
+        f"Target {PRESSE_DEBUG_TARGET} vorhanden={_debug_target_in_items(list(by_url.values()))}",
+        flush=True,
+    )
     if not by_url: raise RuntimeError("Die Presse konnte nicht gelesen werden: "+("; ".join(errors) or "keine Artikel gefunden"))
-    merged=list(by_url.values()); merged.sort(key=_sort_value,reverse=True); return merged[:wanted]
+    merged=list(by_url.values())
+    merged.sort(key=_sort_value,reverse=True)
+    final_items=merged[:wanted]
+    target_rank=next(
+        (idx+1 for idx,item in enumerate(merged) if PRESSE_DEBUG_TARGET in str(item.get("url") or "")),
+        None,
+    )
+    print(
+        f"PRESSE DEBUG | final={len(final_items)} (Limit={wanted}) | "
+        f"Target {PRESSE_DEBUG_TARGET} Rang={target_rank or 'nicht vorhanden'} | "
+        f"in final={_debug_target_in_items(final_items)}",
+        flush=True,
+    )
+    return final_items

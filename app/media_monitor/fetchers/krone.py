@@ -23,6 +23,13 @@ DEFAULT_POLITICS_URL = "https://www.krone.at/politik"
 DEFAULT_POLITICS_ARCHIVE_URL = "https://www.krone.at/politik/archiv/2"
 DEFAULT_INTERIOR_URL = "https://www.krone.at/innenpolitik"
 DEFAULT_INTERIOR_ARCHIVE_URL = "https://www.krone.at/innenpolitik/archiv/2"
+KRONE_DEBUG_TARGET = os.getenv("KRONE_DEBUG_TARGET", "4259228").strip()
+
+def _debug_target_in_items(items: list[dict[str, Any]], target: str = KRONE_DEBUG_TARGET) -> bool:
+    if not target:
+        return False
+    return any(target in str(item.get("url") or "") for item in items)
+
 REQUEST_TIMEOUT_SECONDS = 25
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -292,7 +299,13 @@ def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
     for label, url, kind in specs:
         try:
             batch = _fetch_rss_items(per_channel) if kind == "rss" else _fetch_listing_items(url, per_channel)
-            if batch: batches.append(batch[:per_channel])
+            print(
+                f"KRONE DEBUG | Kanal={label} | erkannt={len(batch)} | "
+                f"Target {KRONE_DEBUG_TARGET} gefunden={_debug_target_in_items(batch)}",
+                flush=True,
+            )
+            if batch:
+                batches.append(batch[:per_channel])
         except Exception as exc:
             errors.append(f"{label}: {exc}")
             print(f"Krone-{label}-Abruf fehlgeschlagen: {exc}", flush=True)
@@ -307,10 +320,20 @@ def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
             else:
                 for key in ("title","teaser","image_url","published_at","source_category"):
                     if not by_url[url].get(key) and item.get(key): by_url[url][key]=item[key]
+    print(
+        f"KRONE DEBUG | nach Deduplizierung={len(ordered_urls)} | "
+        f"Target {KRONE_DEBUG_TARGET} vorhanden={any(KRONE_DEBUG_TARGET in url for url in ordered_urls)}",
+        flush=True,
+    )
     if not ordered_urls:
         raise RuntimeError("Krone konnte nicht gelesen werden: " + ("; ".join(errors) or "keine Meldungen gefunden"))
 
     candidate_urls=ordered_urls[:240]
+    print(
+        f"KRONE DEBUG | Detailkandidaten={len(candidate_urls)} | "
+        f"Target {KRONE_DEBUG_TARGET} in Kandidaten={any(KRONE_DEBUG_TARGET in url for url in candidate_urls)}",
+        flush=True,
+    )
     enriched_by_url={}
     with ThreadPoolExecutor(max_workers=10) as pool:
         futures={pool.submit(_enrich_article,by_url[url]):url for url in candidate_urls}
@@ -319,5 +342,21 @@ def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
             try: enriched_by_url[url]=future.result()
             except Exception: enriched_by_url[url]=by_url[url]
     merged=[enriched_by_url.get(url,by_url[url]) for url in candidate_urls]
+    print(
+        f"KRONE DEBUG | nach Detailabruf={len(merged)} | "
+        f"Target {KRONE_DEBUG_TARGET} vorhanden={_debug_target_in_items(merged)}",
+        flush=True,
+    )
     merged.sort(key=_published_sort_value,reverse=True)
-    return merged[:wanted]
+    final_items=merged[:wanted]
+    target_rank = next(
+        (idx + 1 for idx, item in enumerate(merged) if KRONE_DEBUG_TARGET in str(item.get("url") or "")),
+        None,
+    )
+    print(
+        f"KRONE DEBUG | final={len(final_items)} (Limit={wanted}) | "
+        f"Target {KRONE_DEBUG_TARGET} Rang={target_rank or 'nicht vorhanden'} | "
+        f"in final={_debug_target_in_items(final_items)}",
+        flush=True,
+    )
+    return final_items
