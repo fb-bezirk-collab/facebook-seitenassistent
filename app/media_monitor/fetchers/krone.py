@@ -21,6 +21,8 @@ DEFAULT_RSS_URL = "https://api.krone.at/v1/rss/rssfeed-google.xml?id=2311992"
 DEFAULT_HOMEPAGE_URL = "https://www.krone.at/"
 DEFAULT_POLITICS_URL = "https://www.krone.at/politik"
 DEFAULT_POLITICS_ARCHIVE_URL = "https://www.krone.at/politik/archiv/2"
+DEFAULT_INTERIOR_URL = "https://www.krone.at/innenpolitik"
+DEFAULT_INTERIOR_ARCHIVE_URL = "https://www.krone.at/innenpolitik/archiv/2"
 REQUEST_TIMEOUT_SECONDS = 25
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -270,74 +272,52 @@ def _published_sort_value(item: dict[str, Any]) -> datetime:
 
 
 def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
-    """Krone-spezifische Discovery über Politik, Politik-Archiv, Startseite und RSS.
-
-    Die Übersichtsseiten dienen nur zur Entdeckung. Für die entdeckten Artikel
-    werden anschließend parallel die Artikelseiten gelesen, damit Veröffentlichungs-
-    datum und -zeit zuverlässig vorhanden sind. Dadurch werden auch Krone+-Artikel
-    erfasst, deren öffentlich sichtbarer Teaser auf einer Krone-Liste steht.
-    """
+    """Krone-Discovery mit eigenem Kontingent je politischem Einstiegspunkt."""
     wanted = max(1, min(limit, 100))
-    discovery_limit = max(70, wanted * 2)
-
+    per_channel = max(50, wanted)
     homepage_url = os.getenv("KRONE_HOMEPAGE_URL", DEFAULT_HOMEPAGE_URL).strip() or DEFAULT_HOMEPAGE_URL
     politics_url = os.getenv("KRONE_POLITICS_URL", DEFAULT_POLITICS_URL).strip() or DEFAULT_POLITICS_URL
-    archive_url = os.getenv("KRONE_POLITICS_ARCHIVE_URL", DEFAULT_POLITICS_ARCHIVE_URL).strip() or DEFAULT_POLITICS_ARCHIVE_URL
-
-    batches: list[list[dict[str, Any]]] = []
-    errors: list[str] = []
-
-    for label, loader in (
-        ("Politik", lambda: _fetch_listing_items(politics_url, discovery_limit)),
-        ("Politik-Archiv", lambda: _fetch_listing_items(archive_url, discovery_limit)),
-        ("Startseite", lambda: _fetch_listing_items(homepage_url, discovery_limit)),
-        ("RSS", lambda: _fetch_rss_items(discovery_limit)),
-    ):
+    interior_url = os.getenv("KRONE_INTERIOR_URL", DEFAULT_INTERIOR_URL).strip() or DEFAULT_INTERIOR_URL
+    specs = [
+        ("Innenpolitik", interior_url, "page"),
+        ("Innenpolitik-Archiv 2", os.getenv("KRONE_INTERIOR_ARCHIVE_URL", DEFAULT_INTERIOR_ARCHIVE_URL).strip() or DEFAULT_INTERIOR_ARCHIVE_URL, "page"),
+        ("Innenpolitik-Archiv 3", "https://www.krone.at/innenpolitik/archiv/3", "page"),
+        ("Politik", politics_url, "page"),
+        ("Politik-Archiv 2", os.getenv("KRONE_POLITICS_ARCHIVE_URL", DEFAULT_POLITICS_ARCHIVE_URL).strip() or DEFAULT_POLITICS_ARCHIVE_URL, "page"),
+        ("Politik-Archiv 3", "https://www.krone.at/politik/archiv/3", "page"),
+        ("RSS", "", "rss"),
+        ("Startseite", homepage_url, "page"),
+    ]
+    batches, errors = [], []
+    for label, url, kind in specs:
         try:
-            batch = loader()
-            if batch:
-                batches.append(batch)
+            batch = _fetch_rss_items(per_channel) if kind == "rss" else _fetch_listing_items(url, per_channel)
+            if batch: batches.append(batch[:per_channel])
         except Exception as exc:
             errors.append(f"{label}: {exc}")
             print(f"Krone-{label}-Abruf fehlgeschlagen: {exc}", flush=True)
 
-    by_url: dict[str, dict[str, Any]] = {}
-    ordered_urls: list[str] = []
+    by_url, ordered_urls = {}, []
     for batch in batches:
         for item in batch:
             url = str(item.get("url") or "").split("#", 1)[0].rstrip("/").strip()
-            if not url:
-                continue
-            existing = by_url.get(url)
-            if existing is None:
-                copy = dict(item)
-                copy["url"] = url
-                by_url[url] = copy
-                ordered_urls.append(url)
+            if not url: continue
+            if url not in by_url:
+                copy=dict(item); copy["url"]=url; by_url[url]=copy; ordered_urls.append(url)
             else:
-                for key in ("title", "teaser", "image_url", "published_at", "source_category"):
-                    if not existing.get(key) and item.get(key):
-                        existing[key] = item[key]
-
+                for key in ("title","teaser","image_url","published_at","source_category"):
+                    if not by_url[url].get(key) and item.get(key): by_url[url][key]=item[key]
     if not ordered_urls:
-        detail = "; ".join(errors) if errors else "keine Meldungen gefunden"
-        raise RuntimeError(f"Krone konnte nicht gelesen werden: {detail}")
+        raise RuntimeError("Krone konnte nicht gelesen werden: " + ("; ".join(errors) or "keine Meldungen gefunden"))
 
-    # Nur eine begrenzte, aber ausreichend breite Menge detailliert laden.
-    # Parallelisierung hält den gesamten Medienabruf trotz der Artikeldetails kompakt.
-    candidate_urls = ordered_urls[:max(80, wanted * 2)]
-    enriched_by_url: dict[str, dict[str, Any]] = {}
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        future_map = {pool.submit(_enrich_article, by_url[url]): url for url in candidate_urls}
-        for future in as_completed(future_map):
-            url = future_map[future]
-            try:
-                enriched_by_url[url] = future.result()
-            except Exception:
-                enriched_by_url[url] = by_url[url]
-
-    merged = [enriched_by_url.get(url, by_url[url]) for url in candidate_urls]
-    merged.sort(key=_published_sort_value, reverse=True)
-
+    candidate_urls=ordered_urls[:240]
+    enriched_by_url={}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures={pool.submit(_enrich_article,by_url[url]):url for url in candidate_urls}
+        for future in as_completed(futures):
+            url=futures[future]
+            try: enriched_by_url[url]=future.result()
+            except Exception: enriched_by_url[url]=by_url[url]
+    merged=[enriched_by_url.get(url,by_url[url]) for url in candidate_urls]
+    merged.sort(key=_published_sort_value,reverse=True)
     return merged[:wanted]
