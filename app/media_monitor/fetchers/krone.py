@@ -4,6 +4,7 @@ import html
 import os
 import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -11,13 +12,15 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from app.media_monitor.fetchers.generic import fetch_homepage_source
+from app.media_monitor.fetchers.common import extract_article_published_at, parse_homepage_articles
+from app.media_monitor.fetchers.generic import HEADERS as GENERIC_HEADERS, response_text
 
 
 SOURCE_NAME = "Krone"
 DEFAULT_RSS_URL = "https://api.krone.at/v1/rss/rssfeed-google.xml?id=2311992"
 DEFAULT_HOMEPAGE_URL = "https://www.krone.at/"
 DEFAULT_POLITICS_URL = "https://www.krone.at/politik"
+DEFAULT_POLITICS_ARCHIVE_URL = "https://www.krone.at/politik/archiv/2"
 REQUEST_TIMEOUT_SECONDS = 25
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -182,30 +185,113 @@ def _fetch_rss_items(limit: int) -> list[dict[str, Any]]:
         raise RuntimeError("Der Krone-RSS-Feed konnte nicht gelesen werden.") from exc
 
 
-def _fetch_page_items(url: str, limit: int) -> list[dict[str, Any]]:
-    return fetch_homepage_source(
+def _fetch_listing_items(url: str, limit: int) -> list[dict[str, Any]]:
+    """Liest eine Krone-Übersichts-/Archivseite und extrahiert echte Artikel-URLs."""
+    response = requests.get(
+        url,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        headers=GENERIC_HEADERS,
+    )
+    response.raise_for_status()
+    html_text = response_text(response)
+    if not html_text.strip():
+        raise RuntimeError(f"Krone-Seite hat keine Daten geliefert: {url}")
+
+    items = parse_homepage_articles(
+        html_text,
         source_name=SOURCE_NAME,
-        source_url=url,
         base_url="https://www.krone.at/",
         article_url_predicate=_is_krone_article_url,
-        limit=max(1, min(limit, 100)),
-        enrich_dates=False,
+        limit=max(1, min(limit, 120)),
     )
+    if not items:
+        raise RuntimeError(f"Auf der Krone-Seite wurden keine Artikel gefunden: {url}")
+    return items
+
+
+def _extract_meta(html_text: str, prop: str) -> str:
+    patterns = (
+        rf'<meta[^>]+property=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']',
+        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(prop)}["\']',
+        rf'<meta[^>]+name=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']',
+        rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']{re.escape(prop)}["\']',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, html_text, flags=re.I)
+        if match:
+            return _clean_text(match.group(1))
+    return ""
+
+
+def _enrich_article(item: dict[str, Any]) -> dict[str, Any]:
+    """Holt für einen entdeckten Krone-Artikel Datum/Zeit und öffentliche Metadaten."""
+    enriched = dict(item)
+    url = str(enriched.get("url") or "").strip()
+    if not url:
+        return enriched
+    try:
+        response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS, headers=GENERIC_HEADERS)
+        response.raise_for_status()
+        html_text = response_text(response)
+
+        published = extract_article_published_at(html_text)
+        if published:
+            enriched["published_at"] = published
+
+        title = _extract_meta(html_text, "og:title")
+        description = _extract_meta(html_text, "og:description")
+        image = _extract_meta(html_text, "og:image")
+        if title:
+            enriched["title"] = title
+        if description:
+            enriched["teaser"] = description
+        if image:
+            enriched["image_url"] = image
+
+        # Krone führt das Ressort auf der Artikelseite; JSON-LD/Meta bleibt
+        # je nach Seitentyp unterschiedlich. Der bestehende Listing-Wert bleibt
+        # deshalb als Fallback erhalten.
+    except Exception as exc:
+        print(f"Krone-Artikeldetails konnten nicht gelesen werden ({url}): {exc}", flush=True)
+    return enriched
+
+
+def _published_sort_value(item: dict[str, Any]) -> datetime:
+    raw = str(item.get("published_at") or "").strip()
+    if not raw:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
-    """Entdeckt Krone-Meldungen über Politikseite, Startseite und RSS."""
+    """Krone-spezifische Discovery über Politik, Politik-Archiv, Startseite und RSS.
+
+    Die Übersichtsseiten dienen nur zur Entdeckung. Für die entdeckten Artikel
+    werden anschließend parallel die Artikelseiten gelesen, damit Veröffentlichungs-
+    datum und -zeit zuverlässig vorhanden sind. Dadurch werden auch Krone+-Artikel
+    erfasst, deren öffentlich sichtbarer Teaser auf einer Krone-Liste steht.
+    """
     wanted = max(1, min(limit, 100))
+    discovery_limit = max(70, wanted * 2)
+
     homepage_url = os.getenv("KRONE_HOMEPAGE_URL", DEFAULT_HOMEPAGE_URL).strip() or DEFAULT_HOMEPAGE_URL
     politics_url = os.getenv("KRONE_POLITICS_URL", DEFAULT_POLITICS_URL).strip() or DEFAULT_POLITICS_URL
+    archive_url = os.getenv("KRONE_POLITICS_ARCHIVE_URL", DEFAULT_POLITICS_ARCHIVE_URL).strip() or DEFAULT_POLITICS_ARCHIVE_URL
 
     batches: list[list[dict[str, Any]]] = []
     errors: list[str] = []
 
     for label, loader in (
-        ("Politik", lambda: _fetch_page_items(politics_url, wanted)),
-        ("Startseite", lambda: _fetch_page_items(homepage_url, wanted)),
-        ("RSS", lambda: _fetch_rss_items(wanted)),
+        ("Politik", lambda: _fetch_listing_items(politics_url, discovery_limit)),
+        ("Politik-Archiv", lambda: _fetch_listing_items(archive_url, discovery_limit)),
+        ("Startseite", lambda: _fetch_listing_items(homepage_url, discovery_limit)),
+        ("RSS", lambda: _fetch_rss_items(discovery_limit)),
     ):
         try:
             batch = loader()
@@ -215,11 +301,11 @@ def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
             errors.append(f"{label}: {exc}")
             print(f"Krone-{label}-Abruf fehlgeschlagen: {exc}", flush=True)
 
-    merged: list[dict[str, Any]] = []
     by_url: dict[str, dict[str, Any]] = {}
+    ordered_urls: list[str] = []
     for batch in batches:
         for item in batch:
-            url = str(item.get("url") or "").split("#", 1)[0].strip()
+            url = str(item.get("url") or "").split("#", 1)[0].rstrip("/").strip()
             if not url:
                 continue
             existing = by_url.get(url)
@@ -227,15 +313,31 @@ def fetch_krone(limit: int = 40) -> list[dict[str, Any]]:
                 copy = dict(item)
                 copy["url"] = url
                 by_url[url] = copy
-                merged.append(copy)
+                ordered_urls.append(url)
             else:
                 for key in ("title", "teaser", "image_url", "published_at", "source_category"):
                     if not existing.get(key) and item.get(key):
                         existing[key] = item[key]
 
-    if not merged:
+    if not ordered_urls:
         detail = "; ".join(errors) if errors else "keine Meldungen gefunden"
-        raise RuntimeError(
-            f"Krone konnte über Politikseite, Startseite und RSS nicht gelesen werden: {detail}"
-        )
+        raise RuntimeError(f"Krone konnte nicht gelesen werden: {detail}")
+
+    # Nur eine begrenzte, aber ausreichend breite Menge detailliert laden.
+    # Parallelisierung hält den gesamten Medienabruf trotz der Artikeldetails kompakt.
+    candidate_urls = ordered_urls[:max(80, wanted * 2)]
+    enriched_by_url: dict[str, dict[str, Any]] = {}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        future_map = {pool.submit(_enrich_article, by_url[url]): url for url in candidate_urls}
+        for future in as_completed(future_map):
+            url = future_map[future]
+            try:
+                enriched_by_url[url] = future.result()
+            except Exception:
+                enriched_by_url[url] = by_url[url]
+
+    merged = [enriched_by_url.get(url, by_url[url]) for url in candidate_urls]
+    merged.sort(key=_published_sort_value, reverse=True)
+
     return merged[:wanted]
