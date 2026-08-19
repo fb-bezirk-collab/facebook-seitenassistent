@@ -43,9 +43,64 @@ def kommentar_monitor(
     already_running: int = 0,
     action: str | None = None,
     error: str | None = None,
+    archive: str = "",
+    view_status: str = "new",
 ):
-    comments = storage.load()
-    comments.sort(key=lambda item: item.created_time or item.fetched_at, reverse=True)
+    all_comments = storage.load()
+    all_comments.sort(key=lambda item: item.created_time or item.fetched_at, reverse=True)
+
+    archive_mode = str(archive or "").strip().lower()
+    if archive_mode not in {"all", "processed"}:
+        archive_mode = ""
+
+    # Eine echte Antwort der Seite lässt sich erkennen, wenn ein gespeicherter
+    # Kind-Kommentar von der jeweiligen Facebook-Seite selbst stammt.
+    replied_parent_ids = {
+        item.parent_id
+        for item in all_comments
+        if item.parent_id
+        and (
+            (item.author_id and item.author_id == item.page_id)
+            or (
+                item.author_name
+                and item.page_name
+                and item.author_name.strip().casefold() == item.page_name.strip().casefold()
+            )
+        )
+    }
+
+    def is_page_reply(item) -> bool:
+        return bool(
+            item.parent_id
+            and (
+                (item.author_id and item.author_id == item.page_id)
+                or (
+                    item.author_name
+                    and item.page_name
+                    and item.author_name.strip().casefold() == item.page_name.strip().casefold()
+                )
+            )
+        )
+
+    def is_archived(item) -> bool:
+        return (
+            item.status in {"handled", "hidden", "deleted"}
+            or item.comment_id in replied_parent_ids
+            or is_page_reply(item)
+        )
+
+    def is_processed(item) -> bool:
+        return item.status == "deleted" or item.comment_id in replied_parent_ids or is_page_reply(item)
+
+    archived_comments = [item for item in all_comments if is_archived(item)]
+    active_comments = [item for item in all_comments if not is_archived(item)]
+
+    if archive_mode == "processed":
+        comments = [item for item in archived_comments if is_processed(item)]
+    elif archive_mode == "all":
+        comments = archived_comments
+    else:
+        comments = active_comments
 
     rows = []
     for item in comments:
@@ -83,25 +138,33 @@ def kommentar_monitor(
     refresh_state = str(refresh_job.get("state", "idle"))
 
     page_names = sorted({item.page_name for item in comments if item.page_name}, key=str.lower)
-    user_profiles = build_user_profiles(comments)
+    user_profiles = build_user_profiles(all_comments)
     counts = {
-        "all": len(comments),
-        "new": sum(1 for item in comments if item.status == "new"),
-        "handled": sum(1 for item in comments if item.status == "handled"),
-        "hidden": sum(1 for item in comments if item.status == "hidden"),
-        "deleted": sum(1 for item in comments if item.status == "deleted"),
-        "questions": sum(1 for item in comments if item.ai_category == "Frage"),
-        "critical": sum(1 for item in comments if item.ai_category in {"Meinung/Kritik", "Provokation", "Beleidigung", "Drohung/Gewalt"}),
-        "moderation": sum(1 for item in comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
-        "unanalyzed": sum(1 for item in comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and ((item.message or "").strip() or item.attachment_type or item.attachment_url or item.attachment_image_url)),
-        "ai_errors": sum(1 for item in comments if item.status != "deleted" and bool(item.ai_error)),
-        "media_comments": sum(1 for item in comments if item.attachment_type or item.attachment_url or item.attachment_image_url),
-        "reply_recommended": sum(1 for item in comments if item.ai_recommendation == "Antworten"),
-        "spam": sum(1 for item in comments if item.ai_category == "Spam"),
-        "off_topic": sum(1 for item in comments if item.ai_category == "Off-Topic"),
+        "all": len(all_comments),
+        "new": sum(1 for item in all_comments if item.status == "new"),
+        "handled": sum(1 for item in all_comments if item.status == "handled"),
+        "hidden": sum(1 for item in all_comments if item.status == "hidden"),
+        "deleted": sum(1 for item in all_comments if item.status == "deleted"),
+        "questions": sum(1 for item in all_comments if item.ai_category == "Frage"),
+        "critical": sum(1 for item in all_comments if item.ai_category in {"Meinung/Kritik", "Provokation", "Beleidigung", "Drohung/Gewalt"}),
+        "moderation": sum(1 for item in all_comments if item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}),
+        "unanalyzed": sum(1 for item in all_comments if item.status != "deleted" and item.ai_version != AI_CLASSIFICATION_VERSION and ((item.message or "").strip() or item.attachment_type or item.attachment_url or item.attachment_image_url)),
+        "ai_errors": sum(1 for item in all_comments if item.status != "deleted" and bool(item.ai_error)),
+        "media_comments": sum(1 for item in all_comments if item.attachment_type or item.attachment_url or item.attachment_image_url),
+        "reply_recommended": sum(1 for item in all_comments if item.ai_recommendation == "Antworten"),
+        "spam": sum(1 for item in all_comments if item.ai_category == "Spam"),
+        "off_topic": sum(1 for item in all_comments if item.ai_category == "Off-Topic"),
         "users": len(user_profiles),
         "repeat_users": sum(1 for profile in user_profiles if profile.get("repeated_comment_count", 0) >= 3 or profile.get("moderation_count", 0) >= 3),
     }
+
+    archive_count = len(archived_comments)
+    archive_processed_count = sum(1 for item in archived_comments if is_processed(item))
+    selected_status = (
+        "archive:processed" if archive_mode == "processed"
+        else "archive:all" if archive_mode == "all"
+        else view_status if view_status in {"new", "handled", "hidden", "deleted", "all"} else "new"
+    )
 
     first_page_error = next(
         (str(page.get("error", "")) for page in job.get("pages", []) if page.get("error")),
@@ -134,11 +197,15 @@ def kommentar_monitor(
             "refresh_job_success": refresh_state in {"success", "success_with_errors"},
             "refresh_job_partial": refresh_state == "success_with_errors",
             "refresh_job_error": refresh_state == "error",
-            "any_reply_running": any(item.reply_status == "running" for item in comments),
+            "any_reply_running": any(item.reply_status == "running" for item in all_comments),
             "first_page_error": first_page_error,
             "last_fetch_display": _format_datetime(job.get("finished_at")) if job.get("finished_at") else None,
             "action": action or "",
             "action_error": error or "",
+            "archive_mode": archive_mode,
+            "archive_count": archive_count,
+            "archive_processed_count": archive_processed_count,
+            "selected_status": selected_status,
         },
     )
 
