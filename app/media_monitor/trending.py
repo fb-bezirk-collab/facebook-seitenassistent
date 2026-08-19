@@ -48,6 +48,8 @@ Nicht gruppieren:
 - zeitlich oder sachlich voneinander unabhängige Geschichten.
 
 Ein Cluster ist nur gültig, wenn mindestens zwei verschiedene Medienquellen vertreten sind.
+
+WICHTIG: Überschriften müssen nicht ähnlich formuliert sein. Entscheidend ist das zugrunde liegende konkrete Nachrichtenereignis. Zwei Medien können dasselbe Ereignis mit völlig verschiedenen Headlines, Blickwinkeln oder Einzelaspekten beschreiben. Nutze Titel UND Summary/Teaser und erkenne gemeinsame Akteure, Zahlen, Entscheidungen, Forderungen und Vorgänge.
 Gib für jedes Cluster eine sehr kurze sachliche Bezeichnung (maximal 8 Wörter) und die IDs der Artikel zurück.
 Ein Artikel darf höchstens einem Cluster angehören. Erfinde keine Zusammenhänge.
 """.strip()
