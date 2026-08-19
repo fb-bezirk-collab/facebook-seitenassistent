@@ -569,7 +569,8 @@
     });
 
     aiImageGenerate?.addEventListener('click', async () => {
-        if (!prompt) { setAiImageStatus('Bitte zuerst einen Bildprompt eingeben oder vorschlagen lassen.', true); return; }
+        const imageBrief = aiImageBrief?.value?.trim() || '';
+        if (!imageBrief) { setAiImageStatus('Bitte zuerst eine Bildidee / Kernaussage eingeben.', true); return; }
         const style = document.querySelector('input[name="ai_image_style"]:checked')?.value || 'fotorealistisch';
         aiImageGenerate.disabled = true;
         if (aiImageRefine) aiImageRefine.disabled = true;
