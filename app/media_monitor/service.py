@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from app.media_monitor.ai_rating import MediaRatingError, rate_items
 from app.media_monitor.fetchers import (
     fetch_apa,
@@ -46,6 +48,14 @@ SOURCE_FETCHERS = (
     ("NFZ", fetch_nfz),
 )
 
+
+DEBUG_TARGETS = {
+    "Krone": os.getenv("KRONE_DEBUG_TARGET", "4259228").strip(),
+    "Die Presse": os.getenv("PRESSE_DEBUG_TARGET", "41178205").strip(),
+}
+
+def _debug_has_target(items: list[dict], target: str) -> bool:
+    return bool(target) and any(target in str(item.get("url") or "") for item in items)
 
 class MediaFetchCancelled(RuntimeError):
     """Interner Kontrollfluss für einen vom Benutzer abgebrochenen Medienabruf."""
@@ -141,7 +151,22 @@ def fetch_current_media(should_cancel=None, progress_callback=None) -> dict:
         try:
             fetched = fetcher()
             _check_cancel(should_cancel)
+            debug_target = DEBUG_TARGETS.get(source_name, "")
+            if debug_target:
+                print(
+                    f"MEDIA DEBUG | {source_name} | Fetcher-Rückgabe={len(fetched)} | "
+                    f"Target {debug_target} vorhanden={_debug_has_target(fetched, debug_target)}",
+                    flush=True,
+                )
             _, new_count = merge_fetched_items(fetched)
+            if debug_target:
+                stored_now = load_items()
+                print(
+                    f"MEDIA DEBUG | {source_name} | nach merge_fetched_items | "
+                    f"Target {debug_target} im Storage={_debug_has_target(stored_now, debug_target)} | "
+                    f"new_count={new_count}",
+                    flush=True,
+                )
             total_new += new_count
             successful_sources += 1
             source_results.append({
