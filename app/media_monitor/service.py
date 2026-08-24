@@ -134,17 +134,25 @@ def _apply_ratings(items: list[dict], candidates: list[dict], should_cancel=None
     return rated_count, visible_count, error_message
 
 
-def fetch_current_media(should_cancel=None, progress_callback=None) -> dict:
+def fetch_current_media(should_cancel=None, progress_callback=None, selected_sources: list[str] | None = None) -> dict:
     source_results: list[dict] = []
     total_new = 0
     successful_sources = 0
 
-    total_sources = len(SOURCE_FETCHERS)
+    requested = {str(name).strip() for name in (selected_sources or []) if str(name).strip()}
+    active_fetchers = [
+        pair for pair in SOURCE_FETCHERS
+        if not requested or pair[0] in requested
+    ]
+    if not active_fetchers:
+        raise RuntimeError("Keine gültige Medienquelle wurde ausgewählt.")
+
+    total_sources = len(active_fetchers)
     if progress_callback:
         progress_callback(2, f"Quellenabruf wird gestartet (0 von {total_sources})")
 
     # Jede Quelle läuft unabhängig. Ein Fehler bei einer Seite blockiert die anderen nicht.
-    for source_index, (source_name, fetcher) in enumerate(SOURCE_FETCHERS, start=1):
+    for source_index, (source_name, fetcher) in enumerate(active_fetchers, start=1):
         if progress_callback:
             progress_callback(2 + int(((source_index - 1) / total_sources) * 53), f"Quelle {source_index} von {total_sources}: {source_name}")
         _check_cancel(should_cancel)

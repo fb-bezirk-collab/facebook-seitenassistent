@@ -95,7 +95,7 @@ def load_status() -> dict[str, Any]:
     return data
 
 
-def mark_started() -> str | None:
+def mark_started(selected_sources: list[str] | None = None) -> str | None:
     """Reserviert einen neuen Abruf und liefert dessen Job-ID.
 
     None bedeutet: Es läuft bereits ein Abruf in diesem Worker oder der
@@ -119,6 +119,7 @@ def mark_started() -> str | None:
             "message": "Medien werden abgerufen und anschließend von der KI bewertet.",
             "progress_percent": 0,
             "progress_stage": "Medienabruf wird gestartet",
+            "selected_sources": [str(x).strip() for x in (selected_sources or []) if str(x).strip()],
         })
         return job_id
 
@@ -226,7 +227,14 @@ def run_fetch_job(job_id: str) -> None:
         })
 
     try:
-        result = fetch_current_media(lambda: _is_cancel_requested(job_id), update_progress)
+        selected_sources = current.get("selected_sources", [])
+        if not isinstance(selected_sources, list):
+            selected_sources = []
+        result = fetch_current_media(
+            lambda: _is_cancel_requested(job_id),
+            update_progress,
+            selected_sources=selected_sources,
+        )
 
         # Falls zwischenzeitlich abgebrochen/resetet oder ein neuer Job gestartet
         # wurde, darf dieser alte Worker den Status nicht überschreiben.
