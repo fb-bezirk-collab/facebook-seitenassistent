@@ -133,21 +133,50 @@ def entwurf_speichern(
 
 
 @router.get("/drafts", name="entwuerfe_anzeigen")
-def entwuerfe_anzeigen(request: Request, deleted: int = 0):
-    drafts = post_service.list_posts(status="draft")
+def entwuerfe_anzeigen(request: Request, deleted: int = 0, archive: str = ""):
+    all_drafts = post_service.list_posts(status="draft")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
+    def is_old(post) -> bool:
+        raw = str(post.updated_at or post.created_at or "")
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc) < cutoff
+        except (TypeError, ValueError):
+            return False
+
+    def was_used(post) -> bool:
+        publications = publication_service.list_publications(post.id)
+        return any(pub.status == "published" for pub in publications)
+
+    current = [post for post in all_drafts if not is_old(post)]
+    archived = [post for post in all_drafts if is_old(post)]
+    archive_mode = str(archive or "").strip().lower()
+    if archive_mode == "used":
+        drafts = [post for post in archived if was_used(post)]
+    elif archive_mode == "unused":
+        drafts = [post for post in archived if not was_used(post)]
+    else:
+        archive_mode = ""
+        drafts = current
+
+    publication_counts = {
+        post.id: len(publication_service.list_publications(post.id))
+        for post in drafts
+    }
     return templates.TemplateResponse(
         request=request,
         name="drafts.html",
         context={
             "drafts": drafts,
             "deleted": bool(deleted),
-            "publication_counts": {
-                post.id: len(
-                    publication_service.list_publications(post.id)
-                )
-                for post in drafts
-            },
+            "publication_counts": publication_counts,
+            "archive_mode": archive_mode,
+            "current_count": len(current),
+            "archive_used_count": sum(1 for post in archived if was_used(post)),
+            "archive_unused_count": sum(1 for post in archived if not was_used(post)),
         },
     )
 
