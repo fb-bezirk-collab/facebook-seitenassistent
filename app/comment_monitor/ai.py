@@ -37,7 +37,7 @@ RECOMMENDATIONS = (
     "Löschen prüfen",
 )
 
-AI_CLASSIFICATION_VERSION = "3.3.1"
+AI_CLASSIFICATION_VERSION = "3.3.16"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -210,7 +210,6 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
         CLASSIFICATION_SCHEMA,
         max(3000, min(7000, len(compact) * 500)),
     )
-    comment_text_by_id = {str(item.get("id", "")): str(item.get("comment", "")).lower() for item in compact}
     result: dict[str, dict[str, str]] = {}
     for row in parsed.get("items", []):
         if not isinstance(row, dict):
@@ -222,110 +221,19 @@ def classify_comments(items: list[dict[str, str]]) -> dict[str, dict[str, str]]:
         priority = str(row.get("priority", "niedrig"))
         recommendation = str(row.get("recommendation", "Ignorieren"))
         reason = str(row.get("reason", "")).strip()
-        comment_text = comment_text_by_id.get(comment_id, "")
 
-        # Häufige politische Forderungen wie "Rücktritt" sind ausdrücklich keine
-        # Beleidigung, solange keine echte Beschimpfung oder Drohung dazukommt.
-        political_demand_markers = (
-            "rücktritt", "zurücktreten", "abgewählt", "abwahl",
-            "in der regierung nicht brauchen", "gehört abgewählt",
-            "gehört weg", "muss weg", "nicht mehr wählen", "unwählbar",
-        )
-        hostile_provocation_markers = (
-            "peinlicher auftritt", "bewusstes reizen", "troll", "trolling",
-        )
-        # Persönliche bzw. gruppenbezogene Herabsetzungen zählen als Beleidigung,
-        # auch wenn sie kein klassisches grobes Schimpfwort enthalten.
-        insulting_markers = (
-            "mundwerk halten", "halt dein mundwerk", "halt die klappe", "klappe halten",
-            "soll den mund halten", "soll schweigen", "möchtegern", "moechtegern",
-            "vokaki", "blauner", "blaune", "blaunen", "blauer hetzer", "blaue hetze",
-            "niveaulos", "primitiv", "billige propaganda", "dumme propaganda",
-            "lächerliche figur", "laecherliche figur", "peinliche figur",
-            "lächerlich", "laecherlich", "armselig", "erbärmlich", "erbaermlich",
-            "rassist", "rassisten", "rassistisch", "rechtsradikal", "rechtsradikale",
-            "rechtsradikaler", "pack", "dreckspack", "verbrecherpack",
-        )
-        strong_abuse_markers = (
-            "arschloch", "arschlöcher", "hurensohn", "hurensöhne", "volltrottel",
-            "trottel", "idiot", "idioten", "gsindl", "gesindel", "dreckspack",
-            "drecksau", "schwein", "schweine", "nazi", "nazis", "nazipack",
-            "faschist", "faschisten", "volksverräter", "rechtsextreme", "rechtsextremer",
-            "rechtsextremisten", "verbrecherpack", "rassist", "rassisten",
-        )
-        threat_markers = (
-            "umbringen", "töten", "erschießen", "erschiessen", "abstechen",
-            "aufhängen", "aufhaengen", "anzünden", "anzuenden", "totmachen",
-            "sollte man erschießen", "sollte man erschiessen", "an die wand stellen",
-        )
-        has_political_demand = any(marker in comment_text for marker in political_demand_markers)
-        has_hostile_provocation = any(marker in comment_text for marker in hostile_provocation_markers)
-        has_insulting = any(marker in comment_text for marker in insulting_markers)
-        has_strong_abuse = any(marker in comment_text for marker in strong_abuse_markers)
-        has_threat = any(marker in comment_text for marker in threat_markers)
-
-        # 2.7.5: Harte Schranke gegen Übermoderation.
-        # Scharfe, polemische oder ärgerliche politische Kritik bleibt stehen, solange
-        # keine erkennbare Beschimpfung, Drohung oder Spam-Situation vorliegt.
-        if has_threat:
-            category = "Drohung/Gewalt"
-            priority = "hoch"
-            recommendation = "Löschen prüfen"
-            reason = "Der Kommentar enthält eine erkennbare Drohungs- oder Gewaltformulierung."
-        elif has_insulting or has_strong_abuse:
-            category = "Beleidigung"
-            priority = "hoch" if has_strong_abuse else "mittel"
-            recommendation = "Ausblenden prüfen"
-            reason = (
-                "Der Kommentar enthält eine direkte persönliche oder gruppenbezogene Herabsetzung bzw. Beschimpfung."
-            )
-        elif has_hostile_provocation:
-            category = "Provokation"
-            priority = "mittel"
-            recommendation = "Antwort optional"
-            reason = "Der Kommentar zielt erkennbar auf Provokation oder Spott, ohne eindeutige persönliche Beschimpfung."
-        elif category == "Beleidigung" and not (has_insulting or has_strong_abuse):
-            # Die KI darf Beleidigungen auch ohne Wörterbuchtreffer erkennen. Anders als
-            # früher wird eine semantisch erkannte Herabsetzung nicht automatisch
-            # auf Meinung/Kritik zurückgestuft.
-            priority = "mittel"
-            recommendation = "Ausblenden prüfen"
-        elif has_political_demand and not (has_insulting or has_strong_abuse) and category in {"Beleidigung", "Provokation"}:
-            category = "Meinung/Kritik"
-            priority = "niedrig"
-            recommendation = "Ignorieren"
-            reason = "Politische Forderung oder Kritik ohne eindeutige persönliche Beschimpfung."
-
-        # Nur echte Problemkategorien dürfen Priorität "hoch" erhalten.
-        if category not in {"Beleidigung", "Drohung/Gewalt", "Spam"} and priority == "hoch":
-            priority = "mittel" if category in {"Frage", "Provokation"} else "niedrig"
-        if category == "Beleidigung":
-            if has_strong_abuse:
-                priority = "hoch"
-            elif priority == "niedrig":
-                priority = "mittel"
-            if recommendation in {"Ignorieren", "Keine Aktion", "Antworten"}:
-                recommendation = "Ausblenden prüfen"
-                if recommendation not in {"Ausblenden prüfen", "Löschen prüfen"}:
-                    recommendation = "Ausblenden prüfen"
-        elif category == "Meinung/Kritik":
-            priority = "niedrig"
-            if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
-                recommendation = "Ignorieren"
-        elif category in {"Zustimmung", "Neutral"}:
+        # Sicherheitsnetz gegen Übermoderation: Zustimmung/Neutral sowie normale
+        # politische Kritik dürfen nicht mit einer Moderationsempfehlung zurückkommen.
+        if category in {"Zustimmung", "Neutral"}:
             priority = "niedrig"
             if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
                 recommendation = "Keine Aktion"
-        elif category == "Off-Topic":
+        elif category in {"Meinung/Kritik", "Off-Topic"}:
             priority = "niedrig"
-            if recommendation in {"Ausblenden prüfen", "Löschen prüfen", "Antworten"}:
+            if recommendation in {"Ausblenden prüfen", "Löschen prüfen"}:
                 recommendation = "Ignorieren"
         elif category == "Frage" and priority == "hoch":
             priority = "mittel"
-        elif category == "Provokation":
-            priority = "mittel"
-            if recommendation == "Ignorieren" and has_hostile_provocation:
-                recommendation = "Antwort optional"
 
         result[comment_id] = {
             "category": category,
