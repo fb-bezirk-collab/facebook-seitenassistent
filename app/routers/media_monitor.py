@@ -11,6 +11,7 @@ from app.config import TEMPLATES_DIR
 from app.services.post_service import PostService
 from app.media_monitor.job import load_status, mark_started, request_cancel, reset_status, run_fetch_job
 from app.media_monitor.analysis import run_item_analysis
+from app.media_monitor.service import SOURCE_FETCHERS
 from app.media_monitor.storage import load_items, save_items
 
 
@@ -110,13 +111,19 @@ def medienmonitor(
             "progress_current": max(0, int(job.get("progress_current", 0) or 0)),
             "progress_total": max(0, int(job.get("progress_total", 0) or 0)),
             "progress_name": str(job.get("progress_name", "") or ""),
+            "media_sources": [name for name, _ in SOURCE_FETCHERS],
+            "selected_sources": job.get("selected_sources", []) if isinstance(job.get("selected_sources"), list) else [],
         },
     )
 
 
 @router.post("/media-monitor/fetch", name="medienmonitor_abrufen")
-def medienmonitor_abrufen(background_tasks: BackgroundTasks):
-    job_id = mark_started()
+def medienmonitor_abrufen(
+    background_tasks: BackgroundTasks,
+    sources: list[str] = Form(default=[]),
+):
+    selected = [str(x).strip() for x in sources if str(x).strip()]
+    job_id = mark_started(selected)
     if not job_id:
         return RedirectResponse(url="/media-monitor?already_running=1", status_code=303)
     background_tasks.add_task(run_fetch_job, job_id)
