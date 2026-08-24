@@ -54,6 +54,14 @@
 <main>
     <div class="container">
         {% if deleted %}<div class="notice">Der Entwurf wurde gelöscht.</div>{% endif %}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px">
+            <a class="button edit" href="/drafts">Aktuell ({{ current_count }})</a>
+            <a class="button edit" href="/drafts?archive=used">Archiv – Genutzt ({{ archive_used_count }})</a>
+            <a class="button edit" href="/drafts?archive=unused">Archiv – Ungenutzt ({{ archive_unused_count }})</a>
+        </div>
+        {% if archive_mode %}
+        <div class="notice">Archivansicht: {% if archive_mode == 'used' %}<strong>Genutzt</strong>{% else %}<strong>Ungenutzt</strong>{% endif %}. Entwürfe werden nach 7 Tagen automatisch aus der normalen Ansicht ausgeblendet.</div>
+        {% endif %}
         {% if drafts %}
             <div class="draft-list">
                 {% for draft in drafts %}
@@ -92,7 +100,7 @@
         {% else %}
             <div class="empty">
                 <h2>Noch keine Entwürfe</h2>
-                <p>Importiere einen Facebook-Beitrag und speichere ihn anschließend als Entwurf.</p>
+                <p>{% if archive_mode %}In dieser Archivkategorie sind derzeit keine Entwürfe vorhanden.{% else %}Importiere einen Facebook-Beitrag und speichere ihn anschließend als Entwurf.{% endif %}</p>
                 <a class="button edit" href="{{ url_for('startseite') }}">Beitrag importieren</a>
             </div>
         {% endif %}
