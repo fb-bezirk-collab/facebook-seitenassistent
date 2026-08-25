@@ -97,6 +97,19 @@
             <div class="source-row">
                 <strong>{{ page.page_name }}</strong><span>{{ page.posts }} Beiträge</span><span>{{ page.comments }} Kommentare</span><span>{{ page.new }} neu</span>
                 {% if page.error %}<div class="source-error">{{ page.error }}</div>{% endif %}
+                {% if page.post_errors %}
+                <div class="source-error" style="color:#93370d">
+                    {{ page.post_errors|length }} einzelner Beitrag/Beiträge konnte(n) nicht gelesen werden; die übrigen Beiträge wurden trotzdem verarbeitet.
+                    <details style="margin-top:5px"><summary>Betroffene Beiträge anzeigen</summary>
+                    {% for pe in page.post_errors %}
+                        <div style="margin-top:5px">
+                            Post-ID {{ pe.post_id }}{% if pe.permalink %} · <a href="{{ pe.permalink }}" target="_blank" rel="noopener">Original öffnen</a>{% endif %}<br>
+                            {{ pe.error }}
+                        </div>
+                    {% endfor %}
+                    </details>
+                </div>
+                {% endif %}
             </div>
         {% endfor %}
     </details>
