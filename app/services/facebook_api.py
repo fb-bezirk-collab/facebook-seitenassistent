@@ -378,6 +378,53 @@ class FacebookApiService:
                 )
                 return self._read_edge(url=url, params=fallback, max_items=max(1, int(limit)), request_timeout=request_timeout)
 
+    def get_post_comments_via_page_feed(
+        self,
+        page_id: str,
+        target_post_id: str,
+        page_access_token: str,
+        post_limit: int = 25,
+        comment_limit: int = 100,
+        request_timeout: float = 30,
+    ) -> tuple[bool, list[dict]]:
+        """Fallback für Posts, deren direkte /{post_id}/comments-Edge fehlschlägt.
+
+        Meta kann einzelne direkt auf Facebook erstellte Posts über die Page-Feed-
+        Abfrage samt eingebetteten Kommentaren liefern, obwohl die direkte Comments-
+        Edge für dasselbe Objekt mit OAuth-Fehler #100 scheitert.
+        """
+        url = GRAPH_API_BASE_URL + f"/{page_id}/feed"
+        fields = (
+            "id,message,created_time,permalink_url,"
+            f"comments.limit({min(max(1, int(comment_limit)), 100)})"
+            "{id,message,created_time,from{id,name},permalink_url,"
+            "is_hidden,can_hide,can_remove,parent{id}}"
+        )
+        params = {
+            "access_token": page_access_token,
+            "fields": fields,
+            "limit": max(1, min(int(post_limit), 100)),
+        }
+        posts = self._read_edge(
+            url=url,
+            params=params,
+            max_items=max(1, min(int(post_limit), 100)),
+            request_timeout=request_timeout,
+        )
+        target = str(target_post_id or "").strip()
+        for post in posts:
+            post_id = str(post.get("id", "") or "").strip()
+            if post_id != target:
+                continue
+            comments = post.get("comments")
+            if isinstance(comments, dict):
+                data = comments.get("data")
+                if isinstance(data, list):
+                    return True, [item for item in data if isinstance(item, dict)]
+            return True, []
+        return False, []
+
+
     def get_comment_details(
         self,
         comment_id: str,
