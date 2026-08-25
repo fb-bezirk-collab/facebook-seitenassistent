@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 import json
 from pathlib import Path
 
@@ -136,7 +137,6 @@ def entwurf_speichern(
 def entwuerfe_anzeigen(request: Request, deleted: int = 0, archive: str = ""):
     all_drafts = post_service.list_posts(status="draft")
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
     def is_old(post) -> bool:
         raw = str(post.updated_at or post.created_at or "")
         try:
@@ -146,11 +146,8 @@ def entwuerfe_anzeigen(request: Request, deleted: int = 0, archive: str = ""):
             return dt.astimezone(timezone.utc) < cutoff
         except (TypeError, ValueError):
             return False
-
     def was_used(post) -> bool:
-        publications = publication_service.list_publications(post.id)
-        return any(pub.status == "published" for pub in publications)
-
+        return any(pub.status == "published" for pub in publication_service.list_publications(post.id))
     current = [post for post in all_drafts if not is_old(post)]
     archived = [post for post in all_drafts if is_old(post)]
     archive_mode = str(archive or "").strip().lower()
@@ -161,24 +158,13 @@ def entwuerfe_anzeigen(request: Request, deleted: int = 0, archive: str = ""):
     else:
         archive_mode = ""
         drafts = current
-
-    publication_counts = {
-        post.id: len(publication_service.list_publications(post.id))
-        for post in drafts
-    }
-    return templates.TemplateResponse(
-        request=request,
-        name="drafts.html",
-        context={
-            "drafts": drafts,
-            "deleted": bool(deleted),
-            "publication_counts": publication_counts,
-            "archive_mode": archive_mode,
-            "current_count": len(current),
-            "archive_used_count": sum(1 for post in archived if was_used(post)),
-            "archive_unused_count": sum(1 for post in archived if not was_used(post)),
-        },
-    )
+    publication_counts = {post.id: len(publication_service.list_publications(post.id)) for post in drafts}
+    return templates.TemplateResponse(request=request,name="drafts.html",context={
+        "drafts": drafts, "deleted": bool(deleted), "publication_counts": publication_counts,
+        "archive_mode": archive_mode, "current_count": len(current),
+        "archive_used_count": sum(1 for post in archived if was_used(post)),
+        "archive_unused_count": sum(1 for post in archived if not was_used(post)),
+    })
 
 
 @router.get("/drafts/{post_id}", name="entwurf_bearbeiten")
