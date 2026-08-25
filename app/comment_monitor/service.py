@@ -328,12 +328,69 @@ class CommentMonitorService:
                     if not post_id:
                         continue
 
-                    comments = api.get_post_comments(
-                        post_id=post_id,
-                        page_access_token=page.access_token,
-                        limit=comment_limit,
-                        request_timeout=min(request_timeout_seconds, max(5, int(page_deadline - time.monotonic()))),
-                    )
+                    try:
+                        comments = api.get_post_comments(
+                            post_id=post_id,
+                            page_access_token=page.access_token,
+                            limit=comment_limit,
+                            request_timeout=min(request_timeout_seconds, max(5, int(page_deadline - time.monotonic()))),
+                        )
+                    except FacebookApiError as post_error:
+                        post_permalink = str(post.get("permalink_url", "") or "")
+                        print(
+                            "COMMENT DEBUG | direkte Comments-Edge fehlgeschlagen | "
+                            f"Seite={page.name} | page_id={page.page_id} | "
+                            f"Post {post_number}/{len(posts)} | post_id={post_id} | "
+                            f"permalink={post_permalink} | Fehler={post_error}",
+                            flush=True,
+                        )
+                        try:
+                            found_in_feed, comments = api.get_post_comments_via_page_feed(
+                                page_id=page.page_id,
+                                target_post_id=post_id,
+                                page_access_token=page.access_token,
+                                post_limit=post_limit,
+                                comment_limit=comment_limit,
+                                request_timeout=min(
+                                    request_timeout_seconds,
+                                    max(5, int(page_deadline - time.monotonic())),
+                                ),
+                            )
+                        except FacebookApiError as fallback_error:
+                            found_in_feed = False
+                            comments = []
+                            print(
+                                "COMMENT DEBUG | Feed-Fallback ebenfalls fehlgeschlagen | "
+                                f"Seite={page.name} | post_id={post_id} | "
+                                f"permalink={post_permalink} | Fehler={fallback_error}",
+                                flush=True,
+                            )
+
+                        if found_in_feed:
+                            print(
+                                "COMMENT DEBUG | Feed-Fallback erfolgreich | "
+                                f"Seite={page.name} | post_id={post_id} | "
+                                f"Kommentare={len(comments)}",
+                                flush=True,
+                            )
+                        else:
+                            warning = (
+                                f"Beitrag {post_number}/{len(posts)} konnte nicht gelesen werden "
+                                f"(Post-ID {post_id}). Der Abruf wurde mit den übrigen Beiträgen fortgesetzt."
+                            )
+                            page_result.setdefault("post_errors", []).append({
+                                "post_id": post_id,
+                                "permalink": post_permalink,
+                                "error": str(post_error),
+                            })
+                            print(
+                                "COMMENT DEBUG | Beitrag wird übersprungen, Seitenabruf läuft weiter | "
+                                f"Seite={page.name} | post_id={post_id}",
+                                flush=True,
+                            )
+                            update_progress(page_index, page.name, warning)
+                            continue
+
                     page_result["comments"] += len(comments)
                     result["seen_count"] += len(comments)
 
