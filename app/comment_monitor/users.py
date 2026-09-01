@@ -75,6 +75,13 @@ def build_user_profiles(comments: list[FacebookComment]) -> list[dict]:
     je Seite verwendet.
     """
     states = CommentUserStateStorage().load()
+    from app.services.settings_service import SettingsService
+
+    managed_pages = {
+        page.page_id: page.name
+        for page in SettingsService().load_pages()
+        if page.is_active
+    }
     groups: dict[str, list[FacebookComment]] = defaultdict(list)
     display_names: dict[str, str] = {}
 
@@ -140,6 +147,26 @@ def build_user_profiles(comments: list[FacebookComment]) -> list[dict]:
             risk_label = "unauffällig"
 
         state = states.get(key) or FacebookCommentUserState(user_key=key, display_name=display_names[key])
+        all_page_names = dict(managed_pages)
+        all_page_names.update(page_names)
+        page_id_details = []
+        for page_id in sorted(all_page_names, key=lambda pid: all_page_names.get(pid, "").lower()):
+            psid = exact_page_ids.get(page_id, "") or state.page_user_ids.get(page_id, "")
+            block_status = state.page_block_status.get(page_id, "")
+            if state.global_block_requested and not block_status:
+                block_status = "pending"
+            page_id_details.append({
+                "page_id": page_id,
+                "page_name": all_page_names.get(page_id, page_id),
+                "psid": psid,
+                "ambiguous": page_id in ambiguous_pages,
+                "managed": page_id in managed_pages,
+                "block_status": block_status,
+            })
+
+        blocked_page_count = sum(1 for item in page_id_details if item["block_status"] == "blocked")
+        pending_page_count = sum(1 for item in page_id_details if item["block_status"] == "pending")
+        error_page_count = sum(1 for item in page_id_details if str(item["block_status"]).startswith("error:"))
         profiles.append({
             "user_key": key,
             "display_name": display_names[key],
@@ -148,16 +175,12 @@ def build_user_profiles(comments: list[FacebookComment]) -> list[dict]:
             "page_count": len({c.page_id for c in items if c.page_id}),
             "page_names": sorted({c.page_name for c in items if c.page_name}, key=str.lower),
             "page_ids": exact_page_ids,
-            "page_id_details": [
-                {
-                    "page_id": page_id,
-                    "page_name": page_names.get(page_id, page_id),
-                    "psid": exact_page_ids.get(page_id, ""),
-                    "ambiguous": page_id in ambiguous_pages,
-                }
-                for page_id in sorted(page_names, key=lambda pid: page_names.get(pid, "").lower())
-            ],
+            "page_id_details": page_id_details,
             "known_blockable_pages": len(exact_page_ids),
+            "managed_page_count": len(managed_pages),
+            "blocked_page_count": blocked_page_count,
+            "pending_page_count": pending_page_count,
+            "error_page_count": error_page_count,
             "ambiguous_page_count": len(ambiguous_pages),
             "identity_notice": len({c.page_id for c in items if c.page_id}) > 1,
             "category_counts": dict(categories),

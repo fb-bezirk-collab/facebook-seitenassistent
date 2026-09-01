@@ -593,6 +593,17 @@ class CommentMonitorService:
                 # Zwischenspeichern pro Seite: bei Abbruch/Restart geht die bisherige Arbeit nicht verloren.
                 comments_snapshot = list(existing.values())
                 comments_snapshot.sort(key=lambda item: item.created_time or item.fetched_at, reverse=True)
+                if page.access_token:
+                    try:
+                        block_sync = self.sync_pending_global_blocks_for_page(
+                            comments=comments_snapshot,
+                            page=page,
+                            api=api,
+                        )
+                        if any(block_sync.values()):
+                            page_result["block_sync"] = block_sync
+                    except Exception as error:
+                        page_result["block_sync_error"] = str(error)
                 self.storage.save(comments_snapshot)
                 update_progress(page_index, page.name, "Seite abgeschlossen")
 
@@ -821,12 +832,12 @@ class CommentMonitorService:
         self.storage.update(comment)
         return comment
 
-    def set_user_blocked_on_known_pages(self, user_key: str, blocked: bool = True) -> dict:
-        """Blockiert/entsperrt einen gebündelten Kommentator auf allen eindeutig bekannten Seiten.
+    def set_user_blocked_on_all_pages(self, user_key: str, blocked: bool = True) -> dict:
+        """Sperrt einen Kommentator sofort oder vorgemerkt auf allen aktiven Seiten.
 
-        Facebook verwendet Page-Scoped User IDs. Deshalb wird pro Seite ausschließlich die
-        dort tatsächlich beobachtete PSID verwendet. Seiten mit mehrdeutiger Namenszuordnung
-        werden nicht automatisch verändert.
+        Meta liefert pro Facebook-Seite eine eigene Nutzer-ID. Auf Seiten mit bereits
+        bekannter ID wird die Aktion sofort ausgeführt. Für die übrigen Seiten bleibt
+        sie vorgemerkt und wird beim nächsten eindeutigen Treffer nachgeholt.
         """
         from app.comment_monitor.users import CommentUserStateStorage, get_user_profile
         from app.models.facebook_comment_user import FacebookCommentUserState
@@ -835,19 +846,33 @@ class CommentMonitorService:
         profile = get_user_profile(comments, user_key)
         if profile is None:
             raise FacebookApiError("Das Benutzerprofil wurde nicht gefunden.")
-        if not profile.get("page_ids"):
-            raise FacebookApiError("Für diesen Benutzer ist auf keiner Seite eine eindeutige Facebook-ID gespeichert.")
-
         pages = {page.page_id: page for page in self.settings_service.load_pages() if page.is_active}
+        if not pages:
+            raise FacebookApiError("Es ist keine aktive Facebook-Seite eingerichtet.")
         api = FacebookApiService(config=self.meta_config_service.load())
+        state_storage = CommentUserStateStorage()
+        state = state_storage.get(user_key) or FacebookCommentUserState(
+            user_key=user_key,
+            display_name=str(profile.get("display_name", "")),
+        )
+        known_ids = dict(state.page_user_ids)
+        known_ids.update(profile.get("page_ids", {}))
         results = []
         success_count = 0
         error_count = 0
+        pending_count = 0
 
-        for page_id, psid in profile.get("page_ids", {}).items():
-            page = pages.get(page_id)
-            page_name = page.name if page else page_id
-            if page is None or not page.access_token:
+        for page_id, page in pages.items():
+            page_name = page.name
+            psid = known_ids.get(page_id, "")
+            if not psid:
+                status = "pending" if blocked else "not_requested"
+                state.page_block_status[page_id] = status
+                results.append({"page_id": page_id, "page_name": page_name, "success": False, "pending": blocked, "error": ""})
+                if blocked:
+                    pending_count += 1
+                continue
+            if not page.access_token:
                 results.append({"page_id": page_id, "page_name": page_name, "success": False, "error": "Kein Seitenzugriffstoken gespeichert."})
                 error_count += 1
                 continue
@@ -859,33 +884,89 @@ class CommentMonitorService:
                     blocked=blocked,
                 )
                 results.append({"page_id": page_id, "page_name": page_name, "success": True, "error": ""})
+                state.page_user_ids[page_id] = psid
                 success_count += 1
             except FacebookApiError as error:
                 results.append({"page_id": page_id, "page_name": page_name, "success": False, "error": str(error)})
                 error_count += 1
 
-        state_storage = CommentUserStateStorage()
-        state = state_storage.get(user_key) or FacebookCommentUserState(
-            user_key=user_key,
-            display_name=str(profile.get("display_name", "")),
-        )
-        state.status = "blocked" if blocked and success_count else ("normal" if not blocked and success_count else state.status)
-        state.last_action = "blocked" if blocked else "unblocked"
+        state.global_block_requested = blocked
+        state.status = "blocked" if blocked else "normal"
+        state.last_action = "block_all_requested" if blocked else "unblock_all_requested"
         state.last_action_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         for item in results:
             if item["success"]:
                 state.page_block_status[item["page_id"]] = "blocked" if blocked else "unblocked"
-            else:
+            elif item.get("error"):
                 state.page_block_status[item["page_id"]] = "error: " + item["error"]
         state_storage.update(state)
 
         return {
             "success_count": success_count,
             "error_count": error_count,
+            "pending_count": pending_count,
             "results": results,
             "blocked": blocked,
             "display_name": profile.get("display_name", ""),
         }
+
+    def set_user_blocked_on_known_pages(self, user_key: str, blocked: bool = True) -> dict:
+        """Kompatibilitätsalias für ältere Routen."""
+        return self.set_user_blocked_on_all_pages(user_key, blocked)
+
+    def sync_pending_global_blocks_for_page(
+        self,
+        *,
+        comments: list[FacebookComment],
+        page,
+        api: FacebookApiService,
+    ) -> dict:
+        """Holt vorgemerkte Sperren nach, sobald eine eindeutige Seiten-ID vorliegt."""
+        from app.comment_monitor.users import CommentUserStateStorage, user_key_for_name
+
+        state_storage = CommentUserStateStorage()
+        states = state_storage.load()
+        candidates: dict[str, set[str]] = {}
+        for comment in comments:
+            if comment.page_id != page.page_id or not comment.author_id or not comment.author_name:
+                continue
+            key = user_key_for_name(comment.author_name)
+            state = states.get(key)
+            if state and state.global_block_requested:
+                candidates.setdefault(key, set()).add(comment.author_id)
+
+        result = {"blocked": 0, "pending": 0, "errors": 0}
+        changed = False
+        for key, ids in candidates.items():
+            state = states[key]
+            if len(ids) != 1:
+                state.page_block_status[page.page_id] = "pending"
+                result["pending"] += 1
+                changed = True
+                continue
+            psid = next(iter(ids))
+            if state.page_block_status.get(page.page_id) == "blocked" and state.page_user_ids.get(page.page_id) == psid:
+                continue
+            try:
+                api.set_page_user_blocked(
+                    page_id=page.page_id,
+                    page_access_token=page.access_token,
+                    user_id=psid,
+                    blocked=True,
+                )
+                state.page_block_status[page.page_id] = "blocked"
+                state.page_user_ids[page.page_id] = psid
+                state.last_action = "automatic_block"
+                state.last_action_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                result["blocked"] += 1
+            except FacebookApiError as error:
+                state.page_block_status[page.page_id] = "error: " + str(error)
+                result["errors"] += 1
+            changed = True
+
+        if changed:
+            state_storage.save(states)
+        return result
 
     def set_user_watchlist(self, user_key: str, enabled: bool = True) -> None:
         from app.comment_monitor.users import CommentUserStateStorage, get_user_profile
