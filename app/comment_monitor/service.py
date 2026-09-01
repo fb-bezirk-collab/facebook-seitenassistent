@@ -832,6 +832,83 @@ class CommentMonitorService:
         self.storage.update(comment)
         return comment
 
+    def block_comment_author(self, comment_id: str) -> dict:
+        """Sperrt den Autor direkt aus der Kommentaransicht heraus.
+
+        Fehlen gespeicherte Autorinformationen, wird genau für diese Aktion noch
+        einmal die direkte Meta-Abfrage des Kommentars versucht. Mit Name und ID
+        wird die zentrale Sperrliste verwendet; ohne Namen ist nur die Sperre auf
+        der konkreten Facebook-Seite sicher möglich.
+        """
+        from app.comment_monitor.users import user_key_for_name
+
+        comment = self.storage.get(comment_id)
+        if comment is None:
+            raise FacebookApiError("Der Kommentar wurde im Monitor nicht gefunden.")
+
+        pages = {
+            page.page_id: page
+            for page in self.settings_service.load_pages()
+            if page.is_active
+        }
+        page = pages.get(comment.page_id)
+        if page is None or not page.access_token:
+            raise FacebookApiError(
+                "Für diese Facebook-Seite ist kein aktives Seitenzugriffstoken gespeichert."
+            )
+
+        api = FacebookApiService(config=self.meta_config_service.load())
+        if not comment.author_id:
+            try:
+                details = api.get_comment_details(
+                    comment_id=comment.comment_id,
+                    page_access_token=page.access_token,
+                )
+            except FacebookApiError as error:
+                raise FacebookApiError(
+                    "Meta liefert für diesen Kommentar keine sperrbare Nutzer-ID. "
+                    f"Die erneute Abfrage ist fehlgeschlagen: {error}"
+                ) from error
+            author = details.get("from") if isinstance(details.get("from"), dict) else {}
+            comment.author_id = str(author.get("id", "") or "")
+            comment.author_name = str(author.get("name", "") or comment.author_name or "")
+            if comment.author_id or comment.author_name:
+                comment.author_lookup_source = "direct_block_action"
+                comment.author_diagnostic = (
+                    "Autorinformationen wurden bei der direkten Sperraktion erneut von Meta abgefragt."
+                )
+                self.storage.update(comment)
+
+        if not comment.author_id:
+            raise FacebookApiError(
+                "Meta übermittelt für diesen Kommentar weder einen Namen noch eine Nutzer-ID. "
+                "Facebook erlaubt daher keine Sperre über die App. Bitte den Kommentar über "
+                "„Original öffnen“ direkt auf Facebook aufrufen und den Nutzer dort sperren."
+            )
+        if comment.author_id == comment.page_id:
+            raise FacebookApiError("Die eigene Facebook-Seite kann nicht gesperrt werden.")
+
+        if comment.author_name:
+            user_key = user_key_for_name(comment.author_name)
+            if user_key:
+                result = self.set_user_blocked_on_all_pages(user_key, True)
+                result["scope"] = "all_pages"
+                return result
+
+        api.set_page_user_blocked(
+            page_id=page.page_id,
+            page_access_token=page.access_token,
+            user_id=comment.author_id,
+            blocked=True,
+        )
+        return {
+            "scope": "current_page",
+            "success_count": 1,
+            "pending_count": 0,
+            "error_count": 0,
+            "page_name": page.name,
+        }
+
     def set_user_blocked_on_all_pages(self, user_key: str, blocked: bool = True) -> dict:
         """Sperrt einen Kommentator sofort oder vorgemerkt auf allen aktiven Seiten.
 
