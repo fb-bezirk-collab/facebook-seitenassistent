@@ -109,6 +109,14 @@ def kommentar_monitor(
         row["post_preview"] = (item.post_message or "Beitrag ohne Text")[:180]
         row["ai_needs_update"] = item.ai_version != AI_CLASSIFICATION_VERSION
         row["user_key"] = user_key_for_name(item.author_name)
+        row["is_page_author"] = bool(
+            (item.author_id and item.author_id == item.page_id)
+            or (
+                item.author_name
+                and item.page_name
+                and item.author_name.strip().casefold() == item.page_name.strip().casefold()
+            )
+        )
         row["moderation_recommended"] = item.ai_recommendation in {"Ausblenden prüfen", "Löschen prüfen"}
         row["reply_recommended"] = item.ai_recommendation == "Antworten"
         at = (item.attachment_type or "").casefold()
@@ -270,6 +278,21 @@ def kommentar_antwort_vorschlagen(comment_id: str, background_tasks: BackgroundT
         storage.update(comment)
         background_tasks.add_task(_run_reply_suggestion, comment_id)
     return RedirectResponse(url="/comments?action=reply_started", status_code=303)
+
+
+@router.post("/comments/{comment_id}/block-author", name="kommentar_autor_sperren")
+def kommentar_autor_sperren(comment_id: str):
+    try:
+        result = service.block_comment_author(comment_id)
+        if result.get("scope") == "all_pages":
+            return RedirectResponse(
+                url=("/comments?action=user_blocked_all_"
+                     f"{result['success_count']}_{result['pending_count']}_{result['error_count']}"),
+                status_code=303,
+            )
+        return RedirectResponse(url="/comments?action=user_blocked_page", status_code=303)
+    except FacebookApiError as error:
+        return RedirectResponse(url="/comments?error=" + quote(str(error)), status_code=303)
 
 
 @router.post("/comments/{comment_id}/hide", name="kommentar_ausblenden")
