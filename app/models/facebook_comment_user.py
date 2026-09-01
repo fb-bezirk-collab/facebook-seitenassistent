@@ -14,7 +14,9 @@ class FacebookCommentUserState:
     note: str = ""
     last_action: str = ""
     last_action_at: str = ""
+    global_block_requested: bool = False
     page_block_status: dict[str, str] = field(default_factory=dict)
+    page_user_ids: dict[str, str] = field(default_factory=dict)
     updated_at: str = field(default_factory=utc_now_iso)
 
     def to_dict(self) -> dict:
@@ -30,6 +32,11 @@ class FacebookCommentUserState:
             note=str(data.get("note", "") or ""),
             last_action=str(data.get("last_action", "") or ""),
             last_action_at=str(data.get("last_action_at", "") or ""),
+            global_block_requested=bool(data.get("global_block_requested", False)),
             page_block_status={str(k): str(v) for k, v in raw_page_status.items()} if isinstance(raw_page_status, dict) else {},
+            page_user_ids={
+                str(k): str(v)
+                for k, v in (data.get("page_user_ids", {}) or {}).items()
+            } if isinstance(data.get("page_user_ids", {}), dict) else {},
             updated_at=str(data.get("updated_at", utc_now_iso()) or utc_now_iso()),
         )
