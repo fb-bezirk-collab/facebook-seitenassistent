@@ -140,7 +140,7 @@
         {% for u in user_profiles %}
             <a class="user-card" href="/comments/users/{{ u.user_key }}">
                 <div class="user-top"><span>{{ u.display_name }}</span><span class="user-risk">{{ u.risk_score }}/100 · {{ u.risk_label }}</span></div>
-                <div class="user-meta">{{ u.comment_count }} Kommentare · {{ u.page_count }} Seite(n){% if u.repeated_comment_count %} · {{ u.repeated_comment_count }} Wiederholungen{% endif %}{% if u.moderation_count %} · {{ u.moderation_count }}× Moderation empfohlen{% endif %}</div>
+                <div class="user-meta">{{ u.comment_count }} Kommentare · {{ u.page_count }} Seite(n){% if u.state.global_block_requested %} · <strong style="color:#b42318">Zentrale Sperrliste: {{ u.blocked_page_count }} gesperrt, {{ u.pending_page_count }} vorgemerkt</strong>{% endif %}{% if u.repeated_comment_count %} · {{ u.repeated_comment_count }} Wiederholungen{% endif %}{% if u.moderation_count %} · {{ u.moderation_count }}× Moderation empfohlen{% endif %}</div>
             </a>
         {% endfor %}
         </div>
