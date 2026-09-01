@@ -356,22 +356,23 @@ def kommentar_benutzer_nicht_beobachten(user_key: str):
         return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
 
 
-@router.post("/comments/users/{user_key}/block-known-pages", name="kommentar_benutzer_sperren")
+@router.post("/comments/users/{user_key}/block-all-pages", name="kommentar_benutzer_sperren")
 def kommentar_benutzer_sperren(user_key: str):
     try:
-        result = service.set_user_blocked_on_known_pages(user_key, True)
+        result = service.set_user_blocked_on_all_pages(user_key, True)
         return RedirectResponse(
-            url=f"/comments/users/{user_key}?action=blocked_{result['success_count']}_{result['error_count']}",
+            url=(f"/comments/users/{user_key}?action=blocked_{result['success_count']}_"
+                 f"{result['pending_count']}_{result['error_count']}"),
             status_code=303,
         )
     except FacebookApiError as error:
         return RedirectResponse(url=f"/comments/users/{user_key}?error=" + quote(str(error)), status_code=303)
 
 
-@router.post("/comments/users/{user_key}/unblock-known-pages", name="kommentar_benutzer_entsperren")
+@router.post("/comments/users/{user_key}/unblock-all-pages", name="kommentar_benutzer_entsperren")
 def kommentar_benutzer_entsperren(user_key: str):
     try:
-        result = service.set_user_blocked_on_known_pages(user_key, False)
+        result = service.set_user_blocked_on_all_pages(user_key, False)
         return RedirectResponse(
             url=f"/comments/users/{user_key}?action=unblocked_{result['success_count']}_{result['error_count']}",
             status_code=303,
