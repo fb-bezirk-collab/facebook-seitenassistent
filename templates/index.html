@@ -65,7 +65,7 @@
         }
         .source-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 22px;
             margin-bottom: 28px;
         }
@@ -379,7 +379,7 @@
 <div class="container">
     <section class="hero">
         <h2>Neuen Beitrag erstellen</h2>
-        <p>Wähle, ob du einen Facebook-Beitrag importieren oder eigene Medien hochladen möchtest.</p>
+        <p>Importiere einen bestehenden Beitrag, lade eigene Medien hoch oder schreibe einen neuen Beitrag direkt selbst.</p>
     </section>
 
     <section class="source-grid">
@@ -393,6 +393,12 @@
             <div class="source-icon">🖼️</div>
             <h3>Medien hochladen</h3>
             <p>Eigene Bilder oder Videos hochladen und den Beitragstext manuell eingeben.</p>
+        </article>
+
+        <article class="source-card" id="source-own" data-source="own">
+            <div class="source-icon">✍️</div>
+            <h3>Eigenen Beitrag schreiben</h3>
+            <p>Neuen Beitrag direkt erstellen – ohne Facebook-Import und ohne verpflichtendes Bild oder Video.</p>
         </article>
     </section>
 
@@ -495,6 +501,38 @@
             </div>
 
             <button type="submit" class="secondary">Medien übernehmen</button>
+        </form>
+    </section>
+
+    <section class="workflow" id="workflow-own" hidden>
+        <h3>Eigenen Beitrag direkt erstellen</h3>
+        <form method="post" action="/drafts">
+            <div class="field">
+                <label for="own_title">Interner Titel</label>
+                <input
+                    type="text"
+                    id="own_title"
+                    name="title"
+                    maxlength="120"
+                    placeholder="z. B. Position zur Gemeindepolitik"
+                >
+            </div>
+            <div class="field">
+                <label for="own_text">Beitragstext</label>
+                <textarea
+                    id="own_text"
+                    name="text"
+                    required
+                    placeholder="Hier deinen neuen Beitrag schreiben ..."
+                ></textarea>
+                <p class="hint">
+                    Nach dem Speichern öffnet sich der normale Entwurf. Dort kannst du wie gewohnt
+                    KI-Textvarianten erzeugen, ein KI-Bild erstellen, Medien ergänzen und die Veröffentlichung planen.
+                </p>
+            </div>
+            <input type="hidden" name="text_variants_json" value="[]">
+            <input type="hidden" name="source_url" value="">
+            <button type="submit" class="primary">Als Entwurf erstellen</button>
         </form>
     </section>
 
@@ -717,6 +755,7 @@
     const sourceCards = document.querySelectorAll('[data-source]');
     const facebookWorkflow = document.getElementById('workflow-facebook');
     const manualWorkflow = document.getElementById('workflow-manual');
+    const ownWorkflow = document.getElementById('workflow-own');
 
     function selectSource(source) {
         sourceCards.forEach((card) => {
@@ -732,6 +771,10 @@
 
         if (manualWorkflow) {
             manualWorkflow.hidden = source !== 'manual';
+        }
+
+        if (ownWorkflow) {
+            ownWorkflow.hidden = source !== 'own';
         }
     }
 
