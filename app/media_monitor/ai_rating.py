@@ -22,7 +22,16 @@ Bewerte jede Meldung von 0 bis 10 in diesen sechs Bereichen:
 - people: unmittelbare Bedeutung für die Bevölkerung (20 %)
 - profile: Bezug zu Migration/Asyl, Sicherheit, Teuerung, Steuern/Abgaben, Energie, EU,
   Gemeinden, Gesundheit/Pflege, Bildung, Verkehr, Landwirtschaft, Bürokratie,
-  Meinungsfreiheit, Transparenz/Steuergeld, Niederösterreich oder Bezirk Gänserndorf (20 %)
+  Meinungsfreiheit und Transparenz/Steuergeld (20 %)
+
+REGIONALE REDAKTIONSPRIORITÄT DIESER APP:
+- Bezirk Gänserndorf = höchste regionale Priorität.
+- Weinviertel = höchste regionale Priorität.
+- Niederösterreich = sehr hohe Priorität.
+- Direkter FPÖ-/Freiheitlichen-Bezug in Niederösterreich, im Weinviertel oder im Bezirk Gänserndorf
+  ist für diesen Medienmonitor grundsätzlich hoch relevant.
+- Lokale/kommunale politische Meldungen aus diesen Gebieten dürfen nicht bloß deshalb niedriger
+  bewertet werden, weil sie bundesweit weniger Reichweite haben.
 - social: Eignung für einen klaren Social-Media-Beitrag (15 %)
 - interest: öffentliches Interesse und Aufmerksamkeitspotenzial (10 %)
 - reliable: Verwendbarkeit der vorliegenden Informationen; konkrete Meldung statt Spekulation (10 %)
@@ -136,6 +145,96 @@ RATING_SCHEMA = {
 }
 
 
+
+FPÖ_TERMS = (
+    "fpö", "fpoe", "freiheitlich", "freiheitliche", "kickl", "landbauer", "dorner",
+)
+GAENSERNDORF_TERMS = (
+    "gänserndorf", "gaenserndorf", "marchegg", "angern an der march", "angern",
+    "haringsee", "eckartsau", "orth an der donau", "orth/ donau", "orth/donau",
+    "untersiebenbrunn", "leopoldsdorf im marchfelde", "leopoldsdorf",
+    "matzen", "raggendorf", "velm-götzendorf", "velm-goetzendorf",
+    "strasshof", "deutsch-wagram", "dürnkrut", "duernkrut", "auersthal",
+    "drösing", "droesing", "prottes", "weikendorf", "zistersdorf",
+    "marchfeld", "marchquerung",
+)
+WEINVIERTEL_TERMS = (
+    "weinviertel", "mistelbach", "hollabrunn", "korneuburg",
+)
+NOE_TERMS = (
+    "niederösterreich", "niederoesterreich", "nö ", " nö", "st. pölten",
+)
+
+
+def _priority_text(item: dict[str, Any]) -> str:
+    return " ".join(
+        str(item.get(key, "") or "").lower()
+        for key in ("title", "teaser", "source_category", "url")
+    )
+
+
+def _apply_editorial_priority(item: dict[str, Any], rating: dict[str, Any]) -> dict[str, Any]:
+    """Harte redaktionelle Mindestprioritäten für die regionale Ausgabe."""
+    text = _priority_text(item)
+    direct_fpoe = any(term in text for term in FPÖ_TERMS)
+    gaenserndorf = any(term in text for term in GAENSERNDORF_TERMS)
+    weinviertel = any(term in text for term in WEINVIERTEL_TERMS)
+    noe = gaenserndorf or weinviertel or any(term in text for term in NOE_TERMS)
+
+    result = dict(rating)
+    categories = list(result.get("categories") or [])
+
+    if gaenserndorf:
+        result["profile"] = max(float(result.get("profile") or 0), 10.0)
+        result["political"] = max(float(result.get("political") or 0), 8.0)
+        result["social"] = max(float(result.get("social") or 0), 8.0)
+        result["total"] = max(float(result.get("total") or 0), 8.0)
+        result["show"] = True
+        if "Niederösterreich" not in categories:
+            categories.append("Niederösterreich")
+        if result.get("region") in {"", "Unklar", "Österreich"}:
+            result["region"] = "Bezirk Gänserndorf / Niederösterreich"
+
+    elif weinviertel:
+        result["profile"] = max(float(result.get("profile") or 0), 10.0)
+        result["political"] = max(float(result.get("political") or 0), 7.5)
+        result["total"] = max(float(result.get("total") or 0), 7.8)
+        result["show"] = True
+        if "Niederösterreich" not in categories:
+            categories.append("Niederösterreich")
+        if result.get("region") in {"", "Unklar", "Österreich"}:
+            result["region"] = "Weinviertel / Niederösterreich"
+
+    elif noe:
+        result["profile"] = max(float(result.get("profile") or 0), 9.0)
+        if direct_fpoe:
+            result["political"] = max(float(result.get("political") or 0), 9.0)
+            result["social"] = max(float(result.get("social") or 0), 8.5)
+            result["total"] = max(float(result.get("total") or 0), 8.2)
+            result["show"] = True
+        elif float(result.get("total") or 0) >= 6.0:
+            result["total"] = max(float(result.get("total") or 0), 6.8)
+            result["show"] = True
+        if "Niederösterreich" not in categories:
+            categories.append("Niederösterreich")
+
+    # FPÖ + Gänserndorf/Weinviertel ist für diese Ausgabe immer Spitzenrelevanz.
+    if direct_fpoe and (gaenserndorf or weinviertel):
+        result["political"] = max(float(result.get("political") or 0), 10.0)
+        result["profile"] = 10.0
+        result["social"] = max(float(result.get("social") or 0), 9.0)
+        result["interest"] = max(float(result.get("interest") or 0), 8.0)
+        result["total"] = max(float(result.get("total") or 0), 9.0)
+        result["show"] = True
+        result["reason"] = (
+            "Direkter FPÖ-Bezug mit höchster regionaler Relevanz für "
+            "Bezirk Gänserndorf/Weinviertel."
+        )
+
+    result["categories"] = categories[:3]
+    return result
+
+
 def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     if not items:
         return {}
@@ -241,7 +340,7 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         categories = rating.get("categories", [])
         if not isinstance(categories, list):
             categories = []
-        result[item_id] = {
+        base_rating = {
             **scores,
             "total": calculated_total,
             "categories": [str(value).strip() for value in categories[:3] if str(value).strip()],
@@ -250,4 +349,6 @@ def rate_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "reason": str(rating.get("reason") or "").strip(),
             "show": calculated_total >= 6.5 and bool(rating.get("show", calculated_total >= 6.5)),
         }
+        source_item = next((item for item in items if str(item.get("id", "")) == item_id), {})
+        result[item_id] = _apply_editorial_priority(source_item, base_rating)
     return result
