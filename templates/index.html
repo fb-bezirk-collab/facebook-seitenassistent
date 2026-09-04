@@ -506,7 +506,7 @@
 
     <section class="workflow" id="workflow-own" hidden>
         <h3>Eigenen Beitrag direkt erstellen</h3>
-        <form method="post" action="/drafts">
+        <form method="post" action="/own-post" enctype="multipart/form-data">
             <div class="field">
                 <label for="own_title">Interner Titel</label>
                 <input
@@ -518,11 +518,24 @@
                 >
             </div>
             <div class="field">
+                <label for="own_photo">Foto (optional)</label>
+                <input
+                    type="file"
+                    id="own_photo"
+                    name="photo"
+                    accept="image/jpeg,image/png,image/webp"
+                >
+                <div id="own-photo-preview" style="margin-top:12px" hidden>
+                    <img id="own-photo-preview-image" alt="Vorschau" style="max-width:100%;max-height:360px;object-fit:contain;border-radius:12px">
+                </div>
+                <p class="hint">Optional kannst du gleich ein Foto zum neuen Beitrag hochladen. JPG, PNG oder WebP.</p>
+            </div>
+
+            <div class="field">
                 <label for="own_text">Beitragstext</label>
                 <textarea
                     id="own_text"
                     name="text"
-                    required
                     placeholder="Hier deinen neuen Beitrag schreiben ..."
                 ></textarea>
                 <p class="hint">
@@ -530,8 +543,6 @@
                     KI-Textvarianten erzeugen, ein KI-Bild erstellen, Medien ergänzen und die Veröffentlichung planen.
                 </p>
             </div>
-            <input type="hidden" name="text_variants_json" value="[]">
-            <input type="hidden" name="source_url" value="">
             <button type="submit" class="primary">Als Entwurf erstellen</button>
         </form>
     </section>
@@ -943,6 +954,23 @@
     }
 
     initializeAiRewrite();
+
+    const ownPhoto = document.getElementById('own_photo');
+    const ownPhotoPreview = document.getElementById('own-photo-preview');
+    const ownPhotoPreviewImage = document.getElementById('own-photo-preview-image');
+    if (ownPhoto && ownPhotoPreview && ownPhotoPreviewImage) {
+        ownPhoto.addEventListener('change', () => {
+            const file = ownPhoto.files && ownPhoto.files[0];
+            if (!file) {
+                ownPhotoPreview.hidden = true;
+                ownPhotoPreviewImage.removeAttribute('src');
+                return;
+            }
+            const url = URL.createObjectURL(file);
+            ownPhotoPreviewImage.src = url;
+            ownPhotoPreview.hidden = false;
+        });
+    }
 </script>
 </body>
 </html>
