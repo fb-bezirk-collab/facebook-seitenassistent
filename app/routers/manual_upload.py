@@ -176,3 +176,42 @@ async def manueller_medienimport(
             status_code=400,
             detail=str(error),
         ) from error
+
+
+@router.post("/own-post")
+async def eigenen_beitrag_erstellen(
+    request: Request,
+    title: str = Form(""),
+    text: str = Form(""),
+    photo: UploadFile | None = File(default=None),
+):
+    """Erstellt einen eigenen Beitrag ohne Import; optional mit einem Foto."""
+    clean_text = text.strip()
+    images: list[str] = []
+
+    try:
+        if photo is not None and photo.filename:
+            saved_path = await _save_upload(photo)
+            if Path(saved_path).suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+                raise ValueError("Bitte als Foto JPG, PNG oder WebP auswählen.")
+            images.append(saved_path)
+
+        if not clean_text and not images:
+            raise ValueError("Bitte einen Beitragstext eingeben oder ein Foto auswählen.")
+
+        draft = post_service.create_draft(
+            title=title,
+            text=clean_text,
+            text_variants=[],
+            images=images,
+            videos=[],
+            video_url="",
+            page_id="",
+            source_url="",
+        )
+        return RedirectResponse(
+            url=str(request.url_for("entwurf_bearbeiten", post_id=draft.id)) + "?saved=1",
+            status_code=303,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
