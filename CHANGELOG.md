@@ -1,3 +1,9 @@
+# Version 3.3.20
+
+- KI-Medienmonitor einschließlich Medienabrufen, NÖN-Abozugriff, NÖN-Diagnose und Redaktionsprofil entfernt.
+- Navigation und Einstellungen um alle Verweise auf den Medienmonitor bereinigt.
+- Das allgemeine Playwright-Profil bleibt für Facebook-Import und Videoauflösung erhalten.
+
 # 2.8.1
 
 - Autor-Fallback über direkte Comment-Abfrage ergänzt.

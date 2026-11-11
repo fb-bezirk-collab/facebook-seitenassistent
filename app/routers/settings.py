@@ -3,7 +3,7 @@ import secrets
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import TEMPLATES_DIR
@@ -27,26 +27,6 @@ from app.services.social_account_service import (
 from app.services.instagram_account_service import InstagramAccountService
 from app.services.instagram_api import InstagramApiError, InstagramApiService
 from app.services.instagram_config_service import load_instagram_config
-from app.media_monitor.subscriptions import (
-    SubscriptionError,
-    delete_noen_cookie,
-    get_noen_status,
-    noen_credentials_configured,
-    refresh_noen_login,
-    test_noen_subscription,
-)
-from app.media_monitor.noen_debug_job import (
-    SCREENSHOT_FILE as NOEN_DEBUG_SCREENSHOT_FILE,
-    get_noen_debug_job,
-    screenshot_available as noen_debug_screenshot_available,
-    start_noen_debug,
-)
-from app.media_monitor.social_profile import (
-    load_social_media_profile,
-    load_default_social_media_profile,
-    save_social_media_profile,
-    reset_social_media_profile,
-)
 
 
 router = APIRouter()
@@ -70,13 +50,6 @@ def einstellungen(
     instagram_connected: int = 0,
     instagram_count: int = 0,
     instagram_warning: str | None = None,
-    social_profile_saved: int = 0,
-    social_profile_reset: int = 0,
-    social_profile_error: str | None = None,
-    noen_subscription_saved: int = 0,
-    noen_subscription_deleted: int = 0,
-    noen_subscription_error: str | None = None,
-    noen_test_result: str | None = None,
 ):
     meta_config = meta_config_service.load()
     facebook_pages = settings_service.load_pages()
@@ -138,138 +111,7 @@ def einstellungen(
 "instagram_is_connected": bool(InstagramAccountService().list_accounts()),
             "instagram_count": instagram_count,
             "instagram_warning": instagram_warning,
-            "fpoe_social_media_profile": load_social_media_profile(),
-            "social_profile_saved": bool(social_profile_saved),
-            "social_profile_reset": bool(social_profile_reset),
-            "social_profile_error": social_profile_error,
-            "noen_subscription_status": get_noen_status(),
-            "noen_subscription_saved": bool(noen_subscription_saved),
-            "noen_subscription_deleted": bool(noen_subscription_deleted),
-            "noen_subscription_error": noen_subscription_error,
-            "noen_test_result": noen_test_result,
-            "noen_debug_job": get_noen_debug_job(),
-            "noen_debug_screenshot_available": noen_debug_screenshot_available(),
         },
-    )
-
-
-@router.post("/settings/fpoe-social-profile")
-def fpoe_social_media_profil_speichern(profile_text: str = Form(...)):
-    try:
-        save_social_media_profile(profile_text)
-    except (OSError, ValueError) as exc:
-        return RedirectResponse(
-            url="/settings?social_profile_error=" + quote(str(exc)),
-            status_code=303,
-        )
-    return RedirectResponse(url="/settings?social_profile_saved=1", status_code=303)
-
-
-@router.post("/settings/fpoe-social-profile/reset")
-def fpoe_social_media_profil_zuruecksetzen():
-    try:
-        reset_social_media_profile()
-    except OSError as exc:
-        return RedirectResponse(
-            url="/settings?social_profile_error=" + quote(str(exc)),
-            status_code=303,
-        )
-    return RedirectResponse(url="/settings?social_profile_reset=1", status_code=303)
-
-
-@router.post("/settings/media-subscriptions/noen/delete")
-def noen_abo_sitzung_loeschen():
-    delete_noen_cookie()
-    return RedirectResponse(
-        url="/settings?noen_subscription_deleted=1#medien-abos",
-        status_code=303,
-    )
-
-
-@router.post("/settings/media-subscriptions/noen/login")
-def noen_abo_login_erneuern():
-    try:
-        result = refresh_noen_login(force=True)
-        message = (
-            "NÖN-Login erfolgreich. "
-            f"{result.get('cookie_count', 0)} Sitzungs-Cookies wurden verschlüsselt gespeichert."
-        )
-        return RedirectResponse(
-            url="/settings?noen_test_result=" + quote(message) + "#medien-abos",
-            status_code=303,
-        )
-    except SubscriptionError as exc:
-        return RedirectResponse(
-            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
-            status_code=303,
-        )
-
-
-@router.post("/settings/media-subscriptions/noen/test")
-def noen_abo_sitzung_testen(article_url: str = Form(...)):
-    try:
-        result = test_noen_subscription(article_url, force_login=False)
-        session_note = (
-            "Gespeicherte NÖN-Sitzung verwendet. "
-            if result.get("reused_saved_session")
-            else "NÖN-Sitzung wurde bei Bedarf neu aufgebaut. "
-        )
-        if result.get("likely_more_content"):
-            message = (
-                session_note
-                + "Test erfolgreich: Die Abo-Sitzung lieferte deutlich mehr sichtbaren Inhalt "
-                + f"(+{result.get('visible_gain', 0)} Zeichen). HTTP {result.get('status_code')}."
-            )
-        elif result.get("content_changed"):
-            message = (
-                session_note
-                + "Die NÖN-Seite wurde mit der Abo-Sitzung erfolgreich geladen und unterschied sich "
-                "von der öffentlichen Fassung. Ob der vollständige Bezahltext enthalten ist, lässt "
-                "sich technisch noch nicht sicher bestätigen. "
-                f"HTTP {result.get('status_code')}."
-            )
-        else:
-            message = (
-                "Die NÖN-Seite wurde geladen, aber gegenüber dem öffentlichen Abruf war kein "
-                "zusätzlicher Inhalt erkennbar. Möglicherweise ist die Sitzung abgelaufen oder "
-                "der Testartikel frei zugänglich. "
-                f"HTTP {result.get('status_code')}."
-            )
-        return RedirectResponse(
-            url="/settings?noen_test_result=" + quote(message) + "#medien-abos",
-            status_code=303,
-        )
-    except SubscriptionError as exc:
-        return RedirectResponse(
-            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#medien-abos",
-            status_code=303,
-        )
-
-
-@router.post("/settings/media-subscriptions/noen/debug")
-def noen_abo_debug_starten(article_url: str = Form(...)):
-    try:
-        result = start_noen_debug(article_url)
-        message = quote(str(result.get("message") or "NÖN-Diagnose gestartet."))
-        return RedirectResponse(
-            url="/settings?noen_test_result=" + message + "#noen-debug",
-            status_code=303,
-        )
-    except ValueError as exc:
-        return RedirectResponse(
-            url="/settings?noen_subscription_error=" + quote(str(exc)) + "#noen-debug",
-            status_code=303,
-        )
-
-
-@router.get("/settings/media-subscriptions/noen/debug/screenshot")
-def noen_abo_debug_screenshot():
-    if not NOEN_DEBUG_SCREENSHOT_FILE.exists():
-        return RedirectResponse(url="/settings#noen-debug", status_code=303)
-    return FileResponse(
-        path=str(NOEN_DEBUG_SCREENSHOT_FILE),
-        media_type="image/png",
-        filename="noen-debug.png",
     )
 
 

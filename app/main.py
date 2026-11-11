@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import auth_status, get_auth_settings, is_authenticated
 from app.config import STATIC_DIR, UPLOADS_DIR, create_required_directories
-from app.routers import ai, auth, comments, home, importer, manual_upload, media_monitor, planning, posts, publish, settings
+from app.routers import ai, auth, comments, home, importer, manual_upload, planning, posts, publish, settings
 from app.services.publication_runner import PublicationRunner
 
 
@@ -40,7 +40,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Facebook Seitenassistent",
-    version="3.3.19",
+    version="3.3.20",
     lifespan=lifespan,
 )
 
@@ -128,13 +128,12 @@ app.include_router(ai.router)
 app.include_router(publish.router)
 app.include_router(posts.router)
 app.include_router(planning.router)
-app.include_router(media_monitor.router)
 app.include_router(comments.router)
 
 
 @app.get("/health", include_in_schema=False)
 def healthcheck() -> JSONResponse:
-    return JSONResponse({"status": "ok", "version": "3.3.19", "auth": auth_status()})
+    return JSONResponse({"status": "ok", "version": "3.3.20", "auth": auth_status()})
 
 
 @app.get("/robots.txt", include_in_schema=False)

@@ -8,7 +8,7 @@
 </style>
 </head>
 <body>
-<header class="header"><div class="container header-row"><strong>Kommentar-Monitor · Benutzerprofil</strong><nav class="nav"><a href="/comments">← Kommentare</a><a href="/">Import</a><a href="/media-monitor">KI-Medienmonitor</a></nav></div></header>
+<header class="header"><div class="container header-row"><strong>Kommentar-Monitor · Benutzerprofil</strong><nav class="nav"><a href="/comments">← Kommentare</a><a href="/">Import</a></nav></div></header>
 <main class="main"><div class="container">
 {% if action_error %}<div class="notice error"><strong>Aktion fehlgeschlagen:</strong> {{ action_error }}</div>{% endif %}
 {% if action == 'watch' %}<div class="notice success">Benutzer wurde auf die interne Beobachtungsliste gesetzt.</div>{% elif action == 'unwatch' %}<div class="notice success">Benutzer wurde von der Beobachtungsliste entfernt.</div>{% elif action.startswith('blocked_') %}<div class="notice success">Zentrale Sperre gespeichert. {{ action.split('_')[1] }} Seite(n) sofort gesperrt, {{ action.split('_')[2] }} vorgemerkt, {{ action.split('_')[3] }} Fehler.</div>{% elif action.startswith('unblocked_') %}<div class="notice success">Zentrale Sperre aufgehoben. {{ action.split('_')[1] }} Seite(n) entsperrt, {{ action.split('_')[2] }} Fehler.</div>{% endif %}
