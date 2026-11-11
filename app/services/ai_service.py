@@ -215,7 +215,7 @@ Füge vor oder nach dem JSON keine Erklärung, keine Markdown-Formatierung und k
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = (api_key or os.getenv("OPENAI_API_KEY", "")).strip()
-        self.model = (model or os.getenv("OPENAI_MODEL", "gpt-5-mini")).strip()
+        self.model = (model or os.getenv("OPENAI_MODEL", "gpt-5.6-terra")).strip()
 
     def create_variants(
         self,

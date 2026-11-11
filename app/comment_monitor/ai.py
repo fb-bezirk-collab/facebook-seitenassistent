@@ -137,7 +137,7 @@ def _call(prompt: str, payload_data: dict[str, Any], schema_name: str, schema: d
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     model = os.getenv(
         "OPENAI_COMMENT_MONITOR_MODEL",
-        os.getenv("OPENAI_MEDIA_MONITOR_MODEL", os.getenv("OPENAI_MODEL", "gpt-5-mini")),
+        os.getenv("OPENAI_MODEL", "gpt-5.6-terra"),
     ).strip()
     if not api_key:
         raise CommentAiError("OPENAI_API_KEY ist nicht konfiguriert.")

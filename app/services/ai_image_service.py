@@ -21,7 +21,7 @@ class AiImageService:
 
     def __init__(self) -> None:
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        self.text_model = os.getenv("OPENAI_MEDIA_ANALYSIS_MODEL", os.getenv("OPENAI_MODEL", "gpt-5-mini")).strip()
+        self.text_model = os.getenv("OPENAI_MEDIA_ANALYSIS_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.6-terra")).strip()
         self.image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2").strip()
         self.storage = MediaStorage()
 

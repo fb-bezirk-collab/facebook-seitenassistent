@@ -1,3 +1,9 @@
+# Version 3.3.21
+
+- OpenAI-Textmodell von `gpt-5-mini` auf den offiziellen Ersatz `gpt-5.6-terra` umgestellt.
+- Veralteten Fallback `OPENAI_MEDIA_MONITOR_MODEL` aus dem Kommentar-Monitor entfernt.
+- Responses API und Bildmodell bleiben unverändert.
+
 # Version 3.3.20
 
 - KI-Medienmonitor einschließlich Medienabrufen, NÖN-Abozugriff, NÖN-Diagnose und Redaktionsprofil entfernt.
